@@ -926,6 +926,63 @@ textarea.form-control {
     z-index: 1029;
 }
 
+/* Mega-menu dropdown */
+.dropdown-mega { position: static; }
+
+.dropdown-mega-menu {
+    width: 100%;
+    max-width: 900px;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    margin-top: 0.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+}
+
+.dropdown-mega-menu .dropdown-header {
+    color: var(--accent-cyan);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.dropdown-mega-menu .dropdown-item {
+    color: var(--text-secondary);
+    padding: 0.4rem 0;
+    font-size: 0.82rem;
+    background: transparent;
+    border-radius: 4px;
+}
+
+.dropdown-mega-menu .dropdown-item:hover {
+    color: var(--accent-blue);
+    background: rgba(59,130,246,0.08);
+}
+
+.dropdown-mega-menu .dropdown-item i {
+    width: 18px;
+    text-align: center;
+    margin-right: 0.5rem;
+    font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+    .dropdown-mega-menu {
+        max-width: 100%;
+        left: 0 !important;
+        transform: none !important;
+    }
+    .dropdown-mega-menu .row > div {
+        margin-bottom: 0.5rem;
+    }
+    .dropdown-mega-menu .row > div:last-child {
+        margin-bottom: 0;
+    }
+}
+
 /* Settings page common */
 .settings-page-title {
     font-size: 1.1rem;

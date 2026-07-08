@@ -32,30 +32,43 @@
                     <li class="nav-item"><a class="nav-link" href="{% url 'audit:list' %}"><i class="bi bi-journal-text"></i> Audit Logs</a></li>
                     
                     {% if user.analyst_profile.role in settings_roles %}
-                    <li class="nav-item dropdown">
+                    <li class="nav-item dropdown dropdown-mega">
                         <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
                             <i class="bi bi-gear"></i> Settings
                         </a>
-                        <ul class="dropdown-menu ariba-dropdown dropdown-menu-end" style="min-width: 280px; max-height: 80vh; overflow-y: auto;">
-                            <li><h6 class="dropdown-header text-secondary"><i class="bi bi-gear"></i> Settings</h6></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:user_management' %}"><i class="bi bi-people"></i> User Management</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:role_permission' %}"><i class="bi bi-shield-lock"></i> Role & Permission</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:analyst_profile' %}"><i class="bi bi-person-badge"></i> Analyst Profile</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:wazuh_api' %}"><i class="bi bi-cloud-connect"></i> Wazuh API Settings</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:alert_sources' %}"><i class="bi bi-diagram-3"></i> Alert Source Settings</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:severities' %}"><i class="bi bi-exclamation-triangle"></i> Severity Settings</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:statuses' %}"><i class="bi bi-list-check"></i> Status Settings</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:verdicts' %}"><i class="bi bi-check2-square"></i> Verdict Settings</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:sla' %}"><i class="bi bi-clock"></i> SLA Settings</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:escalation' %}"><i class="bi bi-arrow-up-circle"></i> Escalation Settings</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:notifications' %}"><i class="bi bi-bell"></i> Notification Settings</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:reports' %}"><i class="bi bi-file-earmark-bar-graph"></i> Report Settings</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:dashboard' %}"><i class="bi bi-layout-wtf"></i> Dashboard Settings</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:audit_log' %}"><i class="bi bi-journal-check"></i> Audit Log Settings</a></li>
-                            <li><a class="dropdown-item" href="{% url 'settings:system' %}"><i class="bi bi-gear"></i> System Settings</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-info" href="{% url 'admin:index' %}"><i class="bi bi-shield-lock"></i> Django Administration</a></li>
-                        </ul>
+                        <div class="dropdown-menu ariba-dropdown dropdown-mega-menu p-3">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <h6 class="dropdown-header px-0 border-bottom pb-2 mb-2"><i class="bi bi-people"></i> User & Access</h6>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:user_management' %}"><i class="bi bi-people"></i> User Management</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:role_permission' %}"><i class="bi bi-shield-lock"></i> Role & Permission</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:analyst_profile' %}"><i class="bi bi-person-badge"></i> Analyst Profile</a>
+                                </div>
+                                <div class="col-md-3">
+                                    <h6 class="dropdown-header px-0 border-bottom pb-2 mb-2"><i class="bi bi-exclamation-triangle"></i> Alert Config</h6>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:severities' %}"><i class="bi bi-exclamation-triangle"></i> Severity Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:statuses' %}"><i class="bi bi-list-check"></i> Status Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:verdicts' %}"><i class="bi bi-check2-square"></i> Verdict Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:sla' %}"><i class="bi bi-clock"></i> SLA Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:escalation' %}"><i class="bi bi-arrow-up-circle"></i> Escalation Settings</a>
+                                </div>
+                                <div class="col-md-3">
+                                    <h6 class="dropdown-header px-0 border-bottom pb-2 mb-2"><i class="bi bi-cloud-connect"></i> Integration</h6>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:wazuh_api' %}"><i class="bi bi-cloud-connect"></i> Wazuh API Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:alert_sources' %}"><i class="bi bi-diagram-3"></i> Alert Source Settings</a>
+                                </div>
+                                <div class="col-md-3">
+                                    <h6 class="dropdown-header px-0 border-bottom pb-2 mb-2"><i class="bi bi-gear"></i> System</h6>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:notifications' %}"><i class="bi bi-bell"></i> Notification Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:reports' %}"><i class="bi bi-file-earmark-bar-graph"></i> Report Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:dashboard' %}"><i class="bi bi-layout-wtf"></i> Dashboard Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:audit_log' %}"><i class="bi bi-journal-check"></i> Audit Log Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:system' %}"><i class="bi bi-gear"></i> System Settings</a>
+                                    <div class="dropdown-divider my-2"></div>
+                                    <a class="dropdown-item ps-0 text-info" href="{% url 'admin:index' %}"><i class="bi bi-shield-lock"></i> Django Administration</a>
+                                </div>
+                            </div>
+                        </div>
                     </li>
                     {% endif %}
                 </ul>
