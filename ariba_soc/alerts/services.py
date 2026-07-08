@@ -1,6 +1,9 @@
 from django.utils import timezone
 from django.contrib.auth.models import User
-from .models import Alert, AlertComment, AlertAuditLog
+from django.core.mail import send_mail
+from django.conf import settings
+from django.urls import reverse
+from .models import Alert, AlertComment, AlertAuditLog, Notification
 
 def create_audit_log(alert, user, action, old_value='', new_value='', request=None):
     ip = ''
@@ -40,6 +43,10 @@ def update_alert(alert, form, user, request=None):
             }
             create_audit_log(alert, user, action_map.get(field, 'Updated'), old, new, request)
             changed.append(field)
+            
+            # Send notification if assignee changed and it's not the current user
+            if field == 'assignee' and alert.assignee and alert.assignee != user:
+                _notify_assignment(alert, alert.assignee, user, request)
 
     comment_text = form.cleaned_data.get('analyst_comment')
     if comment_text:
@@ -89,10 +96,32 @@ def update_alert(alert, form, user, request=None):
     return changed
 
 
+def _notify_assignment(alert, assignee, assigner, request=None):
+    """Helper to send in-app notification and email to the assignee."""
+    try:
+        # Create In-App Notification
+        link = reverse('alerts:detail', args=[alert.id])
+        msg = f"Alert '{alert.alert_name}' was assigned to you by {assigner.username}."
+        Notification.objects.create(user=assignee, message=msg, link=link)
+        
+        # Send Email
+        if assignee.email:
+            subject = f"[Ariba SOC] Alert Assigned: {alert.alert_name}"
+            body = f"Hello {assignee.username},\n\nAn alert has been assigned to you by {assigner.username}.\n\nAlert: {alert.alert_name}\nSeverity: {alert.severity}\n\nPlease check your dashboard for details.\n\nThank you,\nAriba SOC"
+            send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [assignee.email], fail_silently=True)
+    except Exception as e:
+        pass
+
+
 def assign_alert(alert, user, assignee=None, request=None):
     if assignee is None:
         assignee = user
     old = str(alert.assignee)
+    
+    notify = False
+    if alert.assignee != assignee and assignee != user:
+        notify = True
+        
     alert.assignee = assignee
     alert.assigned_by = user
     alert.assigned_at = timezone.now()
@@ -101,3 +130,7 @@ def assign_alert(alert, user, assignee=None, request=None):
         alert.acknowledged_at = timezone.now()
     alert.save()
     create_audit_log(alert, user, 'Assigned', old, str(assignee), request)
+    
+    if notify:
+        _notify_assignment(alert, assignee, user, request)
+

@@ -8,7 +8,7 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.contrib.auth.models import User
-from .models import Alert, AlertComment, AlertAuditLog
+from .models import Alert, AlertComment, AlertAuditLog, Notification
 from .forms import AlertEditForm, AlertCommentForm
 from .services import update_alert, assign_alert, create_audit_log
 
@@ -271,7 +271,15 @@ def alerts_api(request):
             'rule_id': a.rule_id,
             'sla_status': a.sla_status,
         })
-    return JsonResponse({'alerts': data})
+    return JsonResponse({'alerts': results})
+
+
+@login_required
+def mark_notifications_read(request):
+    if request.method == 'POST':
+        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return JsonResponse({'status': 'ok'})
+    return JsonResponse({'status': 'error'}, status=400)
 
 
 @login_required

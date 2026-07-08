@@ -16,4 +16,5 @@ urlpatterns = [
     path('my-alerts/', views.my_alerts, name='my_alerts'),
     path('api/alerts/', views.alerts_api, name='alerts_api'),
     path('api/alerts/<int:alert_id>/move/', views.alert_move_api, name='alert_move_api'),
+    path('notifications/read/', views.mark_notifications_read, name='mark_notifications_read'),
 ]
