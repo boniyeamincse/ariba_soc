@@ -155,12 +155,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Active sidebar link based on current URL
     var currentPath = window.location.pathname;
-    document.querySelectorAll('.sidebar-nav .nav-link').forEach(function(link) {
+    document.querySelectorAll('.sidebar-nav .nav-link, .sidebar-nav-sub .nav-link').forEach(function(link) {
         var href = link.getAttribute('href');
         if (href && currentPath.startsWith(href) && href !== '/') {
             link.classList.add('active');
         }
     });
+
+    // Auto-expand Settings menu if on a settings page
+    if (currentPath.startsWith('/settings/')) {
+        var settingsCollapse = document.getElementById('settingsMenu');
+        if (settingsCollapse) {
+            var bsCollapse = new bootstrap.Collapse(settingsCollapse, {toggle: false});
+            bsCollapse.show();
+            var toggle = document.querySelector('.nav-collapse-toggle');
+            if (toggle) toggle.setAttribute('aria-expanded', 'true');
+        }
+    }
 
     // Date range presets
     document.querySelectorAll('[data-date-preset]').forEach(function(btn) {

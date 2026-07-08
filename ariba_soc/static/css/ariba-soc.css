@@ -837,6 +837,41 @@ textarea.form-control {
     font-weight: 600;
 }
 
+/* Collapsible nav */
+.nav-collapse-toggle {
+    cursor: pointer;
+    user-select: none;
+}
+
+.nav-collapse-toggle .collapse-arrow {
+    transition: transform 0.25s ease;
+    font-size: 0.7rem;
+}
+
+.nav-collapse-toggle[aria-expanded="true"] .collapse-arrow {
+    transform: rotate(180deg);
+}
+
+.nav-collapse {
+    padding: 0;
+}
+
+.sidebar-nav-sub {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.sidebar-nav-sub .nav-link {
+    padding-left: 2.5rem;
+    font-size: 0.78rem;
+}
+
+.sidebar-nav-sub .nav-link i {
+    font-size: 0.8rem;
+    width: 16px;
+}
+
 .sidebar-footer {
     border-top: 1px solid var(--border-color);
     padding: 0.75rem 1rem;

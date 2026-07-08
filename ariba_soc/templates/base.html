@@ -35,22 +35,30 @@
                     <li class="nav-item"><a class="nav-link" href="{% url 'alerts:table' %}"><i class="bi bi-arrow-up-circle"></i> <span>Escalated Alerts</span></a></li>
                     {% if user.analyst_profile.role in settings_roles %}
                     <li class="nav-item nav-divider"><hr></li>
-                    <li class="nav-item nav-section-label"><span>Settings</span></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:user_management' %}"><i class="bi bi-people"></i> <span>User Management</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:role_permission' %}"><i class="bi bi-shield-lock"></i> <span>Role & Permission</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:analyst_profile' %}"><i class="bi bi-person-badge"></i> <span>Analyst Profile</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:wazuh_api' %}"><i class="bi bi-cloud-connect"></i> <span>Wazuh API Settings</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:alert_sources' %}"><i class="bi bi-diagram-3"></i> <span>Alert Source Settings</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:severities' %}"><i class="bi bi-exclamation-triangle"></i> <span>Severity Settings</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:statuses' %}"><i class="bi bi-list-check"></i> <span>Status Settings</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:verdicts' %}"><i class="bi bi-check2-square"></i> <span>Verdict Settings</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:sla' %}"><i class="bi bi-clock"></i> <span>SLA Settings</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:escalation' %}"><i class="bi bi-arrow-up-circle"></i> <span>Escalation Settings</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:notifications' %}"><i class="bi bi-bell"></i> <span>Notification Settings</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:reports' %}"><i class="bi bi-file-earmark-bar-graph"></i> <span>Report Settings</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:dashboard' %}"><i class="bi bi-layout-wtf"></i> <span>Dashboard Settings</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:audit_log' %}"><i class="bi bi-journal-check"></i> <span>Audit Log Settings</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'settings:system' %}"><i class="bi bi-gear"></i> <span>System Settings</span></a></li>
+                    <li class="nav-item">
+                        <a class="nav-link nav-collapse-toggle" data-bs-toggle="collapse" href="#settingsMenu" role="button" aria-expanded="false">
+                            <i class="bi bi-gear"></i> <span>Settings</span> <i class="bi bi-chevron-down ms-auto collapse-arrow"></i>
+                        </a>
+                        <div class="collapse nav-collapse" id="settingsMenu">
+                            <ul class="sidebar-nav-sub">
+                                <li><a class="nav-link" href="{% url 'settings:user_management' %}"><i class="bi bi-people"></i> <span>User Management</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:role_permission' %}"><i class="bi bi-shield-lock"></i> <span>Role & Permission</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:analyst_profile' %}"><i class="bi bi-person-badge"></i> <span>Analyst Profile</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:wazuh_api' %}"><i class="bi bi-cloud-connect"></i> <span>Wazuh API Settings</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:alert_sources' %}"><i class="bi bi-diagram-3"></i> <span>Alert Source Settings</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:severities' %}"><i class="bi bi-exclamation-triangle"></i> <span>Severity Settings</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:statuses' %}"><i class="bi bi-list-check"></i> <span>Status Settings</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:verdicts' %}"><i class="bi bi-check2-square"></i> <span>Verdict Settings</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:sla' %}"><i class="bi bi-clock"></i> <span>SLA Settings</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:escalation' %}"><i class="bi bi-arrow-up-circle"></i> <span>Escalation Settings</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:notifications' %}"><i class="bi bi-bell"></i> <span>Notification Settings</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:reports' %}"><i class="bi bi-file-earmark-bar-graph"></i> <span>Report Settings</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:dashboard' %}"><i class="bi bi-layout-wtf"></i> <span>Dashboard Settings</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:audit_log' %}"><i class="bi bi-journal-check"></i> <span>Audit Log Settings</span></a></li>
+                                <li><a class="nav-link" href="{% url 'settings:system' %}"><i class="bi bi-gear"></i> <span>System Settings</span></a></li>
+                            </ul>
+                        </div>
+                    </li>
                     {% endif %}
                     <li class="nav-item nav-divider"><hr></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'admin:index' %}"><i class="bi bi-shield-lock"></i> <span>Administrator</span></a></li>
