@@ -8,9 +8,9 @@
         <div class="d-flex gap-2 flex-wrap">
             <form method="post" action="{% url 'wazuh_integration:sync' %}" style="display:inline;">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-arrow-repeat"></i> Force Sync Alerts</button>
+                <button type="submit" class="btn btn-ariba-outline btn-sm"><i class="bi bi-arrow-repeat"></i> Force Sync</button>
             </form>
-            <a href="{% url 'wazuh_integration:agents' %}" class="btn btn-outline-info btn-sm"><i class="bi bi-pc-display"></i> View Agents</a>
+            <a href="{% url 'wazuh_integration:agents' %}" class="btn btn-ariba-outline btn-sm"><i class="bi bi-pc-display"></i> View Agents</a>
         </div>
     </div>
 
@@ -34,7 +34,7 @@
         <div class="tab-pane fade show active" id="status" role="tabpanel">
             <div class="row g-3">
                 <div class="col-md-6">
-                    <div class="ariba-card p-4 h-100" style="background: rgba(30, 33, 40, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;">
+                    <div class="ariba-card p-3 h-100">
                         <h6 class="text-info mb-3"><i class="bi bi-info-circle"></i> Current Status</h6>
                         {% if config %}
                         <div class="mb-3 d-flex align-items-center">
@@ -45,10 +45,10 @@
                                 <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Inactive</span>
                             {% endif %}
                         </div>
-                        <table class="table table-sm ariba-table text-light border-secondary">
-                            <tr><td class="text-muted border-secondary">API URL</td><td class="border-secondary"><code>{{ config.api_url }}</code></td></tr>
-                            <tr><td class="text-muted border-secondary">Last Sync</td><td class="border-secondary">{{ config.last_sync_at|default:'Never' }}</td></tr>
-                            <tr><td class="text-muted border-secondary">Sync Interval</td><td class="border-secondary">Every {{ config.sync_interval_minutes }} mins</td></tr>
+                        <table class="table table-sm ariba-table">
+                            <tr><td class="text-muted">API URL</td><td><code>{{ config.api_url }}</code></td></tr>
+                            <tr><td class="text-muted">Last Sync</td><td>{{ config.last_sync_at|default:'Never' }}</td></tr>
+                            <tr><td class="text-muted">Sync Interval</td><td>Every {{ config.sync_interval_minutes }} mins</td></tr>
                         </table>
                         <div class="mt-4">
                             <a href="{% url 'wazuh_integration:agents' %}" class="btn btn-outline-light btn-sm w-100">Browse Connected Agents <i class="bi bi-arrow-right"></i></a>
@@ -62,14 +62,14 @@
                 </div>
                 
                 <div class="col-md-6">
-                    <div class="ariba-card p-4 h-100" style="background: rgba(30, 33, 40, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;">
+                    <div class="ariba-card p-3 h-100">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h6 class="text-info m-0"><i class="bi bi-clock-history"></i> Recent Sync Activity</h6>
                             <a href="{% url 'wazuh_integration:logs' %}" class="text-decoration-none text-muted small">View All</a>
                         </div>
                         <div style="max-height: 250px; overflow-y: auto;" class="pe-2">
                             {% for log in sync_logs %}
-                            <div class="d-flex justify-content-between align-items-center py-2 border-bottom" style="border-color: rgba(255,255,255,0.05) !important;">
+                            <div class="d-flex justify-content-between align-items-center py-2 border-bottom" style="border-color: var(--border-color) !important;">
                                 <div>
                                     <span class="badge {% if log.status == 'Success' %}bg-success{% elif log.status == 'Failed' %}bg-danger{% else %}bg-warning{% endif %} me-2" style="width: 70px;">{{ log.status }}</span>
                                     <small class="text-light">{{ log.started_at|timesince }} ago</small>
@@ -93,7 +93,7 @@
 
         <!-- Configuration Tab -->
         <div class="tab-pane fade" id="config" role="tabpanel">
-            <div class="ariba-card p-4 mx-auto" style="max-width: 800px; background: rgba(30, 33, 40, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;">
+            <div class="ariba-card p-4 mx-auto" style="max-width: 800px;">
                 <h5 class="text-info border-bottom border-secondary pb-2 mb-4"><i class="bi bi-sliders"></i> API Connection Settings</h5>
                 
                 <form method="post" action="{% url 'wazuh_integration:config_update' %}">

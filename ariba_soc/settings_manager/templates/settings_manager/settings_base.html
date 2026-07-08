@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block extra_css %}
+<style>
+    .settings-sidebar {
+        width: 260px;
+        min-width: 260px;
+        background: var(--bg-dark); /* Same as body background to blend in, or var(--bg-card) */
+        border-right: 1px solid var(--border-color);
+        min-height: calc(100vh - 60px);
+    }
+    .settings-nav-link {
+        display: flex;
+        align-items: center;
+        padding: 0.75rem 1.25rem;
+        color: var(--text-secondary);
+        text-decoration: none;
+        transition: all 0.2s;
+        border-left: 3px solid transparent;
+        font-size: 0.95rem;
+    }
+    .settings-nav-link:hover {
+        background: rgba(59,130,246,0.05);
+        color: var(--text-primary);
+    }
+    .settings-nav-link.active {
+        background: rgba(59,130,246,0.1);
+        color: var(--accent-blue);
+        border-left-color: var(--accent-blue);
+        font-weight: 500;
+    }
+    .settings-nav-link i {
+        width: 24px;
+        font-size: 1.1rem;
+        margin-right: 10px;
+    }
+    .settings-main {
+        flex: 1;
+        overflow-y: auto;
+        min-width: 0;
+    }
+    /* Hide the topbar settings link if we are already in settings? Not necessary */
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex" style="min-height: calc(100vh - 60px);">
+    <div class="settings-sidebar pt-3">
+        <h6 class="text-secondary mb-3 px-4 fw-normal"><i class="bi bi-gear me-2"></i> Settings</h6>
+        
+        <div class="d-flex flex-column pb-4">
+            <a href="{% url 'settings:user_management' %}" class="settings-nav-link {% if request.resolver_match.url_name == 'user_management' or request.resolver_match.url_name == 'user_edit' %}active{% endif %}">
+                <i class="bi bi-people"></i> User Management
+            </a>
+            <a href="{% url 'settings:role_permission' %}" class="settings-nav-link {% if request.resolver_match.url_name == 'role_permission' %}active{% endif %}">
+                <i class="bi bi-shield-lock"></i> Role & Permission
+            </a>
+            <a href="{% url 'settings:analyst_profile' %}" class="settings-nav-link {% if request.resolver_match.url_name == 'analyst_profile' %}active{% endif %}">
+                <i class="bi bi-person-badge"></i> Analyst Profile
+            </a>
+            <a href="{% url 'settings:wazuh_api' %}" class="settings-nav-link {% if request.resolver_match.url_name == 'wazuh_api' %}active{% endif %}">
+                <i class="bi bi-cloud-connect"></i> Wazuh API Settings
+            </a>
+            <a href="{% url 'settings:alert_sources' %}" class="settings-nav-link {% if 'alert_source' in request.resolver_match.url_name %}active{% endif %}">
+                <i class="bi bi-diagram-3"></i> Alert Source Settings
+            </a>
+            <a href="{% url 'settings:severities' %}" class="settings-nav-link {% if 'severit' in request.resolver_match.url_name %}active{% endif %}">
+                <i class="bi bi-exclamation-triangle"></i> Severity Settings
+            </a>
+            <a href="{% url 'settings:statuses' %}" class="settings-nav-link {% if 'status' in request.resolver_match.url_name %}active{% endif %}">
+                <i class="bi bi-list-check"></i> Status Settings
+            </a>
+            <a href="{% url 'settings:verdicts' %}" class="settings-nav-link {% if 'verdict' in request.resolver_match.url_name %}active{% endif %}">
+                <i class="bi bi-check2-square"></i> Verdict Settings
+            </a>
+            <a href="{% url 'settings:sla' %}" class="settings-nav-link {% if 'sla' in request.resolver_match.url_name %}active{% endif %}">
+                <i class="bi bi-clock"></i> SLA Settings
+            </a>
+            <a href="{% url 'settings:escalation' %}" class="settings-nav-link {% if 'escalation' in request.resolver_match.url_name %}active{% endif %}">
+                <i class="bi bi-arrow-up-circle"></i> Escalation Settings
+            </a>
+            <a href="{% url 'settings:notifications' %}" class="settings-nav-link {% if 'notification' in request.resolver_match.url_name %}active{% endif %}">
+                <i class="bi bi-bell"></i> Notification Settings
+            </a>
+            <a href="{% url 'settings:reports' %}" class="settings-nav-link {% if 'report' in request.resolver_match.url_name %}active{% endif %}">
+                <i class="bi bi-file-earmark-bar-graph"></i> Report Settings
+            </a>
+            <a href="{% url 'settings:dashboard' %}" class="settings-nav-link {% if request.resolver_match.url_name == 'dashboard' or request.resolver_match.url_name == 'dashboard_edit' %}active{% endif %}">
+                <i class="bi bi-layout-wtf"></i> Dashboard Settings
+            </a>
+            <a href="{% url 'settings:audit_log' %}" class="settings-nav-link {% if 'audit_log' in request.resolver_match.url_name %}active{% endif %}">
+                <i class="bi bi-journal-check"></i> Audit Log Settings
+            </a>
+            <a href="{% url 'settings:system' %}" class="settings-nav-link {% if 'system' in request.resolver_match.url_name %}active{% endif %}">
+                <i class="bi bi-gear"></i> System Settings
+            </a>
+            
+            <hr class="border-secondary mx-3 my-3">
+            
+            <a href="{% url 'admin:index' %}" class="settings-nav-link text-info">
+                <i class="bi bi-shield-shaded"></i> Django Administration
+            </a>
+        </div>
+    </div>
+    <div class="settings-main">
+        {% block settings_content %}{% endblock %}
+    </div>
+</div>
+{% endblock %}

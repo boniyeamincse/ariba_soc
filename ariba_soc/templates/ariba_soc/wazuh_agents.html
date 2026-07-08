@@ -16,25 +16,26 @@
     </div>
     {% endif %}
 
-    <div class="ariba-card p-0 overflow-hidden" style="background: rgba(30, 33, 40, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;">
-        <table class="table table-hover ariba-table mb-0 text-light align-middle">
-            <thead style="background: rgba(0,0,0,0.2);">
-                <tr>
-                    <th class="border-secondary border-bottom">ID</th>
-                    <th class="border-secondary border-bottom">Name</th>
-                    <th class="border-secondary border-bottom">IP</th>
-                    <th class="border-secondary border-bottom">Status</th>
-                    <th class="border-secondary border-bottom d-none d-md-table-cell">Version</th>
-                    <th class="border-secondary border-bottom d-none d-md-table-cell">OS</th>
-                </tr>
-            </thead>
-            <tbody>
+    <div class="ariba-card">
+        <div class="table-responsive">
+            <table class="table ariba-table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 90px;">ID</th>
+                        <th>Name</th>
+                        <th>IP Address</th>
+                        <th>Status</th>
+                        <th class="d-none d-md-table-cell">Version</th>
+                        <th class="d-none d-md-table-cell">OS</th>
+                    </tr>
+                </thead>
+                <tbody>
                 {% for agent in agents %}
                 <tr>
-                    <td class="border-secondary text-muted"><code>{{ agent.id }}</code></td>
-                    <td class="border-secondary fw-bold text-info"><i class="bi bi-pc me-2"></i>{{ agent.name }}</td>
-                    <td class="border-secondary">{{ agent.ip|default:"-" }}</td>
-                    <td class="border-secondary">
+                    <td><small><code class="text-info">{{ agent.id }}</code></small></td>
+                    <td><span class="fw-medium"><i class="bi bi-pc me-2 text-muted"></i>{{ agent.name }}</span></td>
+                    <td><small>{{ agent.ip|default:"-" }}</small></td>
+                    <td>
                         {% if agent.status == 'active' %}
                             <span class="badge bg-success"><i class="bi bi-check-circle"></i> Active</span>
                         {% elif agent.status == 'disconnected' %}
@@ -43,25 +44,26 @@
                             <span class="badge bg-secondary">{{ agent.status }}</span>
                         {% endif %}
                     </td>
-                    <td class="border-secondary d-none d-md-table-cell"><small>{{ agent.version|default:"-" }}</small></td>
-                    <td class="border-secondary text-muted d-none d-md-table-cell"><small>{{ agent.os.name|default:"-" }} {{ agent.os.version|default:"" }}</small></td>
+                    <td class="d-none d-md-table-cell"><small>{{ agent.version|default:"-" }}</small></td>
+                    <td class="text-muted d-none d-md-table-cell"><small>{{ agent.os.name|default:"-" }} {{ agent.os.version|default:"" }}</small></td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="text-center py-5 text-muted border-secondary">
-                        <i class="bi bi-pc-display fs-1 d-block mb-3"></i>
+                    <td colspan="6" class="text-center py-5">
+                        <i class="bi bi-pc-display" style="font-size: 3rem; color: var(--text-muted);"></i>
+                        <p class="mt-2 text-muted">
                         {% if error %}
                         Could not fetch agents due to an API error.
                         {% else %}
                         No agents found or integration is not configured properly.
                         {% endif %}
-                        <br>
-                        <a href="{% url 'wazuh_integration:status' %}" class="btn btn-outline-info btn-sm mt-3">Check Configuration</a>
+                        </p>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 {% endblock %}
