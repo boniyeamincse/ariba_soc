@@ -21,8 +21,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% with permissions as perm_list %}
-                        {% for perm_display, perm_field in perm_list %}
+                        {% for perm_display, perm_field in permissions %}
                         <tr>
                             <td><small>{{ perm_display }}</small></td>
                             {% for rc in role_choices %}
@@ -52,7 +51,6 @@
                             {% endfor %}
                         </tr>
                         {% endfor %}
-                        {% endwith %}
                     </tbody>
                 </table>
             </div>

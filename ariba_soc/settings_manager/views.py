@@ -137,7 +137,25 @@ def role_permission(request):
         _log_setting_change(request.user, 'Updated role permissions', 'RolePermission', 0, '', 'Updated', request)
         messages.success(request, 'Permissions updated.')
         return redirect('settings:role_permission')
-    ctx = {'section': 'roles', 'roles': roles, 'role_choices': ROLE_CHOICES}
+    PERMISSION_FIELDS = [
+        ('View Alerts', 'can_view_alerts'),
+        ('Assign to Self', 'can_assign_self'),
+        ('Assign to Others', 'can_assign_others'),
+        ('Change Status', 'can_change_status'),
+        ('Change Severity', 'can_change_severity'),
+        ('Change Verdict', 'can_change_verdict'),
+        ('Close Alert', 'can_close_alert'),
+        ('Escalate Alert', 'can_escalate_alert'),
+        ('View Reports', 'can_view_reports'),
+        ('Manage Users', 'can_manage_users'),
+        ('Manage Wazuh', 'can_manage_wazuh'),
+        ('View Audit Logs', 'can_view_audit_logs'),
+        ('Archive', 'can_archive'),
+        ('Reassign', 'can_reassign'),
+        ('Add Remediation', 'can_add_remediation'),
+        ('Export Reports', 'can_export_reports'),
+    ]
+    ctx = {'section': 'roles', 'roles': roles, 'role_choices': ROLE_CHOICES, 'permissions': PERMISSION_FIELDS}
     return render(request, 'settings_manager/role_permission.html', ctx)
 
 def analyst_profile_list(request):
@@ -168,21 +186,21 @@ def wazuh_api_settings(request):
         return redirect('alerts:table')
     config = None
     try:
-        from wazuh_integration.models import WazuhConfig
-        config = WazuhConfig.objects.first()
+        from wazuh_integration.models import WazuhConfiguration
+        config = WazuhConfiguration.objects.first()
     except Exception:
         pass
     if request.method == 'POST':
-        from wazuh_integration.forms import WazuhConfigForm
-        form = WazuhConfigForm(request.POST, instance=config)
+        from wazuh_integration.forms import WazuhConfigurationForm
+        form = WazuhConfigurationForm(request.POST, instance=config)
         if form.is_valid():
             form.save()
-            _log_setting_change(request.user, 'Updated Wazuh API settings', 'WazuhConfig', config.id if config else 0, '', 'Updated', request)
+            _log_setting_change(request.user, 'Updated Wazuh API settings', 'WazuhConfiguration', config.id if config else 0, '', 'Updated', request)
             messages.success(request, 'Wazuh API settings saved.')
             return redirect('settings:wazuh_api')
     else:
-        from wazuh_integration.forms import WazuhConfigForm
-        form = WazuhConfigForm(instance=config)
+        from wazuh_integration.forms import WazuhConfigurationForm
+        form = WazuhConfigurationForm(instance=config)
     ctx = {'section': 'wazuh_api', 'form': form, 'config': config}
     return render(request, 'settings_manager/wazuh_api_settings.html', ctx)
 
