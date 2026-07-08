@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0"><i class="bi bi-journal-check"></i> Audit Log Settings</h4>
+            <p class="settings-page-desc mb-0">Configure which actions are logged and retention policies.</p>
+        </div>
+        <button class="btn btn-ariba-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addAuditLogModal"><i class="bi bi-plus-lg"></i> Add Setting</button>
+    </div>
+
+    <div class="ariba-card p-0">
+        <div class="table-responsive">
+            <table class="table ariba-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Action Type</th>
+                        <th>Logging</th>
+                        <th>Retention (days)</th>
+                        <th>Critical</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in logs %}
+                    <tr>
+                        <td><code>{{ l.action_type }}</code></td>
+                        <td>
+                            {% if l.log_enabled %}
+                            <span class="badge bg-success">Enabled</span>
+                            {% else %}
+                            <span class="badge bg-danger">Disabled</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ l.retention_days }}</td>
+                        <td>
+                            {% if l.is_critical %}
+                            <span class="badge bg-danger">Critical</span>
+                            {% else %}
+                            <span class="badge bg-secondary">No</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                <a href="{% url 'settings:audit_log_edit' l.id %}" class="btn btn-ariba-outline btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
+                                <a href="{% url 'settings:audit_log_toggle' l.id %}" class="btn btn-ariba-outline btn-sm" title="Toggle Logging">
+                                    {% if l.log_enabled %}
+                                    <i class="bi bi-toggle-on text-success"></i>
+                                    {% else %}
+                                    <i class="bi bi-toggle-off text-danger"></i>
+                                    {% endif %}
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-muted text-center">No audit log settings found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade ariba-modal" id="addAuditLogModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Add Audit Log Setting</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <div class="modal-body">
+                    {% if form.errors %}
+                    <div class="alert alert-danger py-2 small">
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}<div>{{ field|title }}: {{ error }}</div>{% endfor %}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small">Action Type</label>
+                            {{ form.action_type }}
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small">Retention Days</label>
+                            {{ form.retention_days }}
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="form-check mt-4">
+                                {{ form.log_enabled }}
+                                <label class="form-check-label small">Log Enabled</label>
+                            </div>
+                            <div class="form-check">
+                                {{ form.is_critical }}
+                                <label class="form-check-label small">Is Critical</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-check-lg"></i> Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

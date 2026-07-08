@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     'dashboard',
     'reports',
     'audit',
+    'settings_manager',
 ]
 
 MIDDLEWARE = [

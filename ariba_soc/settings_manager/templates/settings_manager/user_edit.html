@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4 class="m-0"><i class="bi bi-person-gear"></i> Edit User: {{ edit_user.get_full_name|default:edit_user.username }}</h4>
+    </div>
+    <p class="settings-page-desc">Update user profile and account settings.</p>
+
+    <div class="ariba-card p-4">
+        <form method="post">
+            {% csrf_token %}
+            {% if form.errors %}
+            <div class="alert alert-danger py-2 small">
+                {% for field, errors in form.errors.items %}
+                    {% for error in errors %}<div>{{ field|title }}: {{ error }}</div>{% endfor %}
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="row g-3">
+                <div class="col-12 col-md-6">
+                    <label class="form-label small">First Name</label>
+                    {{ form.first_name }}
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label small">Last Name</label>
+                    {{ form.last_name }}
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label small">Username</label>
+                    {{ form.username }}
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label small">Email</label>
+                    {{ form.email }}
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label small">Phone</label>
+                    {{ form.phone }}
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label small">Designation</label>
+                    {{ form.designation }}
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label small">Role</label>
+                    {{ form.role }}
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label small">Team</label>
+                    {{ form.team }}
+                </div>
+                <div class="col-12">
+                    <div class="form-check">
+                        {{ form.is_active }}
+                        <label class="form-check-label small">Active</label>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-ariba-primary"><i class="bi bi-check-lg"></i> Save</button>
+                <a href="{% url 'settings:user_management' %}" class="btn btn-ariba-outline"><i class="bi bi-x-lg"></i> Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

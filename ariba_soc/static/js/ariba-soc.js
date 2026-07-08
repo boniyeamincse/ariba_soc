@@ -130,6 +130,38 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Sidebar toggle
+    var sidebarToggle = document.querySelector('.sidebar-toggler');
+    if (sidebarToggle) {
+        sidebarToggle.addEventListener('click', function() {
+            document.getElementById('sidebar').classList.toggle('show');
+        });
+    }
+
+    // Sidebar overlay
+    var sidebarOverlay = document.getElementById('sidebarOverlay');
+    if (sidebarOverlay) {
+        sidebarOverlay.addEventListener('click', function() {
+            document.getElementById('sidebar').classList.remove('show');
+        });
+    }
+
+    // Topbar hamburger toggle
+    document.querySelectorAll('.ariba-topbar .btn-link').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.getElementById('sidebar').classList.toggle('show');
+        });
+    });
+
+    // Active sidebar link based on current URL
+    var currentPath = window.location.pathname;
+    document.querySelectorAll('.sidebar-nav .nav-link').forEach(function(link) {
+        var href = link.getAttribute('href');
+        if (href && currentPath.startsWith(href) && href !== '/') {
+            link.classList.add('active');
+        }
+    });
+
     // Date range presets
     document.querySelectorAll('[data-date-preset]').forEach(function(btn) {
         btn.addEventListener('click', function() {
