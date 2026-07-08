@@ -30,15 +30,19 @@
                     {% if user.analyst_profile.role == 'SOC_MGR' or user.analyst_profile.role == 'ADMIN' or user.analyst_profile.role == 'SOC_ENG' %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'reports:home' %}"><i class="bi bi-file-text"></i> Reports</a></li>
                     {% endif %}
+                    {% if user.analyst_profile.role == 'ADMIN' or user.analyst_profile.role == 'SOC_ENG' %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'wazuh_integration:status' %}"><i class="bi bi-hdd-rack"></i> Wazuh</a></li>
-                    {% if user.analyst_profile.role == 'SOC_MGR' or user.analyst_profile.role == 'ADMIN' %}
-                    <li class="nav-item"><a class="nav-link" href="{% url 'admin:index' %}"><i class="bi bi-gear"></i> Settings</a></li>
                     {% endif %}
+                    <li class="nav-item"><a class="nav-link" href="{% url 'admin:index' %}"><i class="bi bi-shield-lock"></i> Administrator</a></li>
                 </ul>
                 <ul class="navbar-nav">
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
-                            <i class="bi bi-person-circle"></i>
+                        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" data-bs-toggle="dropdown">
+                            {% if user.analyst_profile.avatar %}
+                            <img src="{{ user.analyst_profile.avatar.url }}" class="rounded-circle me-1" style="width: 26px; height: 26px; object-fit: cover;">
+                            {% else %}
+                            <i class="bi bi-person-circle me-1"></i>
+                            {% endif %}
                             {{ user.get_full_name|default:user.username }}
                             <span class="badge bg-secondary ms-1">{{ user.analyst_profile.get_role_display }}</span>
                         </a>

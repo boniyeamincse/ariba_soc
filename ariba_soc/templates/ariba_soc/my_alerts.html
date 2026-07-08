@@ -20,11 +20,11 @@
                     <tr>
                         <th>Time</th>
                         <th>Name</th>
-                        <th>Severity</th>
-                        <th>Status</th>
-                        <th>Verdict</th>
-                        <th>Source</th>
-                        <th>SLA</th>
+                        <th class="d-none d-md-table-cell">Severity</th>
+                        <th class="d-none d-md-table-cell">Status</th>
+                        <th class="d-none d-md-table-cell">Verdict</th>
+                        <th class="d-none d-md-table-cell">Source</th>
+                        <th class="d-none d-md-table-cell">SLA</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -33,11 +33,11 @@
                     <tr>
                         <td class="text-nowrap"><small>{{ alert.alert_time|date:"M d, H:i" }}</small></td>
                         <td><span class="fw-medium">{{ alert.alert_name|truncatechars:50 }}</span></td>
-                        <td>{% include 'ariba_soc/_severity_badge.html' with severity=alert.severity %}</td>
-                        <td>{% include 'ariba_soc/_status_pill.html' with status=alert.status %}</td>
-                        <td>{% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}</td>
-                        <td><small>{{ alert.source_name }}</small></td>
-                        <td>
+                        <td class="d-none d-md-table-cell">{% include 'ariba_soc/_severity_badge.html' with severity=alert.severity %}</td>
+                        <td class="d-none d-md-table-cell">{% include 'ariba_soc/_status_pill.html' with status=alert.status %}</td>
+                        <td class="d-none d-md-table-cell">{% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}</td>
+                        <td class="d-none d-md-table-cell"><small>{{ alert.source_name }}</small></td>
+                        <td class="d-none d-md-table-cell">
                             {% if alert.sla_status == 'Breached' %}<span class="badge bg-danger">Breached</span>
                             {% elif alert.sla_status == 'Near SLA breach' %}<span class="badge bg-warning text-dark">Near</span>
                             {% else %}<span class="badge bg-success">OK</span>{% endif %}

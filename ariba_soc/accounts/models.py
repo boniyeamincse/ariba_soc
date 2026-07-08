@@ -26,6 +26,7 @@ class AnalystProfile(models.Model):
     team = models.CharField(max_length=20, choices=TEAM_CHOICES, blank=True)
     phone = models.CharField(max_length=20, blank=True)
     designation = models.CharField(max_length=100, blank=True)
+    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:

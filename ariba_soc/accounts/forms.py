@@ -10,11 +10,12 @@ class ProfileForm(forms.ModelForm):
 
     class Meta:
         model = AnalystProfile
-        fields = ['phone', 'designation', 'team']
+        fields = ['phone', 'designation', 'team', 'avatar']
         widgets = {
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
             'designation': forms.TextInput(attrs={'class': 'form-control'}),
             'team': forms.Select(attrs={'class': 'form-select'}),
+            'avatar': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
         }
 
     def __init__(self, *args, **kwargs):

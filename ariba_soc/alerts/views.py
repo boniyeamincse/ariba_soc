@@ -28,6 +28,7 @@ def alert_table(request):
     if search:
         alerts = alerts.filter(
             Q(alert_name__icontains=search) |
+            Q(wazuh_alert_id__icontains=search) |
             Q(hostname__icontains=search) |
             Q(username__icontains=search) |
             Q(source_ip__icontains=search) |
@@ -51,13 +52,13 @@ def alert_table(request):
     if date_to:
         alerts = alerts.filter(alert_time__lte=date_to)
 
-    allowed_sorts = ['alert_time', '-alert_time', 'severity', '-severity', 'status', '-status', 'verdict', '-verdict', 'alert_name', '-alert_name']
+    allowed_sorts = ['alert_time', '-alert_time', 'severity', '-severity', 'status', '-status', 'verdict', '-verdict', 'alert_name', '-alert_name', 'wazuh_alert_id', '-wazuh_alert_id']
     if sort in allowed_sorts:
         alerts = alerts.order_by(sort)
     else:
         alerts = alerts.order_by('-alert_time')
 
-    paginator = Paginator(alerts, 50)
+    paginator = Paginator(alerts, 10)
     page = request.GET.get('page', 1)
     alerts_page = paginator.get_page(page)
 
@@ -79,6 +80,23 @@ def alert_table(request):
 @login_required
 def alert_board(request):
     alerts = Alert.objects.select_related('assignee', 'source').all()
+
+    now = timezone.now()
+    month = request.GET.get('month')
+    year = request.GET.get('year')
+
+    if month and year:
+        try:
+            m, y = int(month), int(year)
+            alerts = alerts.filter(alert_time__year=y, alert_time__month=m)
+        except (ValueError, TypeError):
+            month = None
+            year = None
+    else:
+        month = now.month
+        year = now.year
+        alerts = alerts.filter(alert_time__year=year, alert_time__month=month)
+
     search = request.GET.get('search')
     if search:
         alerts = alerts.filter(
@@ -97,6 +115,14 @@ def alert_board(request):
         'closed_alerts': alerts.filter(status='Closed'),
         'archived_alerts': alerts.filter(status='Archived'),
         'users': User.objects.filter(is_active=True),
+        'selected_month': month,
+        'selected_year': year,
+        'months': [
+            (1, 'January'), (2, 'February'), (3, 'March'), (4, 'April'),
+            (5, 'May'), (6, 'June'), (7, 'July'), (8, 'August'),
+            (9, 'September'), (10, 'October'), (11, 'November'), (12, 'December'),
+        ],
+        'years': range(2024, 2028),
     }
     return render(request, 'ariba_soc/alert_board.html', context)
 
@@ -135,7 +161,6 @@ def alert_assign(request, alert_id):
     assignee_id = request.POST.get('assignee_id')
     assignee = request.user
     if assignee_id:
-        from django.contrib.auth.models import User
         assignee = get_object_or_404(User, id=assignee_id)
     assign_alert(alert, request.user, assignee, request)
     messages.success(request, f'Alert assigned to {assignee.username}.')
@@ -151,6 +176,7 @@ def alert_add_comment(request, alert_id):
         comment = form.save(commit=False)
         comment.alert = alert
         comment.user = request.user
+        comment.comment_type = 'Analyst Note'
         comment.save()
         create_audit_log(alert, request.user, 'Comment Added', '', form.cleaned_data['comment'][:200], request)
         messages.success(request, 'Comment added.')

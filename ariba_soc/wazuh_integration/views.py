@@ -1,17 +1,27 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from .models import WazuhSyncLog, WazuhConfiguration
 from .forms import WazuhConfigurationForm
 from .services import WazuhClient
 
 
+ALLOWED_ROLES = ['ADMIN', 'SOC_ENG']
+
+
+def _check_wazuh_access(user):
+    role = user.analyst_profile.role
+    if role not in ALLOWED_ROLES:
+        raise PermissionDenied("You do not have permission to access Wazuh integration.")
+
+
 @login_required
 def wazuh_status(request):
+    _check_wazuh_access(request.user)
     config = WazuhConfiguration.objects.first()
     sync_logs = WazuhSyncLog.objects.all()[:20]
     
-    # Initialize form with existing config or empty
     if config:
         form = WazuhConfigurationForm(instance=config)
     else:
@@ -26,6 +36,7 @@ def wazuh_status(request):
 
 @login_required
 def wazuh_config_update(request):
+    _check_wazuh_access(request.user)
     if request.method == 'POST':
         config = WazuhConfiguration.objects.first()
         if config:
@@ -37,19 +48,19 @@ def wazuh_config_update(request):
             form.save()
             messages.success(request, "Wazuh configuration updated successfully.")
         else:
-            messages.error(request, "Failed to update configuration. Please check the form errors.")
+            messages.error(request, "Failed to update configuration.")
     return redirect('wazuh_integration:status')
 
 
 @login_required
 def wazuh_agents(request):
+    _check_wazuh_access(request.user)
     agents = []
     error = None
     try:
         client = WazuhClient()
         response = client.fetch_agents()
         agents = response.get('data', {}).get('affected_items', [])
-        # Some Wazuh API versions use different structure, handle fallback
         if not agents and 'data' in response and 'items' in response['data']:
             agents = response['data']['items']
     except Exception as e:
@@ -63,6 +74,7 @@ def wazuh_agents(request):
 
 @login_required
 def wazuh_sync(request):
+    _check_wazuh_access(request.user)
     if request.method == 'POST':
         from .services import fetch_wazuh_alerts
         try:
@@ -75,5 +87,6 @@ def wazuh_sync(request):
 
 @login_required
 def sync_logs(request):
+    _check_wazuh_access(request.user)
     logs = WazuhSyncLog.objects.all()[:50]
     return render(request, 'ariba_soc/sync_logs.html', {'logs': logs})

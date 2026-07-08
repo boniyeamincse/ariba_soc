@@ -4,9 +4,9 @@
 
 {% block content %}
 <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h4 class="m-0"><i class="bi bi-table"></i> Alert Table</h4>
-        <div>
+        <div class="d-flex gap-2">
             <a href="{% url 'alerts:board' %}" class="btn btn-ariba-outline btn-sm"><i class="bi bi-kanban"></i> Board View</a>
             <button class="btn btn-ariba-outline btn-sm" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
         </div>
@@ -20,15 +20,16 @@
                 <thead>
                     <tr>
                         <th style="width: 30px;"></th>
+                        <th style="width: 90px;">ID</th>
                         <th><a href="?sort={% if current_filters.sort == 'alert_time' %}-{% endif %}alert_time" class="text-decoration-none text-secondary">Time</a></th>
                         <th><a href="?sort={% if current_filters.sort == 'alert_name' %}-{% endif %}alert_name" class="text-decoration-none text-secondary">Name</a></th>
                         <th><a href="?sort={% if current_filters.sort == 'severity' %}-{% endif %}severity" class="text-decoration-none text-secondary">Severity</a></th>
                         <th><a href="?sort={% if current_filters.sort == 'status' %}-{% endif %}status" class="text-decoration-none text-secondary">Status</a></th>
-                        <th><a href="?sort={% if current_filters.sort == 'verdict' %}-{% endif %}verdict" class="text-decoration-none text-secondary">Verdict</a></th>
-                        <th>Assignee</th>
-                        <th>Source</th>
-                        <th>Host</th>
-                        <th>SLA</th>
+                        <th class="d-none d-lg-table-cell"><a href="?sort={% if current_filters.sort == 'verdict' %}-{% endif %}verdict" class="text-decoration-none text-secondary">Verdict</a></th>
+                        <th class="d-none d-lg-table-cell">Assignee</th>
+                        <th class="d-none d-lg-table-cell">Source</th>
+                        <th class="d-none d-lg-table-cell">Host</th>
+                        <th class="d-none d-lg-table-cell">SLA</th>
                         <th style="width: 80px;">Actions</th>
                     </tr>
                 </thead>
@@ -36,21 +37,22 @@
                     {% for alert in alerts %}
                     <tr class="clickable-row {% if alert.severity == 'Critical' %}critical-row{% elif alert.severity == 'High' %}high-row{% endif %}">
                         <td><button class="btn btn-sm btn-link text-secondary p-0 expand-row-btn" data-row-id="{{ alert.id }}"><i class="bi bi-chevron-down"></i></button></td>
+                        <td><small><code class="text-info">{{ alert.wazuh_alert_id|default:alert.id }}</code></small></td>
                         <td class="text-nowrap"><small>{{ alert.alert_time|date:"M d, H:i" }}</small></td>
                         <td><span class="fw-medium">{{ alert.alert_name|truncatechars:50 }}</span></td>
                         <td>{% include 'ariba_soc/_severity_badge.html' with severity=alert.severity %}</td>
                         <td>{% include 'ariba_soc/_status_pill.html' with status=alert.status %}</td>
-                        <td>{% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}</td>
-                        <td>
+                        <td class="d-none d-lg-table-cell">{% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}</td>
+                        <td class="d-none d-lg-table-cell">
                             {% if alert.assignee %}
                             <span class="badge bg-info bg-opacity-25 text-info">{{ alert.assignee.username }}</span>
                             {% else %}
                             <span class="text-muted">—</span>
                             {% endif %}
                         </td>
-                        <td><small>{{ alert.source_name }}</small></td>
-                        <td><small>{{ alert.hostname|default:'—' }}</small></td>
-                        <td>
+                        <td class="d-none d-lg-table-cell"><small>{{ alert.source_name }}</small></td>
+                        <td class="d-none d-lg-table-cell"><small>{{ alert.hostname|default:'—' }}</small></td>
+                        <td class="d-none d-lg-table-cell">
                             {% if alert.sla_status == 'Breached' %}
                             <span class="badge bg-danger">Breached</span>
                             {% elif alert.sla_status == 'Near SLA breach' %}
@@ -74,13 +76,13 @@
                         </td>
                     </tr>
                     <tr class="d-none expanded-detail" id="detail-{{ alert.id }}">
-                        <td colspan="11" class="p-3">
+                        <td colspan="12" class="p-3">
                             {% include 'ariba_soc/_alert_expanded.html' with alert=alert %}
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="11" class="text-center py-5">
+                        <td colspan="12" class="text-center py-5">
                             <i class="bi bi-inbox" style="font-size: 3rem; color: var(--text-muted);"></i>
                             <p class="mt-2 text-muted">No alerts found</p>
                         </td>

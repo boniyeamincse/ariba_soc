@@ -9,7 +9,7 @@ from .forms import ProfileForm
 def profile_view(request):
     profile = request.user.analyst_profile
     if request.method == 'POST':
-        form = ProfileForm(request.POST, instance=profile, user=request.user)
+        form = ProfileForm(request.POST, request.FILES, instance=profile, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, 'Profile updated successfully.')

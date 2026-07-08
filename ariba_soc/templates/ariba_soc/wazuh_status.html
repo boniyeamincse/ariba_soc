@@ -3,26 +3,26 @@
 
 {% block content %}
 <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h4 class="m-0"><i class="bi bi-hdd-rack"></i> Wazuh Integration Dashboard</h4>
-        <div>
+        <div class="d-flex gap-2 flex-wrap">
             <form method="post" action="{% url 'wazuh_integration:sync' %}" style="display:inline;">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-arrow-repeat"></i> Force Sync Alerts</button>
             </form>
-            <a href="{% url 'wazuh_integration:agents' %}" class="btn btn-outline-info btn-sm ms-2"><i class="bi bi-pc-display"></i> View Agents</a>
+            <a href="{% url 'wazuh_integration:agents' %}" class="btn btn-outline-info btn-sm"><i class="bi bi-pc-display"></i> View Agents</a>
         </div>
     </div>
 
     <!-- Tabs -->
-    <ul class="nav nav-tabs mb-4 border-secondary" id="wazuhTabs" role="tablist">
+    <ul class="nav nav-tabs mb-4 border-secondary flex-nowrap overflow-auto" id="wazuhTabs" role="tablist" style="-webkit-overflow-scrolling: touch;">
         <li class="nav-item" role="presentation">
-            <button class="nav-link active bg-transparent text-light border-0" id="status-tab" data-bs-toggle="tab" data-bs-target="#status" type="button" role="tab" style="border-bottom: 2px solid var(--ariba-primary) !important;">
+            <button class="nav-link active bg-transparent text-light border-0 text-nowrap" id="status-tab" data-bs-toggle="tab" data-bs-target="#status" type="button" role="tab" style="border-bottom: 2px solid var(--ariba-primary) !important;">
                 <i class="bi bi-activity"></i> Overview & Logs
             </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link bg-transparent text-secondary border-0" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab" onclick="this.style.borderBottom='2px solid var(--ariba-primary)'; document.getElementById('status-tab').style.borderBottom='none';">
+            <button class="nav-link bg-transparent text-secondary border-0 text-nowrap" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab" onclick="this.style.borderBottom='2px solid var(--ariba-primary)'; document.getElementById('status-tab').style.borderBottom='none';">
                 <i class="bi bi-gear"></i> Configuration
             </button>
         </li>
@@ -113,25 +113,25 @@
                             {% if form.api_url.errors %}<div class="text-danger small">{{ form.api_url.errors }}</div>{% endif %}
                         </div>
                         
-                        <div class="col-md-6">
+                        <div class="col-sm-6">
                             <label class="form-label text-light">API Username</label>
                             {{ form.api_username }}
                             {% if form.api_username.errors %}<div class="text-danger small">{{ form.api_username.errors }}</div>{% endif %}
                         </div>
                         
-                        <div class="col-md-6">
+                        <div class="col-sm-6">
                             <label class="form-label text-light">API Password</label>
                             {{ form.api_password }}
                             {% if form.api_password.errors %}<div class="text-danger small">{{ form.api_password.errors }}</div>{% endif %}
                         </div>
                         
-                        <div class="col-md-6">
+                        <div class="col-sm-6">
                             <label class="form-label text-light">Timeout (seconds)</label>
                             {{ form.timeout }}
                             {% if form.timeout.errors %}<div class="text-danger small">{{ form.timeout.errors }}</div>{% endif %}
                         </div>
                         
-                        <div class="col-md-6">
+                        <div class="col-sm-6">
                             <label class="form-label text-light">Sync Interval (minutes)</label>
                             {{ form.sync_interval_minutes }}
                             {% if form.sync_interval_minutes.errors %}<div class="text-danger small">{{ form.sync_interval_minutes.errors }}</div>{% endif %}

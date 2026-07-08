@@ -7,16 +7,16 @@
 
     <div class="ariba-card">
         <div class="table-responsive">
-            <table class="table ariba-table table-hover mb-0">
+                <table class="table ariba-table table-hover mb-0">
                 <thead>
                     <tr>
                         <th>Time</th>
                         <th>User</th>
                         <th>Action</th>
                         <th>Alert</th>
-                        <th>Old Value</th>
-                        <th>New Value</th>
-                        <th>IP Address</th>
+                        <th class="d-none d-md-table-cell">Old Value</th>
+                        <th class="d-none d-md-table-cell">New Value</th>
+                        <th class="d-none d-md-table-cell">IP Address</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -26,9 +26,9 @@
                         <td>{{ log.user.username|default:'System' }}</td>
                         <td><span class="badge bg-info bg-opacity-25 text-info">{{ log.action }}</span></td>
                         <td><a href="{% url 'alerts:detail' log.alert.id %}" class="text-info">{{ log.alert.alert_name|truncatechars:30 }}</a></td>
-                        <td><small class="text-muted">{{ log.old_value|truncatechars:40 }}</small></td>
-                        <td><small class="text-muted">{{ log.new_value|truncatechars:40 }}</small></td>
-                        <td><small>{{ log.ip_address|default:'—' }}</small></td>
+                        <td class="d-none d-md-table-cell"><small class="text-muted">{{ log.old_value|truncatechars:40 }}</small></td>
+                        <td class="d-none d-md-table-cell"><small class="text-muted">{{ log.new_value|truncatechars:40 }}</small></td>
+                        <td class="d-none d-md-table-cell"><small>{{ log.ip_address|default:'—' }}</small></td>
                     </tr>
                     {% empty %}
                     <tr><td colspan="7" class="text-center py-4 text-muted">No audit logs found.</td></tr>

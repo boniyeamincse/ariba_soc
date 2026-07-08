@@ -7,7 +7,7 @@
         <div class="table-responsive">
             <table class="table ariba-table">
                 <thead>
-                    <tr><th>Username</th><th>Full Name</th><th>Role</th><th>Team</th><th>Designation</th><th>Active</th></tr>
+                    <tr><th>Username</th><th>Full Name</th><th>Role</th><th class="d-none d-md-table-cell">Team</th><th class="d-none d-md-table-cell">Designation</th><th>Active</th></tr>
                 </thead>
                 <tbody>
                     {% for p in profiles %}
@@ -15,8 +15,8 @@
                         <td>{{ p.user.username }}</td>
                         <td>{{ p.user.get_full_name|default:'—' }}</td>
                         <td><span class="severity-badge severity-{{ p.role }}">{{ p.get_role_display }}</span></td>
-                        <td>{{ p.get_team_display|default:'—' }}</td>
-                        <td>{{ p.designation|default:'—' }}</td>
+                        <td class="d-none d-md-table-cell">{{ p.get_team_display|default:'—' }}</td>
+                        <td class="d-none d-md-table-cell">{{ p.designation|default:'—' }}</td>
                         <td>{% if p.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Inactive</span>{% endif %}</td>
                     </tr>
                     {% endfor %}
