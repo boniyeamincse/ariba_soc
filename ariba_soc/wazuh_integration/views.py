@@ -7,7 +7,7 @@ from .forms import WazuhConfigurationForm
 from .services import WazuhClient
 
 
-ALLOWED_ROLES = ['ADMIN', 'SOC_ENG']
+ALLOWED_ROLES = ['ADMIN', 'SOC_ENG', 'SOC_MGR', 'L1', 'L2']
 
 
 def _check_wazuh_access(user):
