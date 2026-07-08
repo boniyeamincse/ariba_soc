@@ -12,119 +12,96 @@
 </head>
 <body class="ariba-soc-body">
     {% if user.is_authenticated %}
-    <div class="ariba-layout">
-        <nav class="ariba-sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <a class="sidebar-brand" href="{% url 'alerts:table' %}">
-                    <span class="brand-icon"><i class="bi bi-shield-shaded"></i></span>
-                    <span class="brand-text">Ariba SOC</span>
-                </a>
-                <button class="sidebar-toggler d-lg-none" onclick="document.getElementById('sidebar').classList.toggle('show')">
-                    <i class="bi bi-x-lg"></i>
-                </button>
-            </div>
-            <div class="sidebar-body">
-                <ul class="sidebar-nav">
-                    <li class="nav-item"><a class="nav-link" href="{% url 'dashboard:home' %}"><i class="bi bi-graph-up"></i> <span>Dashboard</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:board' %}"><i class="bi bi-kanban"></i> <span>Alert Board</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:table' %}"><i class="bi bi-table"></i> <span>Alert Table</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:my_alerts' %}"><i class="bi bi-person-check"></i> <span>My Alerts</span>{% if my_assigned_count %}<span class="badge bg-danger ms-auto">{{ my_assigned_count }}</span>{% endif %}</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'reports:home' %}"><i class="bi bi-file-text"></i> <span>Reports</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'wazuh_integration:status' %}"><i class="bi bi-hdd-rack"></i> <span>Wazuh Sync</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'audit:list' %}"><i class="bi bi-journal-text"></i> <span>Audit Logs</span></a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:table' %}"><i class="bi bi-arrow-up-circle"></i> <span>Escalated Alerts</span></a></li>
+    <nav class="navbar navbar-expand-lg navbar-dark ariba-navbar fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="{% url 'alerts:table' %}">
+                <span class="brand-icon me-2"><i class="bi bi-shield-shaded"></i></span>
+                <span class="brand-text">Ariba SOC</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:table' %}"><i class="bi bi-table"></i> Alerts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:board' %}"><i class="bi bi-kanban"></i> Board</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:my_alerts' %}"><i class="bi bi-person-check"></i> My Alerts {% if my_assigned_count %}<span class="badge bg-danger ms-1">{{ my_assigned_count }}</span>{% endif %}</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'dashboard:home' %}"><i class="bi bi-graph-up"></i> Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'reports:home' %}"><i class="bi bi-file-text"></i> Reports</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'wazuh_integration:status' %}"><i class="bi bi-hdd-rack"></i> Wazuh</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'audit:list' %}"><i class="bi bi-journal-text"></i> Audit Logs</a></li>
+                    
                     {% if user.analyst_profile.role in settings_roles %}
-                    <li class="nav-item nav-divider"><hr></li>
-                    <li class="nav-item">
-                        <a class="nav-link nav-collapse-toggle" data-bs-toggle="collapse" href="#settingsMenu" role="button" aria-expanded="false">
-                            <i class="bi bi-gear"></i> <span>Settings</span> <i class="bi bi-chevron-down ms-auto collapse-arrow"></i>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                            <i class="bi bi-gear"></i> Settings
                         </a>
-                        <div class="collapse nav-collapse" id="settingsMenu">
-                            <ul class="sidebar-nav-sub">
-                                <li><a class="nav-link" href="{% url 'settings:user_management' %}"><i class="bi bi-people"></i> <span>User Management</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:role_permission' %}"><i class="bi bi-shield-lock"></i> <span>Role & Permission</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:analyst_profile' %}"><i class="bi bi-person-badge"></i> <span>Analyst Profile</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:wazuh_api' %}"><i class="bi bi-cloud-connect"></i> <span>Wazuh API Settings</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:alert_sources' %}"><i class="bi bi-diagram-3"></i> <span>Alert Source Settings</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:severities' %}"><i class="bi bi-exclamation-triangle"></i> <span>Severity Settings</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:statuses' %}"><i class="bi bi-list-check"></i> <span>Status Settings</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:verdicts' %}"><i class="bi bi-check2-square"></i> <span>Verdict Settings</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:sla' %}"><i class="bi bi-clock"></i> <span>SLA Settings</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:escalation' %}"><i class="bi bi-arrow-up-circle"></i> <span>Escalation Settings</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:notifications' %}"><i class="bi bi-bell"></i> <span>Notification Settings</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:reports' %}"><i class="bi bi-file-earmark-bar-graph"></i> <span>Report Settings</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:dashboard' %}"><i class="bi bi-layout-wtf"></i> <span>Dashboard Settings</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:audit_log' %}"><i class="bi bi-journal-check"></i> <span>Audit Log Settings</span></a></li>
-                                <li><a class="nav-link" href="{% url 'settings:system' %}"><i class="bi bi-gear"></i> <span>System Settings</span></a></li>
-                            </ul>
-                        </div>
+                        <ul class="dropdown-menu ariba-dropdown dropdown-menu-end" style="min-width: 280px; max-height: 80vh; overflow-y: auto;">
+                            <li><h6 class="dropdown-header text-secondary"><i class="bi bi-gear"></i> Settings</h6></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:user_management' %}"><i class="bi bi-people"></i> User Management</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:role_permission' %}"><i class="bi bi-shield-lock"></i> Role & Permission</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:analyst_profile' %}"><i class="bi bi-person-badge"></i> Analyst Profile</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:wazuh_api' %}"><i class="bi bi-cloud-connect"></i> Wazuh API Settings</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:alert_sources' %}"><i class="bi bi-diagram-3"></i> Alert Source Settings</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:severities' %}"><i class="bi bi-exclamation-triangle"></i> Severity Settings</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:statuses' %}"><i class="bi bi-list-check"></i> Status Settings</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:verdicts' %}"><i class="bi bi-check2-square"></i> Verdict Settings</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:sla' %}"><i class="bi bi-clock"></i> SLA Settings</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:escalation' %}"><i class="bi bi-arrow-up-circle"></i> Escalation Settings</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:notifications' %}"><i class="bi bi-bell"></i> Notification Settings</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:reports' %}"><i class="bi bi-file-earmark-bar-graph"></i> Report Settings</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:dashboard' %}"><i class="bi bi-layout-wtf"></i> Dashboard Settings</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:audit_log' %}"><i class="bi bi-journal-check"></i> Audit Log Settings</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings:system' %}"><i class="bi bi-gear"></i> System Settings</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-info" href="{% url 'admin:index' %}"><i class="bi bi-shield-lock"></i> Django Administration</a></li>
+                        </ul>
                     </li>
                     {% endif %}
-                    <li class="nav-item nav-divider"><hr></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'admin:index' %}"><i class="bi bi-shield-lock"></i> <span>Administrator</span></a></li>
                 </ul>
-            </div>
-            <div class="sidebar-footer">
-                <div class="sidebar-user">
-                    {% if user.analyst_profile.avatar %}
-                    <img src="{{ user.analyst_profile.avatar.url }}" class="rounded-circle" style="width: 32px; height: 32px; object-fit: cover;">
-                    {% else %}
-                    <i class="bi bi-person-circle fs-5"></i>
-                    {% endif %}
-                    <div class="sidebar-user-info">
-                        <small class="fw-medium">{{ user.get_full_name|default:user.username }}</small>
-                        <small class="text-muted">{{ user.analyst_profile.get_role_display }}</small>
-                    </div>
-                    <div class="dropdown">
-                        <button class="btn btn-link text-secondary p-0" data-bs-toggle="dropdown"><i class="bi bi-three-dots-vertical"></i></button>
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" data-bs-toggle="dropdown">
+                            {% if user.analyst_profile.avatar %}
+                            <img src="{{ user.analyst_profile.avatar.url }}" class="rounded-circle me-2" style="width: 24px; height: 24px; object-fit: cover;">
+                            {% else %}
+                            <i class="bi bi-person-circle me-2"></i>
+                            {% endif %}
+                            {{ user.get_full_name|default:user.username }}
+                            <span class="badge bg-secondary ms-2">{{ user.analyst_profile.get_role_display }}</span>
+                        </a>
                         <ul class="dropdown-menu dropdown-menu-end ariba-dropdown">
                             <li><a class="dropdown-item" href="{% url 'accounts:profile' %}"><i class="bi bi-person"></i> Profile</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{% url 'accounts:logout' %}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
                         </ul>
-                    </div>
-                </div>
+                    </li>
+                </ul>
             </div>
-        </nav>
-        <div class="ariba-overlay" id="sidebarOverlay" onclick="document.getElementById('sidebar').classList.remove('show')"></div>
-        <main class="ariba-main">
-            <div class="ariba-topbar d-lg-none">
-                <button class="btn btn-link text-secondary p-2" onclick="document.getElementById('sidebar').classList.toggle('show')">
-                    <i class="bi bi-list fs-4"></i>
-                </button>
-                <span class="brand-text">Ariba SOC</span>
-                <div class="ms-auto">
-                    <a href="{% url 'accounts:profile' %}" class="text-secondary me-2">
-                        {% if user.analyst_profile.avatar %}
-                        <img src="{{ user.analyst_profile.avatar.url }}" class="rounded-circle" style="width: 28px; height: 28px; object-fit: cover;">
-                        {% else %}
-                        <i class="bi bi-person-circle fs-5"></i>
-                        {% endif %}
-                    </a>
-                </div>
-            </div>
-            {% if new_alerts_count > 0 %}
-            <div class="alert alert-warning alert-dismissible fade show rounded-0 border-0 mb-0 text-center" role="alert">
-                <i class="bi bi-exclamation-triangle"></i>
-                <strong>{{ new_alerts_count }}</strong> new alert{{ new_alerts_count|pluralize }} waiting for review.
-                {% if critical_alerts_count > 0 %}
-                <span class="ms-2 text-danger"><i class="bi bi-fire"></i> <strong>{{ critical_alerts_count }}</strong> critical!</span>
-                {% endif %}
+        </div>
+    </nav>
+    <div class="ariba-main-content">
+        {% if new_alerts_count > 0 %}
+        <div class="alert alert-warning alert-dismissible fade show rounded-0 border-0 mb-0 text-center" role="alert">
+            <i class="bi bi-exclamation-triangle"></i>
+            <strong>{{ new_alerts_count }}</strong> new alert{{ new_alerts_count|pluralize }} waiting for review.
+            {% if critical_alerts_count > 0 %}
+            <span class="ms-2 text-danger"><i class="bi bi-fire"></i> <strong>{{ critical_alerts_count }}</strong> critical!</span>
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        {% if messages %}
+        <div class="container-fluid mt-2">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
-            {% endif %}
-            {% if messages %}
-            <div class="container-fluid mt-2">
-                {% for message in messages %}
-                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% block content %}{% endblock %}
-        </main>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% block content %}{% endblock %}
     </div>
     {% else %}
     {% block auth_content %}{% endblock %}
