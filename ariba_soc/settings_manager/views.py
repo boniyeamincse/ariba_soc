@@ -153,6 +153,7 @@ def role_permission(request):
         ('Archive', 'can_archive'),
         ('Reassign', 'can_reassign'),
         ('Add Remediation', 'can_add_remediation'),
+        ('Mark as Incident', 'can_mark_incident'),
         ('Export Reports', 'can_export_reports'),
     ]
     ctx = {'section': 'roles', 'roles': roles, 'role_choices': ROLE_CHOICES, 'permissions': PERMISSION_FIELDS}

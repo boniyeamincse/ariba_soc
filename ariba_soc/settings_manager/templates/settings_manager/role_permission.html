@@ -1,4 +1,5 @@
 {% extends 'settings_manager/settings_base.html' %}
+{% load settings_extras %}
 
 {% block settings_content %}
 <div class="container-fluid py-3">
@@ -29,22 +30,7 @@
                                 {% for r in roles %}
                                 {% if r.role == rc.0 %}
                                 <input type="checkbox" class="form-check-input" name="{{ r.role }}_{{ perm_field }}"
-                                       {% if perm_field == 'can_view_alerts' and r.can_view_alerts %}checked{% endif %}
-                                       {% if perm_field == 'can_assign_self' and r.can_assign_self %}checked{% endif %}
-                                       {% if perm_field == 'can_assign_others' and r.can_assign_others %}checked{% endif %}
-                                       {% if perm_field == 'can_change_status' and r.can_change_status %}checked{% endif %}
-                                       {% if perm_field == 'can_change_severity' and r.can_change_severity %}checked{% endif %}
-                                       {% if perm_field == 'can_change_verdict' and r.can_change_verdict %}checked{% endif %}
-                                       {% if perm_field == 'can_close_alert' and r.can_close_alert %}checked{% endif %}
-                                       {% if perm_field == 'can_escalate_alert' and r.can_escalate_alert %}checked{% endif %}
-                                       {% if perm_field == 'can_view_reports' and r.can_view_reports %}checked{% endif %}
-                                       {% if perm_field == 'can_manage_users' and r.can_manage_users %}checked{% endif %}
-                                       {% if perm_field == 'can_manage_wazuh' and r.can_manage_wazuh %}checked{% endif %}
-                                       {% if perm_field == 'can_view_audit_logs' and r.can_view_audit_logs %}checked{% endif %}
-                                       {% if perm_field == 'can_archive' and r.can_archive %}checked{% endif %}
-                                       {% if perm_field == 'can_reassign' and r.can_reassign %}checked{% endif %}
-                                       {% if perm_field == 'can_add_remediation' and r.can_add_remediation %}checked{% endif %}
-                                       {% if perm_field == 'can_export_reports' and r.can_export_reports %}checked{% endif %}>
+                                       {% if r|attr:perm_field %}checked{% endif %}>
                                 {% endif %}
                                 {% endfor %}
                             </td>
