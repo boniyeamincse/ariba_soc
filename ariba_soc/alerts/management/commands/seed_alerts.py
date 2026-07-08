@@ -22,6 +22,16 @@ SAMPLE_ALERTS = [
     {'name': 'Admin Login from New Location', 'severity': 'Medium', 'rule_level': 7, 'rule_id': '2355', 'description': 'Administrator account logged in from unfamiliar location.'},
     {'name': 'Multiple Failed Login Attempts', 'severity': 'Medium', 'rule_level': 6, 'rule_id': '5501', 'description': 'Multiple failed login attempts detected.'},
     {'name': 'Unusual VPN Login Location', 'severity': 'Medium', 'rule_level': 6, 'rule_id': '2352', 'description': 'VPN login from unusual geographic location.'},
+    {'name': 'Suspicious Scheduled Task Creation', 'severity': 'High', 'rule_level': 9, 'rule_id': '7150', 'mitre_id': 'T1053', 'mitre_tactic': 'Persistence', 'mitre_technique': 'Scheduled Task', 'description': 'Suspicious scheduled task created on endpoint.'},
+    {'name': 'Malicious Web Shell Detected', 'severity': 'Critical', 'rule_level': 13, 'rule_id': '9811', 'mitre_id': 'T1505', 'mitre_tactic': 'Persistence', 'mitre_technique': 'Web Shell', 'description': 'Web shell detected on web server.'},
+    {'name': 'USB Device Anomaly', 'severity': 'Medium', 'rule_level': 5, 'rule_id': '4120', 'description': 'Unknown USB device connected to workstation.'},
+    {'name': 'DNS Tunneling Detected', 'severity': 'High', 'rule_level': 10, 'rule_id': '5413', 'mitre_id': 'T1572', 'mitre_tactic': 'Command and Control', 'mitre_technique': 'DNS Tunneling', 'description': 'Suspicious DNS queries indicating tunneling detected.'},
+    {'name': 'Unauthorized Registry Change', 'severity': 'Medium', 'rule_level': 7, 'rule_id': '6631', 'mitre_id': 'T1112', 'mitre_tactic': 'Defense Evasion', 'mitre_technique': 'Modify Registry', 'description': 'Critical registry key modified without authorization.'},
+    {'name': 'Mass File Renaming Detected', 'severity': 'High', 'rule_level': 8, 'rule_id': '5512', 'mitre_id': 'T1486', 'mitre_tactic': 'Impact', 'mitre_technique': 'Data Encrypted for Impact', 'description': 'Multiple files being renamed rapidly, possible ransomware.'},
+    {'name': 'Privilege Escalation Attempt', 'severity': 'Critical', 'rule_level': 12, 'rule_id': '2310', 'mitre_id': 'T1068', 'mitre_tactic': 'Privilege Escalation', 'mitre_technique': 'Exploitation for Privilege Escalation', 'description': 'Privilege escalation attempt detected via known exploit.'},
+    {'name': 'Outbound Connection to Malicious IP', 'severity': 'High', 'rule_level': 10, 'rule_id': '7211', 'mitre_id': 'T1071', 'mitre_tactic': 'Command and Control', 'mitre_technique': 'Application Layer Protocol', 'description': 'Outbound connection established to known malicious IP address.'},
+    {'name': 'Service Account Anomaly', 'severity': 'Medium', 'rule_level': 6, 'rule_id': '3342', 'description': 'Service account logged in outside normal operating hours.'},
+    {'name': 'Pass-the-Hash Attack Detected', 'severity': 'Critical', 'rule_level': 14, 'rule_id': '6734', 'mitre_id': 'T1550', 'mitre_tactic': 'Lateral Movement', 'mitre_technique': 'Pass the Hash', 'description': 'Pass-the-hash attack detected on domain controller.'},
 ]
 
 HOSTNAMES = ['LPT-HR-009', 'LPT-HR-012', 'SRV-DC-001', 'SRV-EXCH-001', 'LPT-IT-045', 'SRV-DB-002', 'LPT-ACCT-018', 'LPT-EXEC-003', 'SRV-WEB-005', 'LPT-DEV-022']

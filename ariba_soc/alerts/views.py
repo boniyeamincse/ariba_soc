@@ -58,7 +58,7 @@ def alert_table(request):
     else:
         alerts = alerts.order_by('-alert_time')
 
-    paginator = Paginator(alerts, 10)
+    paginator = Paginator(alerts, 25)
     page = request.GET.get('page', 1)
     alerts_page = paginator.get_page(page)
 
