@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block auth_content %}
+<div class="min-vh-100 d-flex align-items-center justify-content-center" style="background: var(--bg-dark);">
+    <div class="card ariba-card" style="width: 400px;">
+        <div class="card-body p-4">
+            <div class="text-center mb-4">
+                <i class="bi bi-shield-shaded" style="font-size: 3rem; color: var(--accent-cyan);"></i>
+                <h3 class="mt-2" style="color: var(--text-primary);">Ariba SOC</h3>
+                <p style="color: var(--text-secondary); font-size: 0.85rem;">Alert Management Dashboard</p>
+            </div>
+            <form method="post" action="{% url 'accounts:login' %}">
+                {% csrf_token %}
+                {% if form.errors %}
+                <div class="alert alert-danger py-2" role="alert">
+                    Invalid username or password.
+                </div>
+                {% endif %}
+                <div class="mb-3">
+                    <label class="form-label" style="color: var(--text-secondary); font-size: 0.8rem;">Username</label>
+                    <input type="text" name="username" class="form-control ariba-input" placeholder="Enter username" required autofocus>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" style="color: var(--text-secondary); font-size: 0.8rem;">Password</label>
+                    <input type="password" name="password" class="form-control ariba-input" placeholder="Enter password" required>
+                </div>
+                <button type="submit" class="btn btn-ariba-primary w-100">Sign In</button>
+                <input type="hidden" name="next" value="{% url 'alerts:table' %}">
+            </form>
+            <div class="text-center mt-3">
+                <small style="color: var(--text-muted);">Ariba SOC Dashboard v1.0</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

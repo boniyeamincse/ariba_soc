@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <h4 class="mb-3"><i class="bi bi-person-check"></i> My Assigned Alerts</h4>
+
+    {% if no_alerts %}
+    <div class="ariba-card p-5 text-center">
+        <i class="bi bi-inbox" style="font-size: 4rem; color: var(--text-muted);"></i>
+        <h5 class="mt-3 text-muted">You haven't picked up any alerts!</h5>
+        <p class="text-secondary">Assign yourself to an alert, move it to In Progress, and start the triage!</p>
+        <a href="{% url 'alerts:table' %}" class="btn btn-ariba-primary mt-2"><i class="bi bi-table"></i> View Alerts</a>
+    </div>
+    {% else %}
+    <div class="ariba-card">
+        <div class="table-responsive">
+            <table class="table ariba-table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Name</th>
+                        <th>Severity</th>
+                        <th>Status</th>
+                        <th>Verdict</th>
+                        <th>Source</th>
+                        <th>SLA</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alert in alerts %}
+                    <tr>
+                        <td class="text-nowrap"><small>{{ alert.alert_time|date:"M d, H:i" }}</small></td>
+                        <td><span class="fw-medium">{{ alert.alert_name|truncatechars:50 }}</span></td>
+                        <td>{% include 'ariba_soc/_severity_badge.html' with severity=alert.severity %}</td>
+                        <td>{% include 'ariba_soc/_status_pill.html' with status=alert.status %}</td>
+                        <td>{% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}</td>
+                        <td><small>{{ alert.source_name }}</small></td>
+                        <td>
+                            {% if alert.sla_status == 'Breached' %}<span class="badge bg-danger">Breached</span>
+                            {% elif alert.sla_status == 'Near SLA breach' %}<span class="badge bg-warning text-dark">Near</span>
+                            {% else %}<span class="badge bg-success">OK</span>{% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'alerts:detail' alert.id %}" class="btn btn-sm btn-link text-info p-0 me-1"><i class="bi bi-eye"></i></a>
+                            <button class="btn btn-sm btn-link text-secondary p-0" data-bs-toggle="modal" data-bs-target="#editAlertModal"
+                                data-alert-id="{{ alert.id }}"
+                                data-status="{{ alert.status }}"
+                                data-severity="{{ alert.severity }}"
+                                data-verdict="{{ alert.verdict }}"
+                                data-priority="{{ alert.priority }}"><i class="bi bi-pencil"></i></button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% include 'ariba_soc/_edit_alert_modal.html' %}
+{% endblock %}

@@ -1,0 +1,278 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb" style="background: transparent; padding: 0;">
+            <li class="breadcrumb-item"><a href="{% url 'alerts:table' %}" class="text-secondary">Alerts</a></li>
+            <li class="breadcrumb-item active text-primary">{{ alert.alert_name|truncatechars:50 }}</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="ariba-card p-4 mb-3">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h4 class="mb-1">{{ alert.alert_name }}</h4>
+                        <div class="d-flex gap-2 align-items-center mt-2">
+                            {% include 'ariba_soc/_severity_badge.html' with severity=alert.severity %}
+                            {% include 'ariba_soc/_status_pill.html' with status=alert.status %}
+                            {% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}
+                            <span class="badge bg-dark">{{ alert.priority }} Priority</span>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-ariba-outline" data-bs-toggle="modal" data-bs-target="#editAlertModal"
+                            data-alert-id="{{ alert.id }}"
+                            data-assignee-id="{{ alert.assignee_id|default:'' }}"
+                            data-status="{{ alert.status }}"
+                            data-severity="{{ alert.severity }}"
+                            data-verdict="{{ alert.verdict }}"
+                            data-priority="{{ alert.priority }}">
+                            <i class="bi bi-pencil"></i> Edit
+                        </button>
+                        <a href="{% url 'alerts:table' %}" class="btn btn-sm btn-ariba-outline"><i class="bi bi-x-lg"></i></a>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <h6 class="text-secondary"><i class="bi bi-info-circle"></i> Description</h6>
+                    <p>{{ alert.description|default:alert.rule_description|default:'No description available' }}</p>
+                    {% if alert.triage_guide %}
+                    <div class="mt-2 p-2" style="background: rgba(59,130,246,0.1); border-radius: 6px; border-left: 3px solid var(--accent-blue);">
+                        <small class="text-info"><i class="bi bi-lightbulb"></i> Triage Guide:</small>
+                        <p class="mb-0 small mt-1">{{ alert.triage_guide }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <hr style="border-color: var(--border-color);">
+
+                <div class="row g-3 detail-section">
+                    <div class="col-md-6">
+                        <h6 class="text-secondary"><i class="bi bi-diagram-2"></i> Technical Details</h6>
+                        <table class="table table-sm ariba-table">
+                            <tr><td class="detail-label">Alert Time</td><td class="detail-value">{{ alert.alert_time|date:"M d, Y H:i:s" }}</td></tr>
+                            <tr><td class="detail-label">Event Time</td><td class="detail-value">{{ alert.event_time|date:"M d, Y H:i:s"|default:'—' }}</td></tr>
+                            <tr><td class="detail-label">Rule ID</td><td class="detail-value">{{ alert.rule_id|default:'—' }} (Level {{ alert.rule_level }})</td></tr>
+                            <tr><td class="detail-label">Source</td><td class="detail-value">{{ alert.source_name }}</td></tr>
+                            <tr><td class="detail-label">Hostname</td><td class="detail-value">{{ alert.hostname|default:'—' }}</td></tr>
+                            <tr><td class="detail-label">Agent</td><td class="detail-value">{{ alert.agent_name|default:'—' }} ({{ alert.agent_id|default:'—' }})</td></tr>
+                            <tr><td class="detail-label">Username</td><td class="detail-value">{{ alert.username|default:'—' }}</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-secondary"><i class="bi bi-shield"></i> Network & Process</h6>
+                        <table class="table table-sm ariba-table">
+                            <tr><td class="detail-label">Source IP</td><td class="detail-value">{{ alert.source_ip|default:'—' }}</td></tr>
+                            <tr><td class="detail-label">Destination IP</td><td class="detail-value">{{ alert.destination_ip|default:'—' }}</td></tr>
+                            <tr><td class="detail-label">Process</td><td class="detail-value">{{ alert.process_name|default:'—' }}</td></tr>
+                            <tr><td class="detail-label">Process User</td><td class="detail-value">{{ alert.process_user|default:'—' }}</td></tr>
+                            <tr><td class="detail-label">Command Line</td><td class="detail-value"><code style="font-size:0.75rem;">{{ alert.command_line|default:'—' }}</code></td></tr>
+                            {% if alert.target_file %}
+                            <tr><td class="detail-label">Target File</td><td class="detail-value">{{ alert.target_file }}</td></tr>
+                            {% endif %}
+                            {% if alert.url %}
+                            <tr><td class="detail-label">URL</td><td class="detail-value"><small>{{ alert.url }}</small></td></tr>
+                            {% endif %}
+                        </table>
+                    </div>
+                </div>
+
+                {% if alert.file_hash_md5 or alert.file_hash_sha256 %}
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <h6 class="text-secondary"><i class="bi bi-fingerprint"></i> File Hashes</h6>
+                    <div class="row g-2">
+                        {% if alert.file_hash_md5 %}<div class="col-md-4"><div class="detail-label">MD5</div><code style="font-size:0.7rem;">{{ alert.file_hash_md5 }}</code></div>{% endif %}
+                        {% if alert.file_hash_sha1 %}<div class="col-md-4"><div class="detail-label">SHA1</div><code style="font-size:0.7rem;">{{ alert.file_hash_sha1 }}</code></div>{% endif %}
+                        {% if alert.file_hash_sha256 %}<div class="col-md-4"><div class="detail-label">SHA256</div><code style="font-size:0.7rem;">{{ alert.file_hash_sha256 }}</code></div>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if alert.mitre_tactic or alert.mitre_technique %}
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <h6 class="text-secondary"><i class="bi bi-crosshair"></i> MITRE ATT&CK</h6>
+                    <div class="row g-2">
+                        {% if alert.mitre_id %}<div class="col-auto"><span class="badge bg-dark">{{ alert.mitre_id }}</span></div>{% endif %}
+                        {% if alert.mitre_tactic %}<div class="col-auto"><span class="badge bg-info bg-opacity-25 text-info">{{ alert.mitre_tactic }}</span></div>{% endif %}
+                        {% if alert.mitre_technique %}<div class="col-auto"><span class="badge bg-warning bg-opacity-25 text-warning">{{ alert.mitre_technique }}</span></div>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <h6 class="text-secondary"><i class="bi bi-chat-dots"></i> Analyst Comments</h6>
+                    {% if comments %}
+                    <div class="mb-3">
+                        {% for c in comments %}
+                        <div class="p-2 mb-2" style="background: rgba(19,26,43,0.5); border-radius: 6px; border-left: 3px solid var(--accent-blue);">
+                            <div class="d-flex justify-content-between">
+                                <strong style="font-size:0.8rem;">{{ c.user.username }}</strong>
+                                <small class="text-muted">{{ c.created_at|timesince }} ago</small>
+                            </div>
+                            <small class="text-secondary">{{ c.get_comment_type_display }}</small>
+                            <p class="mb-0 small mt-1">{{ c.comment }}</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted small">No comments yet.</p>
+                    {% endif %}
+
+                    <form method="post" action="{% url 'alerts:add_comment' alert.id %}">
+                        {% csrf_token %}
+                        <div class="mb-2">
+                            <textarea name="comment" class="form-control" rows="2" placeholder="Add your comment..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-send"></i> Add Comment</button>
+                    </form>
+                </div>
+
+                {% if alert.remediation_note %}
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <h6 class="text-secondary"><i class="bi bi-tools"></i> Remediation Notes</h6>
+                    <p>{{ alert.remediation_note }}</p>
+                </div>
+                {% endif %}
+
+                {% if alert.raw_json %}
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <h6 class="text-secondary"><i class="bi bi-code-slash"></i> Raw JSON</h6>
+                    <pre style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 6px; max-height: 300px; overflow: auto; font-size: 0.7rem; color: var(--text-secondary);">{{ alert.raw_json|pprint }}</pre>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="ariba-card p-3 mb-3">
+                <h6 class="text-secondary"><i class="bi bi-person"></i> Assignment</h6>
+                <hr style="border-color: var(--border-color);">
+                {% if alert.assignee %}
+                <p><strong>{{ alert.assignee.get_full_name|default:alert.assignee.username }}</strong>
+                    {% if alert.assignee.analyst_profile %}
+                    <span class="badge bg-secondary">{{ alert.assignee.analyst_profile.get_role_display }}</span>
+                    {% endif %}
+                </p>
+                <small class="text-muted">Assigned by {{ alert.assigned_by.username|default:'System' }} at {{ alert.assigned_at|date:"M d, H:i"|default:'—' }}</small>
+                {% else %}
+                <p class="text-muted">Unassigned</p>
+                {% endif %}
+                <form method="post" action="{% url 'alerts:assign' alert.id %}" class="mt-2">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-ariba-primary btn-sm w-100"><i class="bi bi-person-plus"></i> Assign to me</button>
+                </form>
+            </div>
+
+            <div class="ariba-card p-3 mb-3">
+                <h6 class="text-secondary"><i class="bi bi-arrow-right"></i> Actions</h6>
+                <hr style="border-color: var(--border-color);">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-sm btn-ariba-outline text-start" data-bs-toggle="modal" data-bs-target="#editAlertModal"
+                        data-alert-id="{{ alert.id }}"
+                        data-assignee-id="{{ alert.assignee_id|default:'' }}"
+                        data-status="{{ alert.status }}"
+                        data-severity="{{ alert.severity }}"
+                        data-verdict="{{ alert.verdict }}"
+                        data-priority="{{ alert.priority }}">
+                        <i class="bi bi-pencil"></i> Edit Alert
+                    </button>
+                    {% if alert.status != 'Escalated' %}
+                    <form method="post" action="{% url 'alerts:escalate' alert.id %}">
+                        {% csrf_token %}
+                        <div class="mb-1"><input type="text" name="escalation_reason" class="form-control form-control-sm" placeholder="Escalation reason" required></div>
+                        <button type="submit" class="btn btn-sm btn-outline-danger w-100 text-start">
+                            <i class="bi bi-arrow-up-circle"></i> Escalate to L2
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% if alert.status != 'Closed' %}
+                    <form method="post" action="{% url 'alerts:close' alert.id %}">
+                        {% csrf_token %}
+                        <select name="verdict" class="form-select form-select-sm mb-1" required>
+                            <option value="">Select verdict...</option>
+                            <option value="True Positive">True Positive</option>
+                            <option value="False Positive">False Positive</option>
+                            <option value="Benign Positive">Benign Positive</option>
+                            <option value="Duplicate">Duplicate</option>
+                        </select>
+                        <input type="text" name="closure_comment" class="form-control form-control-sm mb-1" placeholder="Closure comment" required>
+                        <button type="submit" class="btn btn-sm btn-outline-success w-100 text-start">
+                            <i class="bi bi-check2-circle"></i> Close Alert
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% if alert.status != 'Archived' and alert.status == 'Closed' %}
+                    <form method="post" action="{% url 'alerts:archive' alert.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-ariba-outline text-start" data-confirm="Archive this alert?">
+                            <i class="bi bi-archive"></i> Archive
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="ariba-card p-3 mb-3">
+                <h6 class="text-secondary"><i class="bi bi-activity"></i> SLA Status</h6>
+                <hr style="border-color: var(--border-color);">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge {% if alert.sla_status == 'Breached' %}bg-danger{% elif alert.sla_status == 'Near SLA breach' %}bg-warning text-dark{% else %}bg-success{% endif %} p-2">{{ alert.sla_status }}</span>
+                </div>
+                {% if alert.sla_due_at %}
+                <small class="text-muted mt-1 d-block">Due: {{ alert.sla_due_at|date:"M d, H:i" }}</small>
+                {% endif %}
+            </div>
+
+            <div class="ariba-card p-3 mb-3">
+                <h6 class="text-secondary"><i class="bi bi-clock-history"></i> Audit Trail</h6>
+                <hr style="border-color: var(--border-color);">
+                <div class="timeline" style="max-height: 300px; overflow-y: auto;">
+                    {% for log in audit_logs %}
+                    <div class="timeline-item">
+                        <small class="text-muted">{{ log.created_at|timesince }} ago</small>
+                        <p class="mb-0 small">
+                            <span class="text-info">{{ log.user.username|default:'System' }}</span>
+                            {{ log.action }}
+                            {% if log.old_value and log.new_value %}
+                            <span class="text-muted">({{ log.old_value }} → {{ log.new_value }})</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted small">No audit logs yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% include 'ariba_soc/_edit_alert_modal.html' %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-target="#editAlertModal"]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var alertId = this.getAttribute('data-alert-id');
+            document.getElementById('editAlertForm').action = "{% url 'alerts:edit' 0 %}".replace('/0/', '/' + alertId + '/');
+            ['assignee','status','severity','verdict','priority'].forEach(function(field) {
+                var el = document.getElementById('id_' + field);
+                var val = btn.getAttribute('data-' + field.replace('_','-'));
+                if (el && val) el.value = val;
+            });
+        });
+    });
+});
+</script>
+{% endblock %}

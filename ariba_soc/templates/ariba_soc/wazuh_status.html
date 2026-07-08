@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="m-0"><i class="bi bi-hdd-rack"></i> Wazuh Integration Dashboard</h4>
+        <div>
+            <form method="post" action="{% url 'wazuh_integration:sync' %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-arrow-repeat"></i> Force Sync Alerts</button>
+            </form>
+            <a href="{% url 'wazuh_integration:agents' %}" class="btn btn-outline-info btn-sm ms-2"><i class="bi bi-pc-display"></i> View Agents</a>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-4 border-secondary" id="wazuhTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active bg-transparent text-light border-0" id="status-tab" data-bs-toggle="tab" data-bs-target="#status" type="button" role="tab" style="border-bottom: 2px solid var(--ariba-primary) !important;">
+                <i class="bi bi-activity"></i> Overview & Logs
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link bg-transparent text-secondary border-0" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab" onclick="this.style.borderBottom='2px solid var(--ariba-primary)'; document.getElementById('status-tab').style.borderBottom='none';">
+                <i class="bi bi-gear"></i> Configuration
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="wazuhTabsContent">
+        <!-- Overview Tab -->
+        <div class="tab-pane fade show active" id="status" role="tabpanel">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="ariba-card p-4 h-100" style="background: rgba(30, 33, 40, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;">
+                        <h6 class="text-info mb-3"><i class="bi bi-info-circle"></i> Current Status</h6>
+                        {% if config %}
+                        <div class="mb-3 d-flex align-items-center">
+                            <span class="text-muted me-3">Integration:</span>
+                            {% if config.is_active %}
+                                <span class="badge bg-success"><i class="bi bi-check-circle"></i> Active</span>
+                            {% else %}
+                                <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Inactive</span>
+                            {% endif %}
+                        </div>
+                        <table class="table table-sm ariba-table text-light border-secondary">
+                            <tr><td class="text-muted border-secondary">API URL</td><td class="border-secondary"><code>{{ config.api_url }}</code></td></tr>
+                            <tr><td class="text-muted border-secondary">Last Sync</td><td class="border-secondary">{{ config.last_sync_at|default:'Never' }}</td></tr>
+                            <tr><td class="text-muted border-secondary">Sync Interval</td><td class="border-secondary">Every {{ config.sync_interval_minutes }} mins</td></tr>
+                        </table>
+                        <div class="mt-4">
+                            <a href="{% url 'wazuh_integration:agents' %}" class="btn btn-outline-light btn-sm w-100">Browse Connected Agents <i class="bi bi-arrow-right"></i></a>
+                        </div>
+                        {% else %}
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> No configuration found. Please setup the integration in the Configuration tab.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="ariba-card p-4 h-100" style="background: rgba(30, 33, 40, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="text-info m-0"><i class="bi bi-clock-history"></i> Recent Sync Activity</h6>
+                            <a href="{% url 'wazuh_integration:logs' %}" class="text-decoration-none text-muted small">View All</a>
+                        </div>
+                        <div style="max-height: 250px; overflow-y: auto;" class="pe-2">
+                            {% for log in sync_logs %}
+                            <div class="d-flex justify-content-between align-items-center py-2 border-bottom" style="border-color: rgba(255,255,255,0.05) !important;">
+                                <div>
+                                    <span class="badge {% if log.status == 'Success' %}bg-success{% elif log.status == 'Failed' %}bg-danger{% else %}bg-warning{% endif %} me-2" style="width: 70px;">{{ log.status }}</span>
+                                    <small class="text-light">{{ log.started_at|timesince }} ago</small>
+                                </div>
+                                <small class="text-muted text-end">
+                                    {{ log.alerts_fetched }} fetched<br>
+                                    <span class="text-info">{{ log.alerts_created }} created</span>
+                                </small>
+                            </div>
+                            {% empty %}
+                            <div class="text-center py-4 text-muted">
+                                <i class="bi bi-inbox fs-2"></i>
+                                <p class="mb-0 mt-2">No sync logs available.</p>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration Tab -->
+        <div class="tab-pane fade" id="config" role="tabpanel">
+            <div class="ariba-card p-4 mx-auto" style="max-width: 800px; background: rgba(30, 33, 40, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;">
+                <h5 class="text-info border-bottom border-secondary pb-2 mb-4"><i class="bi bi-sliders"></i> API Connection Settings</h5>
+                
+                <form method="post" action="{% url 'wazuh_integration:config_update' %}">
+                    {% csrf_token %}
+                    
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {{ form.non_field_errors }}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label text-light">API URL</label>
+                            {{ form.api_url }}
+                            <div class="form-text text-muted">Example: https://wazuh-manager.local:55000</div>
+                            {% if form.api_url.errors %}<div class="text-danger small">{{ form.api_url.errors }}</div>{% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label text-light">API Username</label>
+                            {{ form.api_username }}
+                            {% if form.api_username.errors %}<div class="text-danger small">{{ form.api_username.errors }}</div>{% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label text-light">API Password</label>
+                            {{ form.api_password }}
+                            {% if form.api_password.errors %}<div class="text-danger small">{{ form.api_password.errors }}</div>{% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label text-light">Timeout (seconds)</label>
+                            {{ form.timeout }}
+                            {% if form.timeout.errors %}<div class="text-danger small">{{ form.timeout.errors }}</div>{% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label text-light">Sync Interval (minutes)</label>
+                            {{ form.sync_interval_minutes }}
+                            {% if form.sync_interval_minutes.errors %}<div class="text-danger small">{{ form.sync_interval_minutes.errors }}</div>{% endif %}
+                        </div>
+                        
+                        <div class="col-12 mt-4">
+                            <div class="form-check form-switch mb-2">
+                                {{ form.verify_ssl }}
+                                <label class="form-check-label text-light ms-2">Verify SSL Certificate</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                {{ form.is_active }}
+                                <label class="form-check-label text-light ms-2">Enable Integration</label>
+                            </div>
+                        </div>
+                        
+                        <div class="col-12 mt-4 text-end border-top border-secondary pt-3">
+                            <button type="submit" class="btn btn-ariba-primary"><i class="bi bi-save"></i> Save Configuration</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('status-tab').addEventListener('click', function() {
+        this.style.borderBottom = '2px solid var(--ariba-primary)';
+        document.getElementById('config-tab').style.borderBottom = 'none';
+    });
+</script>
+{% endblock %}

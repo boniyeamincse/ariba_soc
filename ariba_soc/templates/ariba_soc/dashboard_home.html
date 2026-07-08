@@ -1,0 +1,220 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="m-0"><i class="bi bi-graph-up"></i> Management Dashboard</h4>
+        <div>
+            <span class="text-secondary small me-2">Last updated: {% now "M d, H:i" %}</span>
+            <button class="btn btn-ariba-outline btn-sm" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="kpi-card text-center">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="kpi-label">Total Today</div>
+                    <i class="bi bi-bell kpi-icon text-primary"></i>
+                </div>
+                <div class="kpi-value">{{ total_alerts_today }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card text-center">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="kpi-label">Open Alerts</div>
+                    <i class="bi bi-inbox kpi-icon text-warning"></i>
+                </div>
+                <div class="kpi-value" style="color: var(--severity-medium);">{{ open_alerts }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card text-center">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="kpi-label">Critical Open</div>
+                    <i class="bi bi-fire kpi-icon text-danger"></i>
+                </div>
+                <div class="kpi-value" style="color: var(--severity-critical);">{{ critical_open }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card text-center">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="kpi-label">SLA Breached</div>
+                    <i class="bi bi-exclamation-triangle kpi-icon text-danger"></i>
+                </div>
+                <div class="kpi-value" style="color: var(--severity-critical);">{{ sla_breached }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card text-center">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="kpi-label">True Positives</div>
+                    <i class="bi bi-shield-check kpi-icon text-danger"></i>
+                </div>
+                <div class="kpi-value" style="color: var(--severity-critical);">{{ true_positives }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card text-center">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="kpi-label">False Positives</div>
+                    <i class="bi bi-shield-x kpi-icon text-success"></i>
+                </div>
+                <div class="kpi-value" style="color: var(--severity-low);">{{ false_positives }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card text-center">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="kpi-label">Escalated</div>
+                    <i class="bi bi-arrow-up-circle kpi-icon text-danger"></i>
+                </div>
+                <div class="kpi-value" style="color: var(--status-escalated);">{{ escalated_alerts }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card text-center">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="kpi-label">Closed</div>
+                    <i class="bi bi-check2-circle kpi-icon text-success"></i>
+                </div>
+                <div class="kpi-value" style="color: var(--severity-low);">{{ closed_alerts }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="ariba-card p-3">
+                <h6 class="text-secondary mb-3"><i class="bi bi-bar-chart"></i> Alerts by Severity</h6>
+                <canvas id="severityChart" height="200"></canvas>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="ariba-card p-3">
+                <h6 class="text-secondary mb-3"><i class="bi bi-pie-chart"></i> Alerts by Status</h6>
+                <canvas id="statusChart" height="200"></canvas>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="ariba-card p-3">
+                <h6 class="text-secondary mb-3"><i class="bi bi-graph-up"></i> Alert Trend (7 days)</h6>
+                <canvas id="trendChart" height="200"></canvas>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="ariba-card p-3">
+                <h6 class="text-secondary mb-3"><i class="bi bi-person"></i> Analyst Workload</h6>
+                <canvas id="analystChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="ariba-card p-3">
+                <h6 class="text-secondary mb-3"><i class="bi bi-list-ul"></i> Top 10 Alert Names</h6>
+                <div id="topAlertsList"><small class="text-muted">Loading...</small></div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="ariba-card p-3">
+                <h6 class="text-secondary mb-3"><i class="bi bi-hdd"></i> Top 10 Affected Hosts</h6>
+                <div id="topHostsList"><small class="text-muted">Loading...</small></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    fetch("{% url 'dashboard:stats_api' %}")
+        .then(r => r.json())
+        .then(data => {
+            // Severity chart
+            new Chart(document.getElementById('severityChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: data.severity.map(s => s.severity),
+                    datasets: [{
+                        data: data.severity.map(s => s.count),
+                        backgroundColor: ['#6b7280', '#22c55e', '#eab308', '#f97316', '#ef4444']
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#8896b8' } } } }
+            });
+
+            // Status chart
+            new Chart(document.getElementById('statusChart'), {
+                type: 'bar',
+                data: {
+                    labels: data.status.map(s => s.status),
+                    datasets: [{
+                        label: 'Count',
+                        data: data.status.map(s => s.count),
+                        backgroundColor: ['#3b82f6', '#eab308', '#f97316', '#94a3b8', '#ef4444', '#22c55e', '#6b7280']
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } },
+                    scales: { x: { ticks: { color: '#8896b8' } }, y: { ticks: { color: '#8896b8' } } } }
+            });
+
+            // Trend chart
+            new Chart(document.getElementById('trendChart'), {
+                type: 'line',
+                data: {
+                    labels: data.alerts_by_day.map(d => d.date),
+                    datasets: [{
+                        label: 'Alerts',
+                        data: data.alerts_by_day.map(d => d.count),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59,130,246,0.1)',
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { labels: { color: '#8896b8' } } },
+                    scales: { x: { ticks: { color: '#8896b8' } }, y: { ticks: { color: '#8896b8' } } } }
+            });
+
+            // Analyst chart
+            new Chart(document.getElementById('analystChart'), {
+                type: 'bar',
+                data: {
+                    labels: data.analyst_load.map(a => a.assignee__username || 'Unknown'),
+                    datasets: [{
+                        label: 'Alerts',
+                        data: data.analyst_load.map(a => a.count),
+                        backgroundColor: '#06b6d4'
+                    }]
+                },
+                options: { responsive: true, indexAxis: 'y', plugins: { legend: { display: false } },
+                    scales: { x: { ticks: { color: '#8896b8' } }, y: { ticks: { color: '#8896b8' } } } }
+            });
+
+            // Top 10 alerts
+            var alertsList = document.getElementById('topAlertsList');
+            alertsList.innerHTML = data.top_alerts.map((a, i) =>
+                `<div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+                    <span><small>${i+1}. ${a.alert_name}</small></span>
+                    <span class="badge bg-secondary">${a.count}</span>
+                </div>`
+            ).join('');
+
+            // Top 10 hosts
+            var hostsList = document.getElementById('topHostsList');
+            hostsList.innerHTML = data.top_hosts.map((h, i) =>
+                `<div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+                    <span><small>${i+1}. ${h.hostname}</small></span>
+                    <span class="badge bg-secondary">${h.count}</span>
+                </div>`
+            ).join('');
+        });
+});
+</script>
+{% endblock %}

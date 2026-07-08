@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="m-0"><i class="bi bi-kanban"></i> Alert Board</h4>
+        <div>
+            <a href="{% url 'alerts:table' %}" class="btn btn-ariba-outline btn-sm"><i class="bi bi-table"></i> Table View</a>
+            <button class="btn btn-ariba-outline btn-sm" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+        </div>
+    </div>
+
+    <div class="kanban-board">
+        <div class="kanban-column board-col-new">
+            <div class="kanban-column-header">
+                <span><i class="bi bi-inbox"></i> New</span>
+                <span class="badge bg-primary">{{ new_alerts|length }}</span>
+            </div>
+            <div class="kanban-column-body" data-status="New">
+                {% for alert in new_alerts %}
+                {% include 'ariba_soc/_board_card.html' with alert=alert %}
+                {% empty %}
+                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="kanban-column board-col-progress">
+            <div class="kanban-column-header">
+                <span><i class="bi bi-arrow-repeat"></i> In Progress</span>
+                <span class="badge bg-warning text-dark">{{ in_progress_alerts|length }}</span>
+            </div>
+            <div class="kanban-column-body" data-status="In Progress">
+                {% for alert in in_progress_alerts %}
+                {% include 'ariba_soc/_board_card.html' with alert=alert %}
+                {% empty %}
+                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="kanban-column board-col-escalated">
+            <div class="kanban-column-header">
+                <span><i class="bi bi-arrow-up-circle"></i> Escalated</span>
+                <span class="badge bg-danger">{{ escalated_alerts|length }}</span>
+            </div>
+            <div class="kanban-column-body" data-status="Escalated">
+                {% for alert in escalated_alerts %}
+                {% include 'ariba_soc/_board_card.html' with alert=alert %}
+                {% empty %}
+                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="kanban-column board-col-tp">
+            <div class="kanban-column-header">
+                <span><i class="bi bi-check2-circle"></i> True Positives</span>
+                <span class="badge bg-danger">{{ true_positives|length }}</span>
+            </div>
+            <div class="kanban-column-body">
+                {% for alert in true_positives %}
+                {% include 'ariba_soc/_board_card.html' with alert=alert %}
+                {% empty %}
+                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="kanban-column board-col-fp">
+            <div class="kanban-column-header">
+                <span><i class="bi bi-x-circle"></i> False Positives</span>
+                <span class="badge bg-success">{{ false_positives|length }}</span>
+            </div>
+            <div class="kanban-column-body">
+                {% for alert in false_positives %}
+                {% include 'ariba_soc/_board_card.html' with alert=alert %}
+                {% empty %}
+                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="kanban-column board-col-archive">
+            <div class="kanban-column-header">
+                <span><i class="bi bi-archive"></i> Archive</span>
+                <span class="badge bg-secondary">{{ archived_alerts|length }}</span>
+            </div>
+            <div class="kanban-column-body" data-status="Archived">
+                {% for alert in archived_alerts %}
+                {% include 'ariba_soc/_board_card.html' with alert=alert %}
+                {% empty %}
+                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

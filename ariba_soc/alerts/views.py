@@ -1,0 +1,265 @@
+import json
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from django.db.models import Q
+from django.core.paginator import Paginator
+from django.utils import timezone
+from django.contrib.auth.models import User
+from .models import Alert, AlertComment, AlertAuditLog
+from .forms import AlertEditForm, AlertCommentForm
+from .services import update_alert, assign_alert, create_audit_log
+
+
+@login_required
+def alert_table(request):
+    alerts = Alert.objects.select_related('assignee', 'source').all()
+    severity = request.GET.get('severity')
+    status = request.GET.get('status')
+    verdict = request.GET.get('verdict')
+    search = request.GET.get('search')
+    assignee = request.GET.get('assignee')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    sort = request.GET.get('sort', '-alert_time')
+
+    if search:
+        alerts = alerts.filter(
+            Q(alert_name__icontains=search) |
+            Q(hostname__icontains=search) |
+            Q(username__icontains=search) |
+            Q(source_ip__icontains=search) |
+            Q(destination_ip__icontains=search) |
+            Q(rule_id__icontains=search) |
+            Q(agent_name__icontains=search) |
+            Q(process_name__icontains=search) |
+            Q(file_hash_md5__icontains=search) |
+            Q(file_hash_sha256__icontains=search)
+        )
+    if severity:
+        alerts = alerts.filter(severity=severity)
+    if status:
+        alerts = alerts.filter(status=status)
+    if verdict:
+        alerts = alerts.filter(verdict=verdict)
+    if assignee:
+        alerts = alerts.filter(assignee_id=assignee)
+    if date_from:
+        alerts = alerts.filter(alert_time__gte=date_from)
+    if date_to:
+        alerts = alerts.filter(alert_time__lte=date_to)
+
+    allowed_sorts = ['alert_time', '-alert_time', 'severity', '-severity', 'status', '-status', 'verdict', '-verdict', 'alert_name', '-alert_name']
+    if sort in allowed_sorts:
+        alerts = alerts.order_by(sort)
+    else:
+        alerts = alerts.order_by('-alert_time')
+
+    paginator = Paginator(alerts, 50)
+    page = request.GET.get('page', 1)
+    alerts_page = paginator.get_page(page)
+
+    assignees = Alert.objects.exclude(assignee__isnull=True).values_list('assignee_id', 'assignee__username').distinct()
+
+    context = {
+        'alerts': alerts_page,
+        'assignees': assignees,
+        'users': User.objects.filter(is_active=True),
+        'current_filters': {
+            'search': search, 'severity': severity, 'status': status,
+            'verdict': verdict, 'assignee': assignee, 'date_from': date_from, 'date_to': date_to,
+        },
+        'is_paginated': alerts_page.has_other_pages(),
+    }
+    return render(request, 'ariba_soc/alert_table.html', context)
+
+
+@login_required
+def alert_board(request):
+    alerts = Alert.objects.select_related('assignee', 'source').all()
+    search = request.GET.get('search')
+    if search:
+        alerts = alerts.filter(
+            Q(alert_name__icontains=search) |
+            Q(hostname__icontains=search) |
+            Q(username__icontains=search)
+        )
+    context = {
+        'new_alerts': alerts.filter(status='New'),
+        'in_progress_alerts': alerts.filter(status='In Progress'),
+        'awaiting_alerts': alerts.filter(status='Awaiting Action'),
+        'pending_alerts': alerts.filter(status='Pending'),
+        'escalated_alerts': alerts.filter(status='Escalated'),
+        'true_positives': alerts.filter(verdict='True Positive', status='Closed'),
+        'false_positives': alerts.filter(verdict='False Positive', status='Closed'),
+        'closed_alerts': alerts.filter(status='Closed'),
+        'archived_alerts': alerts.filter(status='Archived'),
+        'users': User.objects.filter(is_active=True),
+    }
+    return render(request, 'ariba_soc/alert_board.html', context)
+
+
+@login_required
+def alert_detail(request, alert_id):
+    alert = get_object_or_404(Alert.objects.select_related('assignee', 'source', 'assigned_by'), id=alert_id)
+    comments = alert.comments.select_related('user').all()
+    audit_logs = alert.audit_logs.select_related('user').all()[:50]
+    form = AlertEditForm(instance=alert, user=request.user)
+    return render(request, 'ariba_soc/alert_detail.html', {
+        'alert': alert, 'comments': comments, 'audit_logs': audit_logs, 'form': form,
+        'users': User.objects.filter(is_active=True),
+    })
+
+
+@login_required
+def alert_edit(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    if request.method == 'POST':
+        form = AlertEditForm(request.POST, instance=alert, user=request.user)
+        if form.is_valid():
+            update_alert(alert, form, request.user, request)
+            messages.success(request, 'Alert updated successfully.')
+            return redirect('alerts:detail', alert_id=alert.id)
+        else:
+            for error in form.non_field_errors():
+                messages.error(request, error)
+    return redirect('alerts:detail', alert_id=alert_id)
+
+
+@login_required
+@require_POST
+def alert_assign(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    assignee_id = request.POST.get('assignee_id')
+    assignee = request.user
+    if assignee_id:
+        from django.contrib.auth.models import User
+        assignee = get_object_or_404(User, id=assignee_id)
+    assign_alert(alert, request.user, assignee, request)
+    messages.success(request, f'Alert assigned to {assignee.username}.')
+    return redirect(request.META.get('HTTP_REFERER', 'alerts:table'))
+
+
+@login_required
+@require_POST
+def alert_add_comment(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    form = AlertCommentForm(request.POST)
+    if form.is_valid():
+        comment = form.save(commit=False)
+        comment.alert = alert
+        comment.user = request.user
+        comment.save()
+        create_audit_log(alert, request.user, 'Comment Added', '', form.cleaned_data['comment'][:200], request)
+        messages.success(request, 'Comment added.')
+    return redirect('alerts:detail', alert_id=alert_id)
+
+
+@login_required
+def alert_escalate(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    if request.method == 'POST':
+        reason = request.POST.get('escalation_reason', '')
+        if not reason:
+            messages.error(request, 'Escalation reason is required.')
+            return redirect('alerts:detail', alert_id=alert_id)
+        alert.status = 'Escalated'
+        alert.is_escalated = True
+        alert.escalated_at = alert.escalated_at or timezone.now()
+        alert.escalation_reason = reason
+        alert.save()
+        AlertComment.objects.create(
+            alert=alert, user=request.user, comment=f"Escalated: {reason}", comment_type='Escalation Note'
+        )
+        create_audit_log(alert, request.user, 'Escalated', '', reason, request)
+        messages.success(request, 'Alert escalated to L2.')
+    return redirect('alerts:detail', alert_id=alert_id)
+
+
+@login_required
+def alert_close(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    if request.method == 'POST':
+        verdict = request.POST.get('verdict', '')
+        comment = request.POST.get('closure_comment', '')
+        if not verdict or verdict == 'None':
+            messages.error(request, 'Verdict must be set before closing.')
+            return redirect('alerts:detail', alert_id=alert_id)
+        if not comment:
+            messages.error(request, 'Closure comment is required.')
+            return redirect('alerts:detail', alert_id=alert_id)
+        old_status = alert.status
+        alert.status = 'Closed'
+        alert.verdict = verdict
+        alert.closure_reason = comment
+        alert.save()
+        AlertComment.objects.create(
+            alert=alert, user=request.user, comment=comment, comment_type='Closure Note'
+        )
+        create_audit_log(alert, request.user, 'Closed', old_status, verdict, request)
+        messages.success(request, 'Alert closed.')
+    return redirect('alerts:detail', alert_id=alert_id)
+
+
+@login_required
+@require_POST
+def alert_archive(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    alert.status = 'Archived'
+    alert.save()
+    create_audit_log(alert, request.user, 'Archived', '', 'Archived', request)
+    messages.success(request, 'Alert archived.')
+    return redirect('alerts:table')
+
+
+@login_required
+def my_alerts(request):
+    alerts = Alert.objects.filter(assignee=request.user).select_related('source')
+    if not alerts.exists():
+        return render(request, 'ariba_soc/my_alerts.html', {'alerts': alerts, 'no_alerts': True, 'users': User.objects.filter(is_active=True)})
+    paginator = Paginator(alerts, 50)
+    page = request.GET.get('page', 1)
+    alerts_page = paginator.get_page(page)
+    return render(request, 'ariba_soc/my_alerts.html', {'alerts': alerts_page, 'users': User.objects.filter(is_active=True)})
+
+
+@login_required
+def alerts_api(request):
+    alerts = Alert.objects.select_related('assignee').all().order_by('-alert_time')[:100]
+    data = []
+    for a in alerts:
+        data.append({
+            'id': a.id,
+            'alert_name': a.alert_name,
+            'severity': a.severity,
+            'status': a.status,
+            'verdict': a.verdict,
+            'priority': a.priority,
+            'assignee': a.assignee.username if a.assignee else None,
+            'assignee_id': a.assignee_id,
+            'source_name': a.source_name,
+            'hostname': a.hostname,
+            'alert_time': a.alert_time.isoformat(),
+            'rule_id': a.rule_id,
+            'sla_status': a.sla_status,
+        })
+    return JsonResponse({'alerts': data})
+
+
+@login_required
+@require_POST
+def alert_move_api(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    data = json.loads(request.body)
+    new_status = data.get('status')
+    if new_status and new_status in dict(Alert.STATUS_CHOICES):
+        old = alert.status
+        alert.status = new_status
+        if new_status == 'In Progress':
+            alert.acknowledged_at = alert.acknowledged_at or timezone.now()
+        alert.save()
+        create_audit_log(alert, request.user, 'Status Changed', old, new_status, request)
+        return JsonResponse({'success': True})
+    return JsonResponse({'success': False, 'error': 'Invalid status'}, status=400)

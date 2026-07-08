@@ -1,0 +1,15 @@
+{% if verdict == 'True Positive' %}
+<span class="badge bg-danger bg-opacity-75">{{ verdict }}</span>
+{% elif verdict == 'False Positive' %}
+<span class="badge bg-success bg-opacity-75">{{ verdict }}</span>
+{% elif verdict == 'Suspicious' %}
+<span class="badge bg-warning text-dark bg-opacity-75">{{ verdict }}</span>
+{% elif verdict == 'None' %}
+<span class="badge bg-secondary bg-opacity-25 text-secondary">{{ verdict }}</span>
+{% elif verdict == 'Benign Positive' %}
+<span class="badge bg-info bg-opacity-75">{{ verdict }}</span>
+{% elif verdict == 'Duplicate' %}
+<span class="badge bg-secondary">{{ verdict }}</span>
+{% else %}
+<span class="badge bg-secondary">{{ verdict }}</span>
+{% endif %}

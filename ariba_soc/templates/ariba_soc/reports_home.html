@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="m-0"><i class="bi bi-file-text"></i> Reports</h4>
+        <div>
+            <a href="{% url 'reports:export_csv' %}" class="btn btn-ariba-outline btn-sm"><i class="bi bi-filetype-csv"></i> CSV</a>
+            <a href="{% url 'reports:export_excel' %}" class="btn btn-ariba-outline btn-sm"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="ariba-card p-3">
+                <h5 class="mb-3">Daily SOC Report</h5>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="kpi-card text-center">
+                            <div class="kpi-label">Total Today</div>
+                            <div class="kpi-value" style="color: var(--accent-blue);">{{ daily.total }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="kpi-card text-center">
+                            <div class="kpi-label">Open</div>
+                            <div class="kpi-value" style="color: var(--severity-medium);">{{ daily.open }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="kpi-card text-center">
+                            <div class="kpi-label">Closed</div>
+                            <div class="kpi-value" style="color: var(--severity-low);">{{ daily.closed }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="kpi-card text-center">
+                            <div class="kpi-label">Critical</div>
+                            <div class="kpi-value" style="color: var(--severity-critical);">{{ daily.critical }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="kpi-card text-center">
+                            <div class="kpi-label">True Positives</div>
+                            <div class="kpi-value" style="color: var(--severity-critical);">{{ daily.true_positives }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="kpi-card text-center">
+                            <div class="kpi-label">False Positives</div>
+                            <div class="kpi-value" style="color: var(--severity-low);">{{ daily.false_positives }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="kpi-card text-center">
+                            <div class="kpi-label">Weekly Total</div>
+                            <div class="kpi-value">{{ weekly_total }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="kpi-card text-center">
+                            <div class="kpi-label">Monthly Total</div>
+                            <div class="kpi-value">{{ monthly_total }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
