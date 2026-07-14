@@ -101,6 +101,56 @@ class WazuhClient:
             return {'data': {'items': []}}
 
 
+class ElasticsearchClient:
+    def __init__(self, config):
+        self.base_url = config.api_url.rstrip('/')
+        self.username = config.api_username
+        self.password = config.api_password
+        self.index_pattern = config.es_index_pattern or 'wazuh-alerts-*'
+        self.verify_ssl = config.verify_ssl
+        self.timeout = config.timeout
+        self.session = requests.Session()
+        self.session.verify = self.verify_ssl
+        self.session.auth = (self.username, self.password)
+        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20)
+        self.session.mount('https://', adapter)
+
+    def fetch_alerts(self, time_range='1h', max_alerts=5000):
+        try:
+            if time_range == '1h':
+                since = (timezone.now() - timedelta(hours=1)).isoformat()
+            elif time_range == '24h':
+                since = (timezone.now() - timedelta(hours=24)).isoformat()
+            else:
+                since = time_range
+
+            body = {
+                'size': min(max_alerts, 5000),
+                'sort': [{'timestamp': {'order': 'desc'}}],
+                'query': {
+                    'range': {
+                        'timestamp': {'gte': since}
+                    }
+                }
+            }
+            response = self.session.post(
+                f'{self.base_url}/{self.index_pattern}/_search',
+                json=body,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            data = response.json()
+            hits = data.get('hits', {}).get('hits', [])
+            items = [h['_source'] for h in hits]
+            return {'data': {'items': items}}
+        except Exception as e:
+            logger.error(f'Failed to fetch alerts from Elasticsearch: {e}')
+            raise
+
+    def fetch_agents(self):
+        return {'data': {'items': []}}
+
+
 def normalize_alert(wazuh_alert):
     data = wazuh_alert.get('data', wazuh_alert)
     rule = data.get('rule', {})
@@ -154,6 +204,62 @@ def normalize_alert(wazuh_alert):
     return alert_data
 
 
+def normalize_es_alert(doc, idx=0):
+    timestamp = doc.get('timestamp') or doc.get('@timestamp') or timezone.now()
+    rule = doc.get('rule', {})
+    agent = doc.get('agent', {})
+
+    if isinstance(timestamp, str):
+        try:
+            timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            timestamp = timezone.now()
+
+    mitre_ids = []
+    if rule.get('mitre', {}).get('id'):
+        mitre_ids = rule['mitre']['id']
+    elif doc.get('input', {}).get('mitre', {}).get('id'):
+        mitre_ids = doc['input']['mitre']['id']
+
+    return {
+        'wazuh_alert_id': doc.get('id') or doc.get('_id') or str(idx),
+        'alert_time': timestamp,
+        'event_time': doc.get('system_time') or doc.get('timestamp'),
+        'alert_name': rule.get('description') or doc.get('rule', {}).get('description') or 'Unknown Alert',
+        'description': rule.get('description', ''),
+        'rule_description': rule.get('description', ''),
+        'severity': map_level_to_severity(rule.get('level', 0)),
+        'severity_score': rule.get('level', 0),
+        'rule_id': str(rule.get('id', '')),
+        'rule_level': rule.get('level', 0),
+        'agent_id': str(agent.get('id', '')),
+        'agent_name': agent.get('name', ''),
+        'agent_ip': agent.get('ip', ''),
+        'hostname': agent.get('name', '') or doc.get('agent', {}).get('name', '') or doc.get('host', {}).get('hostname', ''),
+        'source_ip': doc.get('srcip') or doc.get('SrcIp') or doc.get('source', {}).get('ip', ''),
+        'destination_ip': doc.get('dstip') or doc.get('DstIp') or doc.get('destination', {}).get('ip', ''),
+        'username': doc.get('user') or doc.get('dstuser') or doc.get('srcuser', ''),
+        'process_name': '',
+        'process_user': '',
+        'command_line': '',
+        'target_file': '',
+        'file_path': doc.get('file', {}).get('path', '') if isinstance(doc.get('file'), dict) else '',
+        'file_hash_md5': '',
+        'file_hash_sha1': '',
+        'file_hash_sha256': '',
+        'url': '',
+        'mitre_id': ', '.join(mitre_ids) if isinstance(mitre_ids, list) else str(mitre_ids),
+        'mitre_tactic': '',
+        'mitre_technique': '',
+        'full_log': doc.get('full_log', ''),
+        'location': doc.get('location', ''),
+        'decoder_name': doc.get('decoder', {}).get('name', '') if isinstance(doc.get('decoder'), dict) else '',
+        'alert_fields': doc,
+        'raw_json': doc,
+        'source_name': doc.get('agent', {}).get('name', '') or doc.get('data', {}).get('source_name', '') or 'Wazuh',
+    }
+
+
 def map_level_to_severity(level):
     if level >= 12:
         return 'Critical'
@@ -166,14 +272,23 @@ def map_level_to_severity(level):
     return 'Informational'
 
 
-def fetch_wazuh_alerts(time_range='1h'):
+def fetch_wazuh_alerts(time_range='1h', config=None):
     sync_log = WazuhSyncLog.objects.create(status='Running')
     source, _ = AlertSource.objects.get_or_create(name='Wazuh', defaults={'source_type': 'Wazuh'})
-    client = WazuhClient()
     created_count = 0
     fetched_count = 0
 
+    if config is None:
+        config = WazuhConfiguration.objects.first()
+
     try:
+        if config and config.api_type == 'elasticsearch':
+            client = ElasticsearchClient(config)
+            normalize_fn = normalize_es_alert
+        else:
+            client = WazuhClient()
+            normalize_fn = normalize_alert
+
         result = client.fetch_alerts(time_range=time_range)
         alerts_data = result.get('data', {}).get('items', []) if 'data' in result else result.get('data', {}).get('affected_items', [])
         fetched_count = len(alerts_data)
@@ -183,12 +298,12 @@ def fetch_wazuh_alerts(time_range='1h'):
         ).values_list('wazuh_alert_id', flat=True))
 
         batch = []
-        for wazuh_alert in alerts_data:
-            alert_id = str(wazuh_alert.get('id', ''))
-            if not alert_id or alert_id in existing_ids:
+        for i, alert_raw in enumerate(alerts_data):
+            alert_id = str(alert_raw.get('id', '')) or str(i)
+            if alert_id in existing_ids:
                 continue
             try:
-                data = normalize_alert(wazuh_alert)
+                data = normalize_fn(alert_raw, i)
                 data['source'] = source
                 batch.append(Alert(**data))
             except Exception as e:
@@ -204,7 +319,6 @@ def fetch_wazuh_alerts(time_range='1h'):
         sync_log.finished_at = timezone.now()
         sync_log.save()
 
-        config = WazuhConfiguration.objects.first()
         if not config:
             config = WazuhConfiguration.objects.create()
         config.last_sync_at = timezone.now()

@@ -107,22 +107,34 @@
                     
                     <div class="row g-3">
                         <div class="col-12">
+                            <label class="form-label text-light">API Type</label>
+                            {{ form.api_type }}
+                            <div class="form-text text-muted">Select Wazuh REST API (port 55000) or Elasticsearch/OpenSearch (port 9200)</div>
+                        </div>
+
+                        <div class="col-12">
                             <label class="form-label text-light">API URL</label>
                             {{ form.api_url }}
-                            <div class="form-text text-muted">Example: https://wazuh-manager.local:55000</div>
+                            <div class="form-text text-muted" id="urlHelpText">Example: https://wazuh-manager.local:55000</div>
                             {% if form.api_url.errors %}<div class="text-danger small">{{ form.api_url.errors }}</div>{% endif %}
                         </div>
                         
                         <div class="col-sm-6">
-                            <label class="form-label text-light">API Username</label>
+                            <label class="form-label text-light">Username</label>
                             {{ form.api_username }}
                             {% if form.api_username.errors %}<div class="text-danger small">{{ form.api_username.errors }}</div>{% endif %}
                         </div>
                         
                         <div class="col-sm-6">
-                            <label class="form-label text-light">API Password</label>
+                            <label class="form-label text-light">Password</label>
                             {{ form.api_password }}
                             {% if form.api_password.errors %}<div class="text-danger small">{{ form.api_password.errors }}</div>{% endif %}
+                        </div>
+
+                        <div class="col-12" id="esIndexField">
+                            <label class="form-label text-light">Elasticsearch Index Pattern</label>
+                            {{ form.es_index_pattern }}
+                            <div class="form-text text-muted">Index pattern for alert documents (default: wazuh-alerts-*)</div>
                         </div>
                         
                         <div class="col-sm-6">
@@ -163,5 +175,20 @@
         this.style.borderBottom = '2px solid var(--ariba-primary)';
         document.getElementById('config-tab').style.borderBottom = 'none';
     });
+
+    function toggleEsFields() {
+        var apiType = document.getElementById('id_api_type');
+        var esField = document.getElementById('esIndexField');
+        var urlHelp = document.getElementById('urlHelpText');
+        if (apiType && apiType.value === 'elasticsearch') {
+            if (esField) esField.style.display = 'block';
+            if (urlHelp) urlHelp.textContent = 'Example: https://10.24.66.2:9200';
+        } else {
+            if (esField) esField.style.display = 'none';
+            if (urlHelp) urlHelp.textContent = 'Example: https://wazuh-manager.local:55000';
+        }
+    }
+    document.addEventListener('DOMContentLoaded', toggleEsFields);
+    document.getElementById('id_api_type')?.addEventListener('change', toggleEsFields);
 </script>
 {% endblock %}
