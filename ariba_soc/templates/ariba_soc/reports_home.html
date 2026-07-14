@@ -6,7 +6,9 @@
         <h4 class="m-0"><i class="bi bi-file-text"></i> Reports</h4>
         <div class="d-flex gap-2">
             <a href="{% url 'reports:export_csv' %}" class="btn btn-ariba-outline btn-sm export-btn"><i class="bi bi-filetype-csv"></i> CSV</a>
+            {% if HAS_OPENPYXL %}
             <a href="{% url 'reports:export_excel' %}" class="btn btn-ariba-outline btn-sm export-btn"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+            {% endif %}
         </div>
     </div>
 
