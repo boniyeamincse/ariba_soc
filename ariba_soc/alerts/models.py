@@ -196,6 +196,10 @@ class AlertComment(models.Model):
 
     class Meta:
         ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['alert', 'created_at']),
+        ]
 
     def __str__(self):
         return f"{self.user} - {self.comment_type}"
@@ -226,6 +230,10 @@ class AlertAuditLog(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['alert', '-created_at']),
+        ]
 
     def __str__(self):
         return f"{self.user} {self.action} - {self.alert}"
