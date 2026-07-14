@@ -260,6 +260,24 @@ def alert_archive(request, alert_id):
 
 
 @login_required
+@require_POST
+def alert_reopen(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    if alert.status not in ('Closed', 'Archived'):
+        messages.error(request, 'Only closed or archived alerts can be reopened.')
+        return redirect('alerts:detail', alert_id=alert_id)
+    old_status = alert.status
+    alert.status = 'New'
+    alert.closed_at = None
+    alert.archived_at = None
+    alert.closure_reason = ''
+    alert.save()
+    create_audit_log(alert, request.user, 'Reopened', old_status, 'New', request)
+    messages.success(request, 'Alert reopened.')
+    return redirect('alerts:detail', alert_id=alert_id)
+
+
+@login_required
 def my_alerts(request):
     alerts = Alert.objects.filter(assignee=request.user).select_related('source')
     if not alerts.exists():
@@ -299,6 +317,60 @@ def mark_notifications_read(request):
         Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
         return JsonResponse({'status': 'ok'})
     return JsonResponse({'status': 'error'}, status=400)
+
+
+@login_required
+@require_POST
+def alert_bulk_action(request):
+    action = request.POST.get('action')
+    value = request.POST.get('value', '')
+    alert_ids = request.POST.getlist('alert_ids')
+    if not alert_ids or not action:
+        messages.error(request, 'No alerts selected or no action specified.')
+        return redirect('alerts:table')
+    alerts = Alert.objects.filter(id__in=alert_ids)
+    count = alerts.count()
+    if action == 'assign':
+        check_perm(request.user, 'can_assign_others')
+        user_id = value
+        if user_id:
+            assignee = get_object_or_404(User, id=user_id)
+            for alert in alerts:
+                assign_alert(alert, request.user, assignee, request)
+        messages.success(request, f'{count} alerts assigned.')
+    elif action == 'status':
+        check_perm(request.user, 'can_change_status')
+        old_val = ', '.join(alerts.values_list('status', flat=True).distinct())
+        alerts.update(status=value)
+        for alert in alerts:
+            create_audit_log(alert, request.user, 'Status Changed', old_val, value, request)
+        messages.success(request, f'{count} alerts status changed to {value}.')
+    elif action == 'verdict':
+        check_perm(request.user, 'can_change_verdict')
+        old_val = ', '.join(alerts.values_list('verdict', flat=True).distinct())
+        alerts.update(verdict=value)
+        for alert in alerts:
+            create_audit_log(alert, request.user, 'Verdict Changed', old_val, value, request)
+        messages.success(request, f'{count} alerts verdict changed to {value}.')
+    elif action == 'close':
+        check_perm(request.user, 'can_close_alert')
+        old_val = ', '.join(alerts.values_list('status', flat=True).distinct())
+        for alert in alerts:
+            alert.status = 'Closed'
+            alert.verdict = value or 'None'
+            alert.closed_at = timezone.now()
+            alert.save()
+            create_audit_log(alert, request.user, 'Closed', old_val, value, request)
+        messages.success(request, f'{count} alerts closed.')
+    elif action == 'archive':
+        check_perm(request.user, 'can_archive')
+        alerts.update(status='Archived')
+        for alert in alerts:
+            create_audit_log(alert, request.user, 'Archived', '', 'Archived', request)
+        messages.success(request, f'{count} alerts archived.')
+    else:
+        messages.error(request, f'Unknown action: {action}')
+    return redirect('alerts:table')
 
 
 @login_required

@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from settings_manager.models import SLASettings
 
 SEVERITY_CHOICES = [
     ('Informational', 'Informational'),
@@ -154,19 +155,23 @@ class Alert(models.Model):
     def update_sla(self):
         if not self.alert_time:
             return
-        sla_minutes = {'Critical': 240, 'High': 480, 'Medium': 1440, 'Low': 4320, 'Informational': 4320}
-        ack_sla = {'Critical': 15, 'High': 30, 'Medium': 120, 'Low': 480, 'Informational': 480}
-        minutes = sla_minutes.get(self.severity, 1440)
-        due = self.alert_time + timezone.timedelta(minutes=minutes)
+        try:
+            sla_config = SLASettings.objects.get(severity=self.severity, is_active=True)
+            ack_min = sla_config.acknowledge_minutes
+            resolve_min = sla_config.resolve_minutes
+            breach_warn = sla_config.breach_warning_minutes
+        except SLASettings.DoesNotExist:
+            defaults = {'Critical': (15, 240, 30), 'High': (30, 480, 30), 'Medium': (120, 1440, 30),
+                         'Low': (480, 4320, 30), 'Informational': (480, 4320, 30)}
+            ack_min, resolve_min, breach_warn = defaults.get(self.severity, (120, 1440, 30))
+
+        due = self.alert_time + timezone.timedelta(minutes=resolve_min)
         self.sla_due_at = due
         if self.status in ('Closed', 'Archived') and self.closed_at:
-            if self.closed_at > due:
-                self.sla_status = 'Breached'
-            else:
-                self.sla_status = 'Within SLA'
+            self.sla_status = 'Breached' if self.closed_at > due else 'Within SLA'
         elif timezone.now() > due:
             self.sla_status = 'Breached'
-        elif timezone.now() > (due - timezone.timedelta(minutes=ack_sla.get(self.severity, 30))):
+        elif timezone.now() > (due - timezone.timedelta(minutes=breach_warn)):
             self.sla_status = 'Near SLA breach'
 
     def calculate_priority(self):
