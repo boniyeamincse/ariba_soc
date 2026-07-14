@@ -3,6 +3,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
+from django.core.exceptions import PermissionDenied
 from django.views.decorators.http import require_POST
 from django.db.models import Q
 from django.core.paginator import Paginator
@@ -11,6 +12,12 @@ from django.contrib.auth.models import User
 from .models import Alert, AlertComment, AlertAuditLog, Notification
 from .forms import AlertEditForm, AlertCommentForm
 from .services import update_alert, assign_alert, create_audit_log
+
+
+def check_perm(user, perm):
+    profile = getattr(user, 'analyst_profile', None)
+    if not profile or not profile.has_permission(perm):
+        raise PermissionDenied(f"You don't have permission: {perm}")
 
 
 @login_required
@@ -145,6 +152,12 @@ def alert_edit(request, alert_id):
     if request.method == 'POST':
         form = AlertEditForm(request.POST, instance=alert, user=request.user)
         if form.is_valid():
+            changed = []
+            for field in ('severity', 'status', 'verdict'):
+                if field in form.changed_data:
+                    perm_map = {'severity': 'can_change_severity', 'status': 'can_change_status', 'verdict': 'can_change_verdict'}
+                    check_perm(request.user, perm_map[field])
+                    changed.append(field)
             update_alert(alert, form, request.user, request)
             messages.success(request, 'Alert updated successfully.')
             return redirect('alerts:detail', alert_id=alert.id)
@@ -161,7 +174,10 @@ def alert_assign(request, alert_id):
     assignee_id = request.POST.get('assignee_id')
     assignee = request.user
     if assignee_id:
+        check_perm(request.user, 'can_assign_others')
         assignee = get_object_or_404(User, id=assignee_id)
+    else:
+        check_perm(request.user, 'can_assign_self')
     assign_alert(alert, request.user, assignee, request)
     messages.success(request, f'Alert assigned to {assignee.username}.')
     return redirect(request.META.get('HTTP_REFERER', 'alerts:table'))
@@ -185,6 +201,7 @@ def alert_add_comment(request, alert_id):
 
 @login_required
 def alert_escalate(request, alert_id):
+    check_perm(request.user, 'can_escalate_alert')
     alert = get_object_or_404(Alert, id=alert_id)
     if request.method == 'POST':
         reason = request.POST.get('escalation_reason', '')
@@ -206,6 +223,7 @@ def alert_escalate(request, alert_id):
 
 @login_required
 def alert_close(request, alert_id):
+    check_perm(request.user, 'can_close_alert')
     alert = get_object_or_404(Alert, id=alert_id)
     if request.method == 'POST':
         verdict = request.POST.get('verdict', '')
@@ -232,6 +250,7 @@ def alert_close(request, alert_id):
 @login_required
 @require_POST
 def alert_archive(request, alert_id):
+    check_perm(request.user, 'can_archive')
     alert = get_object_or_404(Alert, id=alert_id)
     alert.status = 'Archived'
     alert.save()

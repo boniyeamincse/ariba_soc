@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.models import User
 from django.db.models import Q
-from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES, SETTINGS_ALLOWED_ROLES
+from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES, SETTINGS_ALLOWED_ROLES as _FALLBACK_SETTINGS_ROLES
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
@@ -17,13 +17,18 @@ from .forms import (
     AuditLogSettingForm, SystemSettingForm, ResetPasswordForm
 )
 
-ALLOWED_SETTINGS_ROLES = SETTINGS_ALLOWED_ROLES
+def _get_allowed_roles():
+    stored = SystemSetting.get_setting('settings_allowed_roles', '')
+    if stored:
+        return [r.strip() for r in stored.split(',')]
+    return _FALLBACK_SETTINGS_ROLES
+
 
 def _check_settings_access(user):
     if not user.is_authenticated:
         return False
     role = getattr(user.analyst_profile, 'role', '')
-    return role in ALLOWED_SETTINGS_ROLES
+    return role in _get_allowed_roles()
 
 def _log_setting_change(user, action, model_name, obj_id, old_val, new_val, request):
     ip = request.META.get('REMOTE_ADDR', '') if request else ''
