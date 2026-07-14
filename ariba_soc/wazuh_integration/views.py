@@ -5,9 +5,10 @@ from django.core.exceptions import PermissionDenied
 from .models import WazuhSyncLog, WazuhConfiguration
 from .forms import WazuhConfigurationForm
 from .services import WazuhClient
+from accounts.models import WAZUH_ALLOWED_ROLES
 
 
-ALLOWED_ROLES = ['ADMIN', 'SOC_ENG', 'SOC_MGR', 'L1', 'L2']
+ALLOWED_ROLES = WAZUH_ALLOWED_ROLES
 
 
 def _check_wazuh_access(user):

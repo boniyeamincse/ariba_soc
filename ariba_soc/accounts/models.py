@@ -12,6 +12,9 @@ ROLE_CHOICES = [
     ('VIEWER', 'Viewer'),
 ]
 
+SETTINGS_ALLOWED_ROLES = ['SOC_MGR', 'SOC_ENG', 'ADMIN']
+WAZUH_ALLOWED_ROLES = ['ADMIN', 'SOC_ENG', 'SOC_MGR', 'L1', 'L2']
+
 TEAM_CHOICES = [
     ('L1', 'L1 Team'),
     ('L2', 'L2 Team'),

@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.models import User
 from django.db.models import Q
-from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES
+from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES, SETTINGS_ALLOWED_ROLES
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
@@ -17,7 +17,7 @@ from .forms import (
     AuditLogSettingForm, SystemSettingForm, ResetPasswordForm
 )
 
-ALLOWED_SETTINGS_ROLES = ['SOC_MGR', 'SOC_ENG', 'ADMIN']
+ALLOWED_SETTINGS_ROLES = SETTINGS_ALLOWED_ROLES
 
 def _check_settings_access(user):
     if not user.is_authenticated:
