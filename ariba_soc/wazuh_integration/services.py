@@ -17,13 +17,16 @@ class WazuhClient:
         self.verify_ssl = settings.WAZUH_VERIFY_SSL
         self.timeout = settings.WAZUH_API_TIMEOUT
         self.token = None
+        self.session = requests.Session()
+        self.session.verify = self.verify_ssl
+        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20)
+        self.session.mount('https://', adapter)
 
     def authenticate(self):
         try:
-            response = requests.get(
+            response = self.session.get(
                 f'{self.base_url}/security/user/authenticate',
                 auth=(self.username, self.password),
-                verify=self.verify_ssl,
                 timeout=self.timeout,
                 headers={'Content-Type': 'application/json'}
             )
@@ -43,43 +46,55 @@ class WazuhClient:
             'Content-Type': 'application/json',
         }
 
-    def fetch_alerts(self, limit=500, offset=0, time_range='1h'):
+    def _request(self, method, url, **kwargs):
+        for attempt in range(2):
+            if not self.token:
+                self.authenticate()
+            kwargs['headers'] = kwargs.get('headers', {})
+            kwargs['headers'].update(self.get_headers())
+            response = self.session.request(method, url, **kwargs)
+            if response.status_code == 401 and attempt == 0:
+                self.token = None
+                continue
+            response.raise_for_status()
+            return response
+
+    def fetch_alerts(self, time_range='1h', max_alerts=5000):
         try:
-            params = {
-                'limit': limit,
-                'offset': offset,
-                'sort': '-timestamp',
-            }
+            all_items = []
+            offset = 0
+            limit = 500
+
             if time_range == '1h':
                 since = (timezone.now() - timedelta(hours=1)).isoformat()
             elif time_range == '24h':
                 since = (timezone.now() - timedelta(hours=24)).isoformat()
             else:
                 since = time_range
-            params['q'] = f'timestamp>{since}'
-            response = requests.get(
-                f'{self.base_url}/alerts',
-                headers=self.get_headers(),
-                params=params,
-                verify=self.verify_ssl,
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
-            return response.json()
+
+            while offset < max_alerts:
+                params = {
+                    'limit': limit,
+                    'offset': offset,
+                    'sort': '-timestamp',
+                    'q': f'timestamp>{since}',
+                }
+                response = self._request('GET', f'{self.base_url}/alerts', params=params, timeout=self.timeout)
+                data = response.json()
+                items = data.get('data', {}).get('items', []) or data.get('data', {}).get('affected_items', [])
+                if not items:
+                    break
+                all_items.extend(items)
+                offset += limit
+
+            return {'data': {'items': all_items}}
         except Exception as e:
             logger.error(f'Failed to fetch Wazuh alerts: {e}')
             raise
 
     def fetch_agents(self):
         try:
-            response = requests.get(
-                f'{self.base_url}/agents',
-                headers=self.get_headers(),
-                params={'limit': 500, 'sort': '-id'},
-                verify=self.verify_ssl,
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
+            response = self._request('GET', f'{self.base_url}/agents', params={'limit': 500, 'sort': '-id'}, timeout=self.timeout)
             return response.json()
         except Exception as e:
             logger.error(f'Failed to fetch agents: {e}')

@@ -9,4 +9,5 @@ urlpatterns = [
     path('logs/', views.sync_logs, name='logs'),
     path('config/update/', views.wazuh_config_update, name='config_update'),
     path('agents/', views.wazuh_agents, name='agents'),
+    path('health/', views.wazuh_health, name='health'),
 ]

@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse
 from .models import WazuhSyncLog, WazuhConfiguration
 from .forms import WazuhConfigurationForm
 from .services import WazuhClient
@@ -91,3 +92,15 @@ def sync_logs(request):
     _check_wazuh_access(request.user)
     logs = WazuhSyncLog.objects.all()[:50]
     return render(request, 'ariba_soc/sync_logs.html', {'logs': logs})
+
+
+@login_required
+def wazuh_health(request):
+    try:
+        client = WazuhClient()
+        token = client.authenticate()
+        if token:
+            return JsonResponse({'status': 'ok', 'api_url': client.base_url})
+        return JsonResponse({'status': 'error', 'detail': 'Authentication failed'}, status=503)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'detail': str(e)}, status=503)
