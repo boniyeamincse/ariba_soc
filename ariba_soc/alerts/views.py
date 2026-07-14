@@ -290,25 +290,14 @@ def my_alerts(request):
 
 @login_required
 def alerts_api(request):
-    alerts = Alert.objects.select_related('assignee').all().order_by('-alert_time')[:100]
-    data = []
-    for a in alerts:
-        data.append({
-            'id': a.id,
-            'alert_name': a.alert_name,
-            'severity': a.severity,
-            'status': a.status,
-            'verdict': a.verdict,
-            'priority': a.priority,
-            'assignee': a.assignee.username if a.assignee else None,
-            'assignee_id': a.assignee_id,
-            'source_name': a.source_name,
-            'hostname': a.hostname,
-            'alert_time': a.alert_time.isoformat(),
-            'rule_id': a.rule_id,
-            'sla_status': a.sla_status,
-        })
-    return JsonResponse({'alerts': results})
+    data = list(Alert.objects.select_related('assignee').only(
+        'id', 'alert_name', 'severity', 'status', 'verdict', 'priority',
+        'assignee_id', 'source_name', 'hostname', 'alert_time', 'rule_id', 'sla_status'
+    ).order_by('-alert_time')[:100].values(
+        'id', 'alert_name', 'severity', 'status', 'verdict', 'priority',
+        'assignee__username', 'source_name', 'hostname', 'alert_time', 'rule_id', 'sla_status'
+    ))
+    return JsonResponse({'alerts': data})
 
 
 @login_required

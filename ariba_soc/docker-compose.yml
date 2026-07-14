@@ -1,0 +1,38 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ariba_soc
+      POSTGRES_USER: ariba_soc
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ariba_soc}
+    healthcheck:
+      test: pg_isready -U ariba_soc
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  redis:
+    image: redis:7
+    healthcheck:
+      test: redis-cli ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_ENGINE: django.db.backends.postgresql
+      DATABASE_NAME: ariba_soc
+      DATABASE_USER: ariba_soc
+      DATABASE_PASSWORD: ${DB_PASSWORD:-ariba_soc}
+      DATABASE_HOST: db
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production}
+      DJANGO_DEBUG: 'False'
+      REDIS_URL: redis://redis:6379/1
