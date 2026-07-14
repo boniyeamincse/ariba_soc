@@ -1,0 +1,7 @@
+<div class="text-center py-5">
+    <i class="bi {{ icon|default:'bi-inbox' }}" style="font-size: 3rem; color: var(--text-muted);"></i>
+    <h5 class="mt-3 text-muted">{{ message|default:'No items found.' }}</h5>
+    {% if action_url and action_label %}
+    <a href="{{ action_url }}" class="btn btn-ariba-primary mt-2">{{ action_label }}</a>
+    {% endif %}
+</div>

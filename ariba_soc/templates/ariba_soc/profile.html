@@ -56,13 +56,12 @@
                         </div>
                         <div class="col-12">
                             <label class="form-label text-secondary small">Profile Picture</label>
-                            {{ form.avatar }}
-                            {% if profile.avatar %}
-                            <div class="mt-2">
-                                <img src="{{ profile.avatar.url }}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 50%; border: 2px solid var(--border-color);">
-                                <small class="text-muted ms-2">Current avatar</small>
+                            <div class="d-flex align-items-center gap-3">
+                                <img id="avatarPreview" src="{{ profile.avatar.url|default:'' }}"
+                                     class="rounded-circle" style="width: 64px; height: 64px; object-fit: cover; border: 2px solid var(--border-color);
+                                     {% if not profile.avatar %}display:none{% endif %}">
+                                {{ form.avatar }}
                             </div>
-                            {% endif %}
                         </div>
                         <div class="col-12">
                             <button type="submit" class="btn btn-ariba-primary"><i class="bi bi-check2"></i> Save Profile</button>

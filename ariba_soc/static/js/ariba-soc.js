@@ -1,10 +1,65 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Auto-dismiss alerts after 5 seconds
-    document.querySelectorAll('.alert-dismissible').forEach(function(alert) {
-        setTimeout(function() {
-            var bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
-            if (bsAlert) bsAlert.close();
-        }, 5000);
+    // Toast notifications
+    document.querySelectorAll('.toast').forEach(function(t) {
+        var toast = new bootstrap.Toast(t);
+        toast.show();
+    });
+
+    // Avatar preview
+    var avatarInput = document.getElementById('id_avatar');
+    if (avatarInput) {
+        avatarInput.addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (file) {
+                var reader = new FileReader();
+                reader.onload = function(ev) {
+                    var preview = document.getElementById('avatarPreview');
+                    if (preview) {
+                        preview.src = ev.target.result;
+                        preview.style.display = 'block';
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    // Loading state helper
+    function withLoading(btnSelector, promiseFn) {
+        var btn = document.querySelector(btnSelector);
+        if (!btn) return promiseFn();
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Loading...';
+        return promiseFn().finally(function() {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+        });
+    }
+
+    // Wazuh sync loading
+    var syncForm = document.querySelector('form[action*="wazuh_integration:sync"]');
+    if (syncForm) {
+        syncForm.addEventListener('submit', function(e) {
+            var btn = syncForm.querySelector('button[type="submit"]');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Syncing...';
+            }
+        });
+    }
+
+    // Export loading
+    document.querySelectorAll('.export-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            var orig = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Exporting...';
+            setTimeout(function() {
+                btn.disabled = false;
+                btn.innerHTML = orig;
+            }, 5000);
+        });
     });
 
     // Expandable table rows

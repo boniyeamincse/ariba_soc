@@ -571,6 +571,15 @@ textarea.form-control {
         padding-top: 52px;
     }
 
+    .dropdown-mega-menu .row > div {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    .navbar-brand .brand-text {
+        font-size: 0.85rem;
+    }
+
     .kanban-column-header {
         padding: 0.5rem 0.75rem;
         font-size: 0.8rem;

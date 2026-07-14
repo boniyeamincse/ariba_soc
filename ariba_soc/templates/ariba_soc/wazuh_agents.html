@@ -50,14 +50,7 @@
                 {% empty %}
                 <tr>
                     <td colspan="6" class="text-center py-5">
-                        <i class="bi bi-pc-display" style="font-size: 3rem; color: var(--text-muted);"></i>
-                        <p class="mt-2 text-muted">
-                        {% if error %}
-                        Could not fetch agents due to an API error.
-                        {% else %}
-                        No agents found or integration is not configured properly.
-                        {% endif %}
-                        </p>
+                        {% include 'ariba_soc/_empty_state.html' with icon='bi-pc-display' message='No agents found or integration is not configured properly.' %}
                     </td>
                 </tr>
                 {% endfor %}
