@@ -4,18 +4,25 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from django.utils import timezone
 from alerts.models import Alert, AlertSource, AlertAuditLog
-from .models import WazuhSyncLog, WazuhConfiguration
+from .models import WazuhSyncLog, WazuhConfiguration, WazuhManagerConfig
 
 logger = logging.getLogger(__name__)
 
 
-class WazuhClient:
-    def __init__(self):
-        self.base_url = settings.WAZUH_API_URL or 'https://localhost:55000'
-        self.username = settings.WAZUH_API_USERNAME or ''
-        self.password = settings.WAZUH_API_PASSWORD or ''
-        self.verify_ssl = settings.WAZUH_VERIFY_SSL
-        self.timeout = settings.WAZUH_API_TIMEOUT
+class ManagerClient:
+    def __init__(self, config=None):
+        if config:
+            self.base_url = config.api_url.rstrip('/')
+            self.username = config.api_username
+            self.password = config.api_password
+            self.verify_ssl = config.verify_ssl
+            self.timeout = config.timeout
+        else:
+            self.base_url = settings.WAZUH_API_URL or 'https://10.24.66.2:55000'
+            self.username = settings.WAZUH_API_USERNAME or ''
+            self.password = settings.WAZUH_API_PASSWORD or ''
+            self.verify_ssl = settings.WAZUH_VERIFY_SSL
+            self.timeout = settings.WAZUH_API_TIMEOUT
         self.token = None
         self.session = requests.Session()
         self.session.verify = self.verify_ssl
@@ -35,7 +42,7 @@ class WazuhClient:
             self.token = data.get('data', {}).get('token', '')
             return self.token
         except Exception as e:
-            logger.error(f'Wazuh auth failed: {e}')
+            logger.error(f'Manager API auth failed: {e}')
             raise
 
     def get_headers(self):
@@ -59,39 +66,6 @@ class WazuhClient:
             response.raise_for_status()
             return response
 
-    def fetch_alerts(self, time_range='1h', max_alerts=5000):
-        try:
-            all_items = []
-            offset = 0
-            limit = 500
-
-            if time_range == '1h':
-                since = (timezone.now() - timedelta(hours=1)).isoformat()
-            elif time_range == '24h':
-                since = (timezone.now() - timedelta(hours=24)).isoformat()
-            else:
-                since = time_range
-
-            while offset < max_alerts:
-                params = {
-                    'limit': limit,
-                    'offset': offset,
-                    'sort': '-timestamp',
-                    'q': f'timestamp>{since}',
-                }
-                response = self._request('GET', f'{self.base_url}/alerts', params=params, timeout=self.timeout)
-                data = response.json()
-                items = data.get('data', {}).get('items', []) or data.get('data', {}).get('affected_items', [])
-                if not items:
-                    break
-                all_items.extend(items)
-                offset += limit
-
-            return {'data': {'items': all_items}}
-        except Exception as e:
-            logger.error(f'Failed to fetch Wazuh alerts: {e}')
-            raise
-
     def fetch_agents(self):
         try:
             response = self._request('GET', f'{self.base_url}/agents', params={'limit': 500, 'sort': '-id'}, timeout=self.timeout)
@@ -100,9 +74,21 @@ class WazuhClient:
             logger.error(f'Failed to fetch agents: {e}')
             return {'data': {'items': []}}
 
+    def get_manager_status(self):
+        try:
+            response = self._request('GET', f'{self.base_url}/manager/status', timeout=self.timeout)
+            return response.json()
+        except Exception as e:
+            logger.error(f'Failed to get manager status: {e}')
+            return {'error': str(e)}
 
-class ElasticsearchClient:
-    def __init__(self, config):
+
+class IndexerClient:
+    def __init__(self, config=None):
+        if config is None:
+            config = WazuhConfiguration.objects.first()
+            if config is None:
+                raise ValueError('No WazuhConfiguration found')
         self.base_url = config.api_url.rstrip('/')
         self.username = config.api_username
         self.password = config.api_password
@@ -114,6 +100,18 @@ class ElasticsearchClient:
         self.session.auth = (self.username, self.password)
         adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20)
         self.session.mount('https://', adapter)
+
+    def test_connection(self):
+        try:
+            response = self.session.get(
+                f'{self.base_url}/_cluster/health',
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f'Indexer connection test failed: {e}')
+            raise
 
     def fetch_alerts(self, time_range='1h', max_alerts=5000):
         try:
@@ -144,11 +142,8 @@ class ElasticsearchClient:
             items = [h['_source'] for h in hits]
             return {'data': {'items': items}}
         except Exception as e:
-            logger.error(f'Failed to fetch alerts from Elasticsearch: {e}')
+            logger.error(f'Failed to fetch alerts from indexer: {e}')
             raise
-
-    def fetch_agents(self):
-        return {'data': {'items': []}}
 
 
 def normalize_alert(wazuh_alert):
@@ -278,19 +273,17 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
     created_count = 0
     fetched_count = 0
 
-    if config is None:
-        config = WazuhConfiguration.objects.first()
-
     try:
-        if config and config.api_type == 'elasticsearch':
-            client = ElasticsearchClient(config)
-            normalize_fn = normalize_es_alert
-        else:
-            client = WazuhClient()
-            normalize_fn = normalize_alert
+        if config is None:
+            config = WazuhConfiguration.objects.first()
+
+        if not config or not config.is_active:
+            raise ValueError('Wazuh Indexer configuration is missing or inactive')
+
+        client = IndexerClient(config)
 
         result = client.fetch_alerts(time_range=time_range)
-        alerts_data = result.get('data', {}).get('items', []) if 'data' in result else result.get('data', {}).get('affected_items', [])
+        alerts_data = result.get('data', {}).get('items', [])
         fetched_count = len(alerts_data)
 
         existing_ids = set(Alert.objects.filter(
@@ -303,7 +296,7 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
             if alert_id in existing_ids:
                 continue
             try:
-                data = normalize_fn(alert_raw, i)
+                data = normalize_es_alert(alert_raw, i)
                 data['source'] = source
                 batch.append(Alert(**data))
             except Exception as e:
@@ -319,8 +312,6 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
         sync_log.finished_at = timezone.now()
         sync_log.save()
 
-        if not config:
-            config = WazuhConfiguration.objects.create()
         config.last_sync_at = timezone.now()
         config.save()
 

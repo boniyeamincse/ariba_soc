@@ -10,7 +10,7 @@
             <button class="btn btn-sm btn-link text-secondary p-0" data-bs-toggle="dropdown"><i class="bi bi-three-dots-vertical"></i></button>
             <ul class="dropdown-menu dropdown-menu-end ariba-dropdown" style="font-size:0.8rem;">
                 <li><a class="dropdown-item" href="{% url 'alerts:detail' alert.id %}"><i class="bi bi-eye"></i> View</a></li>
-                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#editAlertModal"
+                <li><a class="dropdown-item" href="javascript:void(0);" data-bs-toggle="modal" data-bs-target="#editAlertModal"
                     data-alert-id="{{ alert.id }}"
                     data-assignee-id="{{ alert.assignee_id|default:'' }}"
                     data-status="{{ alert.status }}"

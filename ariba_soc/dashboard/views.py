@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.db.models import Count, Q, Avg, F
 from django.http import JsonResponse
 from django.utils import timezone
@@ -24,6 +25,7 @@ def dashboard_home(request):
         'sla_breached': Alert.objects.filter(sla_status='Breached').count(),
         'total_alerts_week': Alert.objects.filter(alert_time__gte=week_ago).count(),
         'total_alerts_month': Alert.objects.filter(alert_time__gte=month_ago).count(),
+        'users': User.objects.filter(is_active=True),
     }
     return render(request, 'ariba_soc/dashboard_home.html', context)
 

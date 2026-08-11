@@ -4,7 +4,7 @@ from . import views
 app_name = 'settings'
 
 urlpatterns = [
-    path('', views.settings_dashboard, name='home'),
+    path('', views.settings_dashboard, name='dashboard'),
     path('users/', views.user_management, name='user_management'),
     path('users/<int:user_id>/edit/', views.user_edit, name='user_edit'),
     path('users/<int:user_id>/toggle/', views.user_toggle_active, name='user_toggle'),
@@ -36,7 +36,7 @@ urlpatterns = [
     path('reports/', views.report_settings, name='reports'),
     path('reports/<int:pk>/edit/', views.report_edit, name='report_edit'),
     path('reports/<int:pk>/toggle/', views.report_toggle, name='report_toggle'),
-    path('dashboard/', views.dashboard_settings, name='dashboard'),
+    path('dashboard/', views.dashboard_settings, name='dashboard_config'),
     path('dashboard/<int:pk>/edit/', views.dashboard_edit, name='dashboard_edit'),
     path('audit-log/', views.audit_log_settings, name='audit_log'),
     path('audit-log/<int:pk>/edit/', views.audit_log_edit, name='audit_log_edit'),

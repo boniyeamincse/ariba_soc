@@ -65,7 +65,7 @@
                     {% for alert in alerts %}
                     <tr class="clickable-row {% if alert.severity == 'Critical' %}critical-row{% elif alert.severity == 'High' %}high-row{% endif %}">
                         <td><input type="checkbox" name="alert_ids" value="{{ alert.id }}" class="form-check-input alert-checkbox" onclick="event.stopPropagation();"></td>
-                        <td><button class="btn btn-sm btn-link text-secondary p-0 expand-row-btn" data-row-id="{{ alert.id }}"><i class="bi bi-chevron-down"></i></button></td>
+                        <td><button type="button" class="btn btn-sm btn-link text-secondary p-0 expand-row-btn" data-row-id="{{ alert.id }}"><i class="bi bi-chevron-down"></i></button></td>
                         <td><small><code class="text-info">{{ alert.wazuh_alert_id|default:alert.id }}</code></small></td>
                         <td class="text-nowrap"><small>{{ alert.alert_time|date:"M d, H:i" }}</small></td>
                         <td><span class="fw-medium">{{ alert.alert_name|truncatechars:50 }}</span></td>
@@ -91,7 +91,7 @@
                             {% endif %}
                         </td>
                         <td class="text-nowrap">
-                            <button class="btn btn-sm btn-link text-info p-0 me-1"
+                            <button type="button" class="btn btn-sm btn-link text-info p-0 me-1"
                                 data-bs-toggle="modal" data-bs-target="#editAlertModal"
                                 data-alert-id="{{ alert.id }}"
                                 data-alert-name="{{ alert.alert_name|escapejs }}"

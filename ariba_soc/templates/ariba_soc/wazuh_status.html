@@ -2,6 +2,83 @@
 {% load humanize %}
 
 {% block content %}
+<style>
+    .live-monitor-box {
+        background: #0d1117;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        height: 120px;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
+    }
+    .wave-container {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        display: none; /* JS will toggle */
+        align-items: center;
+        justify-content: center;
+    }
+    .pulse-line {
+        position: absolute;
+        width: 100%;
+        height: 2px;
+        background: rgba(0, 255, 255, 0.3);
+        box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+    }
+    .pulse-dot {
+        width: 15px;
+        height: 15px;
+        background: cyan;
+        border-radius: 50%;
+        box-shadow: 0 0 15px cyan, 0 0 30px cyan;
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        animation: pulseScan 2s ease-in-out infinite;
+    }
+    @keyframes pulseScan {
+        0% { left: 0%; opacity: 0; }
+        20% { opacity: 1; }
+        80% { opacity: 1; }
+        100% { left: 100%; opacity: 0; }
+    }
+    .status-red-line {
+        position: absolute;
+        width: 100%;
+        height: 2px;
+        background: #ff3333;
+        box-shadow: 0 0 15px #ff3333;
+        top: 50%;
+        display: none; /* JS toggles */
+    }
+    .monitor-overlay {
+        position: absolute;
+        top: 10px;
+        left: 15px;
+        z-index: 10;
+        font-family: monospace;
+        color: rgba(255, 255, 255, 0.7);
+    }
+    .status-text-live {
+        color: cyan;
+        text-shadow: 0 0 5px cyan;
+        font-weight: bold;
+    }
+    .status-text-error {
+        color: #ff3333;
+        text-shadow: 0 0 5px #ff3333;
+        font-weight: bold;
+    }
+    .status-text-loading {
+        color: #ffc107;
+        font-weight: bold;
+    }
+</style>
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h4 class="m-0"><i class="bi bi-hdd-rack"></i> Wazuh Integration Dashboard</h4>
@@ -30,13 +107,55 @@
 
     <!-- Tab Content -->
     <div class="tab-content" id="wazuhTabsContent">
-        <!-- Overview Tab -->
+        <!-- ======================== Overview Tab ======================== -->
         <div class="tab-pane fade show active" id="status" role="tabpanel">
+            <!-- Live Monitor Box -->
+            <div class="col-12">
+                <div class="live-monitor-box">
+                    <div class="monitor-overlay">
+                        STATUS: <span id="monitorStatusText" class="status-text-loading">INITIATING...</span>
+                    </div>
+                    <div class="wave-container" id="waveContainer">
+                        <div class="pulse-line"></div>
+                        <div class="pulse-dot"></div>
+                    </div>
+                    <div class="status-red-line" id="errorLine"></div>
+                </div>
+            </div>
+
             <div class="row g-3">
+                <!-- Manager Status -->
                 <div class="col-md-6">
                     <div class="ariba-card p-3 h-100">
-                        <h6 class="text-info mb-3"><i class="bi bi-info-circle"></i> Current Status</h6>
+                        <h6 class="text-info mb-3"><i class="bi bi-server"></i> Wazuh Manager API <small class="text-muted">(port 55000)</small></h6>
+                        {% if manager_config %}
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="text-muted me-3">Status:</span>
+                            <span class="spinner-border spinner-border-sm text-info me-2 d-none" id="managerStatusSpinner" role="status"></span>
+                            <span id="managerStatusBadge" class="badge bg-secondary"><i class="bi bi-dash-circle"></i> Unknown</span>
+                        </div>
+                        <table class="table table-sm ariba-table">
+                            <tr><td class="text-muted">URL</td><td><code>{{ manager_config.api_url }}</code></td></tr>
+                            <tr><td class="text-muted">Username</td><td>{{ manager_config.api_username|default:'—' }}</td></tr>
+                        </table>
+                        {% else %}
+                        <div class="alert alert-warning mb-0">
+                            <i class="bi bi-exclamation-triangle"></i> No Manager configuration found.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Indexer Status -->
+                <div class="col-md-6">
+                    <div class="ariba-card p-3 h-100">
+                        <h6 class="text-info mb-3"><i class="bi bi-database"></i> Wazuh Indexer <small class="text-muted">(port 9200)</small></h6>
                         {% if config %}
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="text-muted me-3">Status:</span>
+                            <span class="spinner-border spinner-border-sm text-info me-2 d-none" id="indexerStatusSpinner" role="status"></span>
+                            <span id="indexerStatusBadge" class="badge bg-secondary"><i class="bi bi-dash-circle"></i> Unknown</span>
+                        </div>
                         <div class="mb-3 d-flex align-items-center">
                             <span class="text-muted me-3">Integration:</span>
                             {% if config.is_active %}
@@ -46,23 +165,22 @@
                             {% endif %}
                         </div>
                         <table class="table table-sm ariba-table">
-                            <tr><td class="text-muted">API URL</td><td><code>{{ config.api_url }}</code></td></tr>
+                            <tr><td class="text-muted">URL</td><td><code>{{ config.api_url }}</code></td></tr>
+                            <tr><td class="text-muted">Index Pattern</td><td><code>{{ config.es_index_pattern }}</code></td></tr>
                             <tr><td class="text-muted">Last Sync</td><td>{{ config.last_sync_at|default:'Never' }}</td></tr>
                             <tr><td class="text-muted">Sync Interval</td><td>Every {{ config.sync_interval_minutes }} mins</td></tr>
                         </table>
-                        <div class="mt-4">
-                            <a href="{% url 'wazuh_integration:agents' %}" class="btn btn-outline-light btn-sm w-100">Browse Connected Agents <i class="bi bi-arrow-right"></i></a>
-                        </div>
                         {% else %}
-                        <div class="alert alert-warning">
-                            <i class="bi bi-exclamation-triangle"></i> No configuration found. Please setup the integration in the Configuration tab.
+                        <div class="alert alert-warning mb-0">
+                            <i class="bi bi-exclamation-triangle"></i> No Indexer configuration found.
                         </div>
                         {% endif %}
                     </div>
                 </div>
-                
-                <div class="col-md-6">
-                    <div class="ariba-card p-3 h-100">
+
+                <!-- Sync Activity -->
+                <div class="col-12">
+                    <div class="ariba-card p-3">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h6 class="text-info m-0"><i class="bi bi-clock-history"></i> Recent Sync Activity</h6>
                             <a href="{% url 'wazuh_integration:logs' %}" class="text-decoration-none text-muted small">View All</a>
@@ -91,104 +209,219 @@
             </div>
         </div>
 
-        <!-- Configuration Tab -->
+        <!-- ======================== Configuration Tab ======================== -->
         <div class="tab-pane fade" id="config" role="tabpanel">
-            <div class="ariba-card p-4 mx-auto" style="max-width: 800px;">
-                <h5 class="text-info border-bottom border-secondary pb-2 mb-4"><i class="bi bi-sliders"></i> API Connection Settings</h5>
-                
-                <form method="post" action="{% url 'wazuh_integration:config_update' %}">
-                    {% csrf_token %}
-                    
-                    {% if form.non_field_errors %}
-                    <div class="alert alert-danger">
-                        {{ form.non_field_errors }}
-                    </div>
-                    {% endif %}
-                    
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <label class="form-label text-light">API Type</label>
-                            {{ form.api_type }}
-                            <div class="form-text text-muted">Select Wazuh REST API (port 55000) or Elasticsearch/OpenSearch (port 9200)</div>
-                        </div>
-
-                        <div class="col-12">
-                            <label class="form-label text-light">API URL</label>
-                            {{ form.api_url }}
-                            <div class="form-text text-muted" id="urlHelpText">Example: https://wazuh-manager.local:55000</div>
-                            {% if form.api_url.errors %}<div class="text-danger small">{{ form.api_url.errors }}</div>{% endif %}
-                        </div>
-                        
-                        <div class="col-sm-6">
-                            <label class="form-label text-light">Username</label>
-                            {{ form.api_username }}
-                            {% if form.api_username.errors %}<div class="text-danger small">{{ form.api_username.errors }}</div>{% endif %}
-                        </div>
-                        
-                        <div class="col-sm-6">
-                            <label class="form-label text-light">Password</label>
-                            {{ form.api_password }}
-                            {% if form.api_password.errors %}<div class="text-danger small">{{ form.api_password.errors }}</div>{% endif %}
-                        </div>
-
-                        <div class="col-12" id="esIndexField">
-                            <label class="form-label text-light">Elasticsearch Index Pattern</label>
-                            {{ form.es_index_pattern }}
-                            <div class="form-text text-muted">Index pattern for alert documents (default: wazuh-alerts-*)</div>
-                        </div>
-                        
-                        <div class="col-sm-6">
-                            <label class="form-label text-light">Timeout (seconds)</label>
-                            {{ form.timeout }}
-                            {% if form.timeout.errors %}<div class="text-danger small">{{ form.timeout.errors }}</div>{% endif %}
-                        </div>
-                        
-                        <div class="col-sm-6">
-                            <label class="form-label text-light">Sync Interval (minutes)</label>
-                            {{ form.sync_interval_minutes }}
-                            {% if form.sync_interval_minutes.errors %}<div class="text-danger small">{{ form.sync_interval_minutes.errors }}</div>{% endif %}
-                        </div>
-                        
-                        <div class="col-12 mt-4">
-                            <div class="form-check form-switch mb-2">
-                                {{ form.verify_ssl }}
-                                <label class="form-check-label text-light ms-2">Verify SSL Certificate</label>
+            <div class="row g-3">
+                <!-- Manager Config -->
+                <div class="col-lg-6">
+                    <div class="ariba-card p-4">
+                        <h5 class="text-info border-bottom border-secondary pb-2 mb-4">
+                            <i class="bi bi-server"></i> Wazuh Manager <small class="text-muted fs-6">(port 55000, JWT auth)</small>
+                        </h5>
+                        <form method="post" action="{% url 'wazuh_integration:manager_config_update' %}">
+                            {% csrf_token %}
+                            {% if manager_form.non_field_errors %}
+                            <div class="alert alert-danger">{{ manager_form.non_field_errors }}</div>
+                            {% endif %}
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <label class="form-label text-light">API URL</label>
+                                    {{ manager_form.api_url }}
+                                    <div class="form-text text-muted">Example: https://10.24.66.2:55000</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label text-light">Username</label>
+                                    {{ manager_form.api_username }}
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label text-light">Password</label>
+                                    {{ manager_form.api_password }}
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label text-light">Timeout (seconds)</label>
+                                    {{ manager_form.timeout }}
+                                </div>
+                                <div class="col-sm-6 d-flex align-items-end pb-2">
+                                    <div class="form-check form-switch">
+                                        {{ manager_form.verify_ssl }}
+                                        <label class="form-check-label text-light ms-2">Verify SSL</label>
+                                    </div>
+                                </div>
+                                <div class="col-12 mt-3 text-end border-top border-secondary pt-3">
+                                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-save"></i> Save Manager Config</button>
+                                </div>
                             </div>
-                            <div class="form-check form-switch">
-                                {{ form.is_active }}
-                                <label class="form-check-label text-light ms-2">Enable Integration</label>
-                            </div>
+                        </form>
+                        {% if manager_config %}
+                        <div class="mt-3">
+                            <button class="btn btn-outline-info btn-sm w-100" onclick="testManagerConnection()">
+                                <i class="bi bi-plug"></i> Test Manager Connection
+                            </button>
+                            <div id="managerTestResult" class="mt-2 small"></div>
                         </div>
-                        
-                        <div class="col-12 mt-4 text-end border-top border-secondary pt-3">
-                            <button type="submit" class="btn btn-ariba-primary"><i class="bi bi-save"></i> Save Configuration</button>
-                        </div>
+                        {% endif %}
                     </div>
-                </form>
+                </div>
+
+                <!-- Indexer Config -->
+                <div class="col-lg-6">
+                    <div class="ariba-card p-4">
+                        <h5 class="text-info border-bottom border-secondary pb-2 mb-4">
+                            <i class="bi bi-database"></i> Wazuh Indexer <small class="text-muted fs-6">(port 9200, Basic Auth)</small>
+                        </h5>
+                        <form method="post" action="{% url 'wazuh_integration:config_update' %}">
+                            {% csrf_token %}
+                            {% if form.non_field_errors %}
+                            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                            {% endif %}
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <label class="form-label text-light">API URL</label>
+                                    {{ form.api_url }}
+                                    <div class="form-text text-muted">Example: https://10.24.66.2:9200</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label text-light">Username</label>
+                                    {{ form.api_username }}
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label text-light">Password</label>
+                                    {{ form.api_password }}
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label text-light">Index Pattern</label>
+                                    {{ form.es_index_pattern }}
+                                    <div class="form-text text-muted">Index pattern for alert documents</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label text-light">Timeout (seconds)</label>
+                                    {{ form.timeout }}
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label text-light">Sync Interval (minutes)</label>
+                                    {{ form.sync_interval_minutes }}
+                                </div>
+                                <div class="col-12">
+                                    <div class="form-check form-switch mb-2">
+                                        {{ form.verify_ssl }}
+                                        <label class="form-check-label text-light ms-2">Verify SSL Certificate</label>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        {{ form.is_active }}
+                                        <label class="form-check-label text-light ms-2">Enable Alert Sync</label>
+                                    </div>
+                                </div>
+                                <div class="col-12 mt-3 text-end border-top border-secondary pt-3">
+                                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-save"></i> Save Indexer Config</button>
+                                </div>
+                            </div>
+                        </form>
+                        {% if config %}
+                        <div class="mt-3">
+                            <button class="btn btn-outline-info btn-sm w-100" onclick="testIndexerConnection()">
+                                <i class="bi bi-plug"></i> Test Indexer Connection
+                            </button>
+                            <div id="indexerTestResult" class="mt-2 small"></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    document.getElementById('status-tab').addEventListener('click', function() {
-        this.style.borderBottom = '2px solid var(--ariba-primary)';
-        document.getElementById('config-tab').style.borderBottom = 'none';
-    });
+function testManagerConnection() {
+    const btn = event.target.closest('button');
+    const resultDiv = document.getElementById('managerTestResult');
+    const spinner = document.getElementById('managerStatusSpinner');
+    const badge = document.getElementById('managerStatusBadge');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Testing...';
+    resultDiv.innerHTML = '';
+    spinner.classList.remove('d-none');
+    fetch('{% url "wazuh_integration:test_manager" %}')
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                resultDiv.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> Connected successfully</span>';
+                badge.className = 'badge bg-success';
+                badge.innerHTML = '<i class="bi bi-check-circle"></i> Connected';
+            } else {
+                resultDiv.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle"></i> ${data.detail}</span>`;
+                badge.className = 'badge bg-danger';
+                badge.innerHTML = '<i class="bi bi-x-circle"></i> Error';
+            }
+        })
+        .catch(err => {
+            resultDiv.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle"></i> ${err.message}</span>`;
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-plug"></i> Test Manager Connection';
+            spinner.classList.add('d-none');
+        });
+}
 
-    function toggleEsFields() {
-        var apiType = document.getElementById('id_api_type');
-        var esField = document.getElementById('esIndexField');
-        var urlHelp = document.getElementById('urlHelpText');
-        if (apiType && apiType.value === 'elasticsearch') {
-            if (esField) esField.style.display = 'block';
-            if (urlHelp) urlHelp.textContent = 'Example: https://10.24.66.2:9200';
-        } else {
-            if (esField) esField.style.display = 'none';
-            if (urlHelp) urlHelp.textContent = 'Example: https://wazuh-manager.local:55000';
-        }
-    }
-    document.addEventListener('DOMContentLoaded', toggleEsFields);
-    document.getElementById('id_api_type')?.addEventListener('change', toggleEsFields);
+function testIndexerConnection() {
+    const btn = event.target.closest('button');
+    const resultDiv = document.getElementById('indexerTestResult');
+    const spinner = document.getElementById('indexerStatusSpinner');
+    const badge = document.getElementById('indexerStatusBadge');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Testing...';
+    resultDiv.innerHTML = '';
+    spinner.classList.remove('d-none');
+    fetch('{% url "wazuh_integration:test_indexer" %}')
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                resultDiv.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> Connected (cluster: ${data.cluster_health})</span>`;
+                badge.className = 'badge bg-success';
+                badge.innerHTML = '<i class="bi bi-check-circle"></i> Connected';
+            } else {
+                resultDiv.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle"></i> ${data.detail}</span>`;
+                badge.className = 'badge bg-danger';
+                badge.innerHTML = '<i class="bi bi-x-circle"></i> Error';
+            }
+        })
+        .catch(err => {
+            resultDiv.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle"></i> ${err.message}</span>`;
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-plug"></i> Test Indexer Connection';
+            spinner.classList.add('d-none');
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const monitorText = document.getElementById('monitorStatusText');
+    const waveContainer = document.getElementById('waveContainer');
+    const errorLine = document.getElementById('errorLine');
+    
+    fetch('{% url "wazuh_integration:health" %}')
+        .then(r => r.json())
+        .then(data => {
+            if(data.status === 'ok') {
+                monitorText.textContent = 'SYSTEM CONNECTED - RECEIVING DATA';
+                monitorText.className = 'status-text-live';
+                waveContainer.style.display = 'flex';
+                errorLine.style.display = 'none';
+            } else {
+                monitorText.textContent = 'CONNECTION FAILED';
+                monitorText.className = 'status-text-error';
+                waveContainer.style.display = 'none';
+                errorLine.style.display = 'block';
+            }
+        })
+        .catch(err => {
+            monitorText.textContent = 'CONNECTION ERROR';
+            monitorText.className = 'status-text-error';
+            waveContainer.style.display = 'none';
+            errorLine.style.display = 'block';
+        });
+});
 </script>
 {% endblock %}
