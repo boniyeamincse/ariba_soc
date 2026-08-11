@@ -17,7 +17,7 @@ echo "Generating Wazuh Indexer certificates..."
 docker-compose -f generate-indexer-certs.yml run --rm generator
 
 echo "Starting unified SOC stack (Wazuh + Ariba SOC)..."
-docker-compose up -d
+docker-compose up --build -d
 
 echo "Waiting for web service to be healthy before seeding..."
 # We sleep a bit to give time for db and web to start, though ideally we'd use a healthcheck

@@ -115,6 +115,7 @@ services:
     environment:
       POSTGRES_DB: ${DATABASE_NAME:-ariba_soc}
       POSTGRES_USER: ${DATABASE_USER:-ariba_soc}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-ariba_soc}
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
