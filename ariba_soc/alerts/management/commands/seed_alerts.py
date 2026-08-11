@@ -54,9 +54,9 @@ class Command(BaseCommand):
             created = timezone.now() - timedelta(hours=random.randint(1, 72), minutes=random.randint(0, 59))
             severity = sample['severity']
             if severity == 'Critical':
-                status_choices = ['New', 'In Progress', 'Escalated', 'Closed']
+                status_choices = ['New', 'In Progress', 'Escalated to L2', 'Closed']
             elif severity == 'High':
-                status_choices = ['New', 'In Progress', 'Escalated']
+                status_choices = ['New', 'In Progress', 'Escalated to L2']
             elif severity == 'Medium':
                 status_choices = ['New', 'In Progress', 'Closed']
             else:
@@ -66,12 +66,12 @@ class Command(BaseCommand):
             verdict = 'None'
             if status == 'Closed':
                 verdict = random.choice(['True Positive', 'False Positive', 'Benign Positive'])
-            elif status == 'Escalated':
+            elif status == 'Escalated to L2':
                 verdict = 'Suspicious'
 
             assignee = None
             assigned_at = None
-            if status in ('In Progress', 'Escalated', 'Closed'):
+            if status in ('In Progress', 'Escalated to L2', 'Closed'):
                 assignee = random.choice(users)
                 assigned_at = created + timedelta(minutes=random.randint(5, 120))
 

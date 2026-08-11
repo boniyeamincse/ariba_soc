@@ -4,6 +4,15 @@ from django.utils import timezone
 from .models import Alert
 from settings_manager.models import EscalationRule
 
+# Which SOC tier an EscalationRule.escalate_to_role lands an alert on.
+# L1 has nowhere to route to from here (L1 is the triage starting point).
+ROLE_TO_STATUS = {
+    'L2': 'Escalated to L2',
+    'SOC_ENG': 'Escalated to IR/IT',
+    'SOC_MGR': 'Escalated to Management',
+    'ADMIN': 'Escalated to Management',
+}
+
 
 def evaluate_auto_escalation(alert):
     """Check alert against active EscalationRules and escalate it if one
@@ -19,13 +28,15 @@ def evaluate_auto_escalation(alert):
             continue
         if rule.wazuh_rule_id and alert.rule_id != rule.wazuh_rule_id:
             continue
-        alert.status = 'Escalated'
+        target_status = ROLE_TO_STATUS.get(rule.escalate_to_role, 'Escalated to L2')
+        alert.status = target_status
         alert.is_escalated = True
         alert.escalated_at = timezone.now()
         alert.save(update_fields=['status', 'is_escalated', 'escalated_at'])
         from .services import create_audit_log, _notify_escalation
-        create_audit_log(alert, None, 'Escalated', 'New', f'Auto-escalated by rule: {rule.rule_name}')
-        _notify_escalation(alert, f'Auto-escalated by rule: {rule.rule_name}')
+        reason = f'{target_status} — auto-escalated by rule: {rule.rule_name}'
+        create_audit_log(alert, None, 'Escalated', 'New', reason)
+        _notify_escalation(alert, reason)
         return True
     return False
 

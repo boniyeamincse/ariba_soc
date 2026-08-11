@@ -1,6 +1,6 @@
 from .models import Alert, Notification
 from accounts.models import SETTINGS_ALLOWED_ROLES
-from settings_manager.models import SystemSetting
+from settings_manager.models import SystemSetting, SeveritySettings, StatusSettings, VerdictSettings
 
 def _get_settings_roles():
     stored = SystemSetting.get_setting('settings_allowed_roles', '')
@@ -23,4 +23,7 @@ def user_alerts_context(request):
         'settings_roles': _get_settings_roles(),
         'unread_notifications': unread_notifs,
         'unread_notifications_count': Notification.objects.filter(user=request.user, is_read=False).count(),
+        'edit_severities': SeveritySettings.objects.filter(is_active=True).order_by('sort_order'),
+        'edit_statuses': StatusSettings.objects.filter(is_active=True).order_by('sort_order'),
+        'edit_verdicts': VerdictSettings.objects.filter(is_active=True).order_by('name'),
     }

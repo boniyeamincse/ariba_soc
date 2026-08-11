@@ -30,35 +30,25 @@
                         <div class="col-md-4">
                             <label class="form-label text-secondary small">Status</label>
                             <select name="status" id="id_status" class="form-select">
-                                <option value="New">New</option>
-                                <option value="Awaiting Action">Awaiting Action</option>
-                                <option value="In Progress">In Progress</option>
-                                <option value="Pending">Pending</option>
-                                <option value="Escalated">Escalated</option>
-                                <option value="Closed">Closed</option>
-                                <option value="Archived">Archived</option>
+                                {% for s in edit_statuses %}
+                                <option value="{{ s.name }}">{{ s.name }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label text-secondary small">Severity</label>
                             <select name="severity" id="id_severity" class="form-select">
-                                <option value="Informational">Informational</option>
-                                <option value="Low">Low</option>
-                                <option value="Medium">Medium</option>
-                                <option value="High">High</option>
-                                <option value="Critical">Critical</option>
+                                {% for s in edit_severities %}
+                                <option value="{{ s.name }}">{{ s.name }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label text-secondary small">Verdict</label>
                             <select name="verdict" id="id_verdict" class="form-select">
-                                <option value="None">None</option>
-                                <option value="True Positive">True Positive</option>
-                                <option value="False Positive">False Positive</option>
-                                <option value="Benign Positive">Benign Positive</option>
-                                <option value="Suspicious">Suspicious</option>
-                                <option value="Duplicate">Duplicate</option>
-                                <option value="Test Activity">Test Activity</option>
+                                {% for v in edit_verdicts %}
+                                <option value="{{ v.name }}">{{ v.name }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                         <div class="col-12">
@@ -94,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (statusSelect) {
         statusSelect.addEventListener('change', function() {
             var val = this.value;
-            document.getElementById('escalationField').style.display = val === 'Escalated' ? 'block' : 'none';
+            document.getElementById('escalationField').style.display = val.indexOf('Escalated') === 0 ? 'block' : 'none';
             document.getElementById('remediationField').style.display = val === 'Closed' ? 'block' : 'none';
             document.getElementById('closureField').style.display = val === 'Closed' ? 'block' : 'none';
         });

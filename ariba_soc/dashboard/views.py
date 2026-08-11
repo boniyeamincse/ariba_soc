@@ -20,7 +20,7 @@ def dashboard_home(request):
         'critical_open': Alert.objects.filter(severity='Critical', status__in=['New', 'Awaiting Action', 'In Progress']).count(),
         'true_positives': Alert.objects.filter(verdict='True Positive').count(),
         'false_positives': Alert.objects.filter(verdict='False Positive').count(),
-        'escalated_alerts': Alert.objects.filter(status='Escalated').count(),
+        'escalated_alerts': Alert.objects.filter(status__startswith='Escalated').count(),
         'closed_alerts': Alert.objects.filter(status='Closed').count(),
         'sla_breached': Alert.objects.filter(sla_status='Breached').count(),
         'total_alerts_week': Alert.objects.filter(alert_time__gte=week_ago).count(),

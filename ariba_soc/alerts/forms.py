@@ -50,7 +50,7 @@ class AlertEditForm(forms.ModelForm):
             raise forms.ValidationError('Verdict cannot be None when closing an alert.')
         if verdict_requires_comment and not comment:
             raise forms.ValidationError(f'Analyst comment is required for {verdict} verdict.')
-        if status == 'Escalated' and not escalation:
+        if status and status.startswith('Escalated') and not escalation:
             raise forms.ValidationError('Escalation reason is required when escalating.')
         return cleaned
 

@@ -147,6 +147,10 @@ body.ariba-soc-body {
 .status-New { background: rgba(59,130,246,0.15); color: var(--status-new); }
 .status-In-Progress { background: rgba(249,115,22,0.15); color: var(--status-progress); }
 .status-Escalated { background: rgba(239,68,68,0.15); color: var(--status-escalated); }
+.status-EscalatedtoL2 { background: rgba(239,68,68,0.15); color: var(--status-escalated); }
+.status-EscalatedtoIRIT { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.status-EscalatedtoManagement { background: rgba(220,38,38,0.2); color: #dc2626; }
+.status-Remediation { background: rgba(6,182,212,0.15); color: #06b6d4; }
 .status-Closed { background: rgba(34,197,94,0.15); color: var(--status-closed); }
 .status-Archived { background: rgba(107,114,128,0.15); color: var(--status-archived); }
 .status-Awaiting { background: rgba(234,179,8,0.15); color: var(--severity-medium); }

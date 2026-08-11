@@ -32,10 +32,10 @@ def update_alert(alert, form, user, request=None):
             setattr(alert, field, form.cleaned_data[field])
             if field == 'status' and form.cleaned_data[field] == 'In Progress':
                 alert.acknowledged_at = timezone.now()
-            if field == 'status' and form.cleaned_data[field] == 'Escalated':
+            if field == 'status' and form.cleaned_data[field].startswith('Escalated'):
                 alert.is_escalated = True
                 alert.escalated_at = timezone.now()
-                _notify_escalation(alert, form.cleaned_data.get('escalation_reason', ''))
+                _notify_escalation(alert, f"{form.cleaned_data[field]} — {form.cleaned_data.get('escalation_reason', '')}")
             action_map = {
                 'assignee': 'Assigned',
                 'status': 'Status Changed',

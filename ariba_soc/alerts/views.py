@@ -120,7 +120,7 @@ def alert_board(request):
         'in_progress_alerts': alerts.filter(status='In Progress'),
         'awaiting_alerts': alerts.filter(status='Awaiting Action'),
         'pending_alerts': alerts.filter(status='Pending'),
-        'escalated_alerts': alerts.filter(status='Escalated'),
+        'escalated_alerts': alerts.filter(status__startswith='Escalated'),
         'true_positives': alerts.filter(verdict='True Positive', status='Closed'),
         'false_positives': alerts.filter(verdict='False Positive', status='Closed'),
         'closed_alerts': alerts.filter(status='Closed'),
@@ -203,26 +203,35 @@ def alert_add_comment(request, alert_id):
     return redirect('alerts:detail', alert_id=alert_id)
 
 
+ESCALATION_TIERS = {
+    'l2': 'Escalated to L2',
+    'irit': 'Escalated to IR/IT',
+    'management': 'Escalated to Management',
+}
+
+
 @login_required
 def alert_escalate(request, alert_id):
     check_perm(request.user, 'can_escalate_alert')
     alert = get_object_or_404(Alert, id=alert_id)
     if request.method == 'POST':
         reason = request.POST.get('escalation_reason', '')
+        tier = request.POST.get('tier', 'l2')
         if not reason:
             messages.error(request, 'Escalation reason is required.')
             return redirect('alerts:detail', alert_id=alert_id)
-        alert.status = 'Escalated'
+        target_status = ESCALATION_TIERS.get(tier, 'Escalated to L2')
+        alert.status = target_status
         alert.is_escalated = True
         alert.escalated_at = alert.escalated_at or timezone.now()
         alert.escalation_reason = reason
         alert.save()
         AlertComment.objects.create(
-            alert=alert, user=request.user, comment=f"Escalated: {reason}", comment_type='Escalation Note'
+            alert=alert, user=request.user, comment=f"{target_status}: {reason}", comment_type='Escalation Note'
         )
-        create_audit_log(alert, request.user, 'Escalated', '', reason, request)
-        _notify_escalation(alert, reason)
-        messages.success(request, 'Alert escalated to L2.')
+        create_audit_log(alert, request.user, 'Escalated', '', f'{target_status}: {reason}', request)
+        _notify_escalation(alert, f'{target_status} — {reason}')
+        messages.success(request, f'Alert escalated: {target_status}.')
     return redirect('alerts:detail', alert_id=alert_id)
 
 

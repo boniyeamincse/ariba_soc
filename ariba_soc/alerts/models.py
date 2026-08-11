@@ -16,7 +16,10 @@ STATUS_CHOICES = [
     ('Awaiting Action', 'Awaiting Action'),
     ('In Progress', 'In Progress'),
     ('Pending', 'Pending'),
-    ('Escalated', 'Escalated'),
+    ('Escalated to L2', 'Escalated to L2'),
+    ('Escalated to IR/IT', 'Escalated to IR/IT'),
+    ('Escalated to Management', 'Escalated to Management'),
+    ('Remediation', 'Remediation'),
     ('Closed', 'Closed'),
     ('Archived', 'Archived'),
 ]
@@ -64,7 +67,7 @@ class Alert(models.Model):
 
     severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='Medium')
     severity_score = models.IntegerField(default=0)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='New')
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='New')
     verdict = models.CharField(max_length=20, choices=VERDICT_CHOICES, default='None')
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='Medium')
 
