@@ -175,6 +175,7 @@ class ReportSetting(models.Model):
         ('DAILY', 'Daily'),
         ('WEEKLY', 'Weekly'),
         ('MONTHLY', 'Monthly'),
+        ('YEARLY', 'Yearly'),
     ]
     name = models.CharField(max_length=200)
     report_type = models.CharField(max_length=50, choices=REPORT_TYPES)
@@ -182,6 +183,7 @@ class ReportSetting(models.Model):
     recipient_email = models.EmailField(blank=True)
     export_format = models.CharField(max_length=20, choices=EXPORT_FORMATS, default='CSV')
     is_active = models.BooleanField(default=True)
+    last_generated_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
