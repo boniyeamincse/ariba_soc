@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-# Change to the directory where this script is located
-cd "$(dirname "$0")"
+# Change to the infrastructure directory
+cd "$(dirname "$0")/.."
 
 echo "Checking host prerequisites..."
 MAX_MAP_COUNT=$(sysctl -n vm.max_map_count || echo 0)
