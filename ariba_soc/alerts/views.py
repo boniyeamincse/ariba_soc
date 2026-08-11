@@ -12,7 +12,7 @@ from django.contrib.auth.models import User
 from settings_manager.models import SeveritySettings, StatusSettings, VerdictSettings
 from .models import Alert, AlertComment, AlertAuditLog, Notification
 from .forms import AlertEditForm, AlertCommentForm
-from .services import update_alert, assign_alert, create_audit_log
+from .services import update_alert, assign_alert, create_audit_log, _notify_escalation
 
 
 def check_perm(user, perm):
@@ -221,6 +221,7 @@ def alert_escalate(request, alert_id):
             alert=alert, user=request.user, comment=f"Escalated: {reason}", comment_type='Escalation Note'
         )
         create_audit_log(alert, request.user, 'Escalated', '', reason, request)
+        _notify_escalation(alert, reason)
         messages.success(request, 'Alert escalated to L2.')
     return redirect('alerts:detail', alert_id=alert_id)
 

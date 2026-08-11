@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.core.mail import send_mail
 from django.conf import settings
 from django.urls import reverse
+from settings_manager.models import NotificationSetting
 from .models import Alert, AlertComment, AlertAuditLog, Notification
 
 def create_audit_log(alert, user, action, old_value='', new_value='', request=None):
@@ -34,6 +35,7 @@ def update_alert(alert, form, user, request=None):
             if field == 'status' and form.cleaned_data[field] == 'Escalated':
                 alert.is_escalated = True
                 alert.escalated_at = timezone.now()
+                _notify_escalation(alert, form.cleaned_data.get('escalation_reason', ''))
             action_map = {
                 'assignee': 'Assigned',
                 'status': 'Status Changed',
@@ -110,6 +112,37 @@ def _notify_assignment(alert, assignee, assigner, request=None):
             body = f"Hello {assignee.username},\n\nAn alert has been assigned to you by {assigner.username}.\n\nAlert: {alert.alert_name}\nSeverity: {alert.severity}\n\nPlease check your dashboard for details.\n\nThank you,\nAriba SOC"
             send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [assignee.email], fail_silently=True)
     except Exception as e:
+        pass
+
+
+def _notify_escalation(alert, reason=''):
+    """Notify whoever Notification Settings says should hear about an
+    escalation. Best-effort: a notification failure must never block the
+    escalation itself."""
+    try:
+        settings_rows = NotificationSetting.objects.filter(event_type='ALERT_ESCALATED', is_active=True)
+        if not settings_rows.exists():
+            return
+        link = reverse('alerts:detail', args=[alert.id])
+        msg = f"Alert '{alert.alert_name}' was escalated." + (f" Reason: {reason}" if reason else '')
+
+        recipients = set()
+        for setting in settings_rows:
+            if setting.recipient_user_id:
+                recipients.add(setting.recipient_user)
+            elif setting.recipient_role:
+                for u in User.objects.filter(is_active=True, analyst_profile__role=setting.recipient_role):
+                    recipients.add(u)
+
+        for user in recipients:
+            Notification.objects.create(user=user, message=msg, link=link)
+            if user.email:
+                send_mail(
+                    f'[Ariba SOC] Alert Escalated: {alert.alert_name}',
+                    f'{msg}\n\nSeverity: {alert.severity}\n\nPlease check your dashboard for details.',
+                    settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=True,
+                )
+    except Exception:
         pass
 
 
