@@ -57,7 +57,7 @@
                         <div class="col-12">
                             <label class="form-label text-secondary small">Profile Picture</label>
                             <div class="d-flex align-items-center gap-3">
-                                <img id="avatarPreview" src="{{ profile.avatar.url|default:'' }}"
+                                <img id="avatarPreview" src="{% if profile.avatar %}{{ profile.avatar.url }}{% endif %}"
                                      class="rounded-circle" style="width: 64px; height: 64px; object-fit: cover; border: 2px solid var(--border-color);
                                      {% if not profile.avatar %}display:none{% endif %}">
                                 {{ form.avatar }}
