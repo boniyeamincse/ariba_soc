@@ -71,7 +71,7 @@ def reports_home(request):
 def generate_now(request, pk):
     report = get_object_or_404(ReportSetting, pk=pk)
     errors = []
-    relative_path = generate_report(report, errors=errors)
+    relative_path = generate_report(report, errors=errors, generated_by=request.user)
     if relative_path:
         messages.success(request, f'Generated "{report.name}".')
     else:
