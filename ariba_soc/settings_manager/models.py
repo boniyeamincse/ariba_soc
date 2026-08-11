@@ -184,6 +184,7 @@ class ReportSetting(models.Model):
     export_format = models.CharField(max_length=20, choices=EXPORT_FORMATS, default='CSV')
     is_active = models.BooleanField(default=True)
     last_generated_at = models.DateTimeField(null=True, blank=True)
+    last_report_file = models.CharField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

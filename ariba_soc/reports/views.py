@@ -1,12 +1,16 @@
 import csv
 import io
 from datetime import timedelta
-from django.shortcuts import render
+from django.conf import settings
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import HttpResponse
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 from alerts.models import Alert
+from settings_manager.models import ReportSetting
+from reports.services import generate_report
 
 try:
     import openpyxl
@@ -56,8 +60,23 @@ def reports_home(request):
         'weekly_total': Alert.objects.filter(alert_time__gte=week_ago).count(),
         'monthly_total': Alert.objects.filter(alert_time__gte=month_ago).count(),
         'HAS_OPENPYXL': HAS_OPENPYXL,
+        'report_settings': ReportSetting.objects.order_by('name'),
+        'MEDIA_URL': settings.MEDIA_URL,
     }
     return render(request, 'ariba_soc/reports_home.html', context)
+
+
+@login_required
+@require_POST
+def generate_now(request, pk):
+    report = get_object_or_404(ReportSetting, pk=pk)
+    errors = []
+    relative_path = generate_report(report, errors=errors)
+    if relative_path:
+        messages.success(request, f'Generated "{report.name}".')
+    else:
+        messages.error(request, f'Failed to generate "{report.name}": ' + '; '.join(errors or ['unknown error']))
+    return redirect('reports:home')
 
 
 @login_required

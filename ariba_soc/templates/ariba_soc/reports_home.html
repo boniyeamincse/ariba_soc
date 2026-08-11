@@ -69,5 +69,59 @@
             </div>
         </div>
     </div>
+
+    <div class="row g-3">
+        <div class="col-12">
+            <div class="ariba-card p-3">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="m-0">Scheduled Reports</h5>
+                    <a href="{% url 'settings:reports' %}" class="btn btn-ariba-outline btn-sm"><i class="bi bi-gear"></i> Manage</a>
+                </div>
+                {% if report_settings %}
+                <div class="table-responsive">
+                    <table class="table table-dark table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Schedule</th>
+                                <th>Format</th>
+                                <th>Last Generated</th>
+                                <th>Active</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for report in report_settings %}
+                            <tr>
+                                <td>{{ report.name }}</td>
+                                <td>{{ report.get_report_type_display }}</td>
+                                <td>{{ report.get_schedule_display }}</td>
+                                <td>{{ report.get_export_format_display }}</td>
+                                <td>{{ report.last_generated_at|default:"Never" }}</td>
+                                <td>
+                                    {% if report.is_active %}<span class="badge bg-success">Active</span>
+                                    {% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if report.last_report_file %}
+                                    <a href="{{ MEDIA_URL }}{{ report.last_report_file }}" class="btn btn-ariba-outline btn-sm" target="_blank"><i class="bi bi-download"></i> Download</a>
+                                    {% endif %}
+                                    <form method="post" action="{% url 'reports:generate_now' report.pk %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-play-fill"></i> Generate Now</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-secondary mb-0">No scheduled reports configured yet. <a href="{% url 'settings:reports' %}">Add one</a> to get daily/weekly/monthly/yearly PDF, CSV, or Excel reports.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
