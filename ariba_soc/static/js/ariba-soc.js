@@ -156,7 +156,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function moveAlert(alertId, newStatus, column) {
-        fetch('/alerts/api/alerts/' + alertId + '/move/', {
+        fetch('/api/alerts/' + alertId + '/move/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

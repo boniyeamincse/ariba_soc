@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth.models import User
+from settings_manager.models import SeveritySettings, StatusSettings, VerdictSettings
 from .models import Alert, AlertComment, SEVERITY_CHOICES, STATUS_CHOICES, VERDICT_CHOICES
 
 class AlertEditForm(forms.ModelForm):
@@ -18,6 +19,17 @@ class AlertEditForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['assignee'].queryset = User.objects.filter(is_active=True).select_related('analyst_profile')
         self.fields['assignee'].widget.attrs.update({'class': 'form-select'})
+
+        self.fields['severity'].choices = list(
+            SeveritySettings.objects.filter(is_active=True).order_by('sort_order').values_list('name', 'name')
+        ) or SEVERITY_CHOICES
+        self.fields['status'].choices = list(
+            StatusSettings.objects.filter(is_active=True).order_by('sort_order').values_list('name', 'name')
+        ) or STATUS_CHOICES
+        self.fields['verdict'].choices = list(
+            VerdictSettings.objects.filter(is_active=True).order_by('name').values_list('name', 'name')
+        ) or VERDICT_CHOICES
+
         self.fields['status'].widget.attrs.update({'class': 'form-select'})
         self.fields['severity'].widget.attrs.update({'class': 'form-select'})
         self.fields['verdict'].widget.attrs.update({'class': 'form-select'})
@@ -31,12 +43,13 @@ class AlertEditForm(forms.ModelForm):
         comment = cleaned.get('analyst_comment')
         escalation = cleaned.get('escalation_reason')
 
-        if status == 'Closed' and verdict in ('None', ''):
+        status_is_final = StatusSettings.objects.filter(name=status, is_final=True).exists()
+        verdict_requires_comment = VerdictSettings.objects.filter(name=verdict, requires_comment=True).exists()
+
+        if status_is_final and verdict in ('None', ''):
             raise forms.ValidationError('Verdict cannot be None when closing an alert.')
-        if verdict == 'True Positive' and not comment:
-            raise forms.ValidationError('Analyst comment is required for True Positive verdict.')
-        if verdict == 'False Positive' and not comment:
-            raise forms.ValidationError('Comment/reason is required for False Positive verdict.')
+        if verdict_requires_comment and not comment:
+            raise forms.ValidationError(f'Analyst comment is required for {verdict} verdict.')
         if status == 'Escalated' and not escalation:
             raise forms.ValidationError('Escalation reason is required when escalating.')
         return cleaned

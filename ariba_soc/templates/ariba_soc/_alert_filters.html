@@ -8,37 +8,27 @@
             <label class="text-secondary small mb-1">Severity</label>
             <select name="severity" class="form-select form-select-sm filter-auto-submit">
                 <option value="">All</option>
-                <option value="Informational" {% if current_filters.severity == 'Informational' %}selected{% endif %}>Informational</option>
-                <option value="Low" {% if current_filters.severity == 'Low' %}selected{% endif %}>Low</option>
-                <option value="Medium" {% if current_filters.severity == 'Medium' %}selected{% endif %}>Medium</option>
-                <option value="High" {% if current_filters.severity == 'High' %}selected{% endif %}>High</option>
-                <option value="Critical" {% if current_filters.severity == 'Critical' %}selected{% endif %}>Critical</option>
+                {% for s in severities %}
+                <option value="{{ s.name }}" {% if current_filters.severity == s.name %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
             </select>
         </div>
         <div class="col-6 col-md-1">
             <label class="text-secondary small mb-1">Status</label>
             <select name="status" class="form-select form-select-sm filter-auto-submit">
                 <option value="">All</option>
-                <option value="New" {% if current_filters.status == 'New' %}selected{% endif %}>New</option>
-                <option value="Awaiting Action" {% if current_filters.status == 'Awaiting Action' %}selected{% endif %}>Awaiting Action</option>
-                <option value="In Progress" {% if current_filters.status == 'In Progress' %}selected{% endif %}>In Progress</option>
-                <option value="Pending" {% if current_filters.status == 'Pending' %}selected{% endif %}>Pending</option>
-                <option value="Escalated" {% if current_filters.status == 'Escalated' %}selected{% endif %}>Escalated</option>
-                <option value="Closed" {% if current_filters.status == 'Closed' %}selected{% endif %}>Closed</option>
-                <option value="Archived" {% if current_filters.status == 'Archived' %}selected{% endif %}>Archived</option>
+                {% for s in statuses %}
+                <option value="{{ s.name }}" {% if current_filters.status == s.name %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
             </select>
         </div>
         <div class="col-6 col-md-1">
             <label class="text-secondary small mb-1">Verdict</label>
             <select name="verdict" class="form-select form-select-sm filter-auto-submit">
                 <option value="">All</option>
-                <option value="None" {% if current_filters.verdict == 'None' %}selected{% endif %}>None</option>
-                <option value="True Positive" {% if current_filters.verdict == 'True Positive' %}selected{% endif %}>True Positive</option>
-                <option value="False Positive" {% if current_filters.verdict == 'False Positive' %}selected{% endif %}>False Positive</option>
-                <option value="Benign Positive" {% if current_filters.verdict == 'Benign Positive' %}selected{% endif %}>Benign Positive</option>
-                <option value="Suspicious" {% if current_filters.verdict == 'Suspicious' %}selected{% endif %}>Suspicious</option>
-                <option value="Duplicate" {% if current_filters.verdict == 'Duplicate' %}selected{% endif %}>Duplicate</option>
-                <option value="Test Activity" {% if current_filters.verdict == 'Test Activity' %}selected{% endif %}>Test Activity</option>
+                {% for v in verdicts %}
+                <option value="{{ v.name }}" {% if current_filters.verdict == v.name %}selected{% endif %}>{{ v.name }}</option>
+                {% endfor %}
             </select>
         </div>
         <div class="col-6 col-md-2">

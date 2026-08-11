@@ -9,6 +9,7 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.contrib.auth.models import User
+from settings_manager.models import SeveritySettings, StatusSettings, VerdictSettings
 from .models import Alert, AlertComment, AlertAuditLog, Notification
 from .forms import AlertEditForm, AlertCommentForm
 from .services import update_alert, assign_alert, create_audit_log
@@ -75,6 +76,9 @@ def alert_table(request):
         'alerts': alerts_page,
         'assignees': assignees,
         'users': User.objects.filter(is_active=True),
+        'severities': SeveritySettings.objects.filter(is_active=True).order_by('sort_order'),
+        'statuses': StatusSettings.objects.filter(is_active=True).order_by('sort_order'),
+        'verdicts': VerdictSettings.objects.filter(is_active=True).order_by('name'),
         'current_filters': {
             'search': search, 'severity': severity, 'status': status,
             'verdict': verdict, 'assignee': assignee, 'date_from': date_from, 'date_to': date_to,
@@ -368,7 +372,7 @@ def alert_move_api(request, alert_id):
     alert = get_object_or_404(Alert, id=alert_id)
     data = json.loads(request.body)
     new_status = data.get('status')
-    if new_status and new_status in dict(Alert.STATUS_CHOICES):
+    if new_status and StatusSettings.objects.filter(name=new_status, is_active=True).exists():
         old = alert.status
         alert.status = new_status
         if new_status == 'In Progress':

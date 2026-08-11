@@ -198,17 +198,17 @@ document.addEventListener('DOMContentLoaded', function() {
         bulkValueSelect.innerHTML = '';
         if (val === 'status') {
             bulkValueSelect.style.display = 'inline-block';
-            ['New','In Progress','Escalated','Closed','Archived','Awaiting Action','Pending'].forEach(function(s) {
+            [{% for s in statuses %}'{{ s.name|escapejs }}'{% if not forloop.last %},{% endif %}{% endfor %}].forEach(function(s) {
                 bulkValueSelect.innerHTML += '<option value="' + s + '">' + s + '</option>';
             });
         } else if (val === 'verdict') {
             bulkValueSelect.style.display = 'inline-block';
-            ['None','True Positive','False Positive','Benign Positive','Suspicious','Duplicate','Test Activity'].forEach(function(v) {
+            [{% for v in verdicts %}'{{ v.name|escapejs }}'{% if not forloop.last %},{% endif %}{% endfor %}].forEach(function(v) {
                 bulkValueSelect.innerHTML += '<option value="' + v + '">' + v + '</option>';
             });
         } else if (val === 'close') {
             bulkValueSelect.style.display = 'inline-block';
-            ['True Positive','False Positive','Benign Positive','Duplicate','Test Activity'].forEach(function(v) {
+            [{% for v in verdicts %}{% if v.name != 'None' %}'{{ v.name|escapejs }}'{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}].forEach(function(v) {
                 bulkValueSelect.innerHTML += '<option value="' + v + '">' + v + '</option>';
             });
         } else if (val === 'assign') {

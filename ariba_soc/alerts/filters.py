@@ -1,12 +1,12 @@
 import django_filters
 from django import forms
-from .models import Alert
+from .models import Alert, SEVERITY_CHOICES, STATUS_CHOICES, VERDICT_CHOICES
 
 class AlertFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method='search_filter', label='Search', widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Search by name, host, user, IP, rule ID...'}))
-    severity = django_filters.MultipleChoiceFilter(choices=Alert.SEVERITY_CHOICES, widget=forms.SelectMultiple(attrs={'class': 'form-select'}))
-    status = django_filters.MultipleChoiceFilter(choices=Alert.STATUS_CHOICES, widget=forms.SelectMultiple(attrs={'class': 'form-select'}))
-    verdict = django_filters.MultipleChoiceFilter(choices=Alert.VERDICT_CHOICES, widget=forms.SelectMultiple(attrs={'class': 'form-select'}))
+    severity = django_filters.MultipleChoiceFilter(choices=SEVERITY_CHOICES, widget=forms.SelectMultiple(attrs={'class': 'form-select'}))
+    status = django_filters.MultipleChoiceFilter(choices=STATUS_CHOICES, widget=forms.SelectMultiple(attrs={'class': 'form-select'}))
+    verdict = django_filters.MultipleChoiceFilter(choices=VERDICT_CHOICES, widget=forms.SelectMultiple(attrs={'class': 'form-select'}))
     assignee = django_filters.ModelChoiceFilter(queryset=None, widget=forms.Select(attrs={'class': 'form-select'}))
     date_from = django_filters.DateTimeFilter(field_name='alert_time', lookup_expr='gte', widget=forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control'}))
     date_to = django_filters.DateTimeFilter(field_name='alert_time', lookup_expr='lte', widget=forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control'}))
