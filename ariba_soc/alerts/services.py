@@ -91,6 +91,16 @@ def update_alert(alert, form, user, request=None):
             comment_type='Closure Note'
         )
 
+    lessons_learned = form.cleaned_data.get('lessons_learned')
+    if lessons_learned:
+        alert.root_cause_summary = lessons_learned
+        AlertComment.objects.create(
+            alert=alert,
+            user=user,
+            comment=f"Lessons learned: {lessons_learned}",
+            comment_type='Lessons Learned'
+        )
+
     if alert.status == 'Closed' and form.cleaned_data.get('verdict'):
         create_audit_log(alert, user, 'Closed', '', alert.verdict, request)
 

@@ -67,6 +67,10 @@
                             <label class="form-label text-secondary small">Closure Reason</label>
                             <textarea name="closure_reason" class="form-control" rows="2"></textarea>
                         </div>
+                        <div class="col-12" id="lessonsField" style="display:none;">
+                            <label class="form-label text-secondary small">Lessons Learned</label>
+                            <textarea name="lessons_learned" class="form-control" rows="2" placeholder="What should we do differently next time?"></textarea>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -87,6 +91,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('escalationField').style.display = val.indexOf('Escalated') === 0 ? 'block' : 'none';
             document.getElementById('remediationField').style.display = val === 'Closed' ? 'block' : 'none';
             document.getElementById('closureField').style.display = val === 'Closed' ? 'block' : 'none';
+            document.getElementById('lessonsField').style.display = val === 'Closed' ? 'block' : 'none';
         });
     }
 });

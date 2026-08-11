@@ -195,6 +195,7 @@ class AlertComment(models.Model):
         ('Remediation Note', 'Remediation Note'),
         ('Closure Note', 'Closure Note'),
         ('Manager Note', 'Manager Note'),
+        ('Lessons Learned', 'Lessons Learned'),
     ]
     alert = models.ForeignKey(Alert, on_delete=models.CASCADE, related_name='comments')
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)

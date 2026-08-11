@@ -146,6 +146,14 @@
                 </div>
                 {% endif %}
 
+                {% if alert.root_cause_summary %}
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <h6 class="text-secondary"><i class="bi bi-mortarboard"></i> Lessons Learned</h6>
+                    <p>{{ alert.root_cause_summary }}</p>
+                </div>
+                {% endif %}
+
                 {% if alert.raw_json %}
                 <hr style="border-color: var(--border-color);">
                 <div class="detail-section">
