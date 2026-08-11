@@ -1,3 +1,4 @@
+import re
 import requests
 import logging
 from datetime import datetime, timedelta
@@ -115,10 +116,16 @@ class IndexerClient:
 
     def fetch_alerts(self, time_range='1h', max_alerts=5000):
         try:
-            if time_range == '1h':
-                since = (timezone.now() - timedelta(hours=1)).isoformat()
-            elif time_range == '24h':
-                since = (timezone.now() - timedelta(hours=24)).isoformat()
+            match = re.fullmatch(r'(\d+)([mhdw])', time_range)
+            if match:
+                amount, unit = int(match.group(1)), match.group(2)
+                delta = {
+                    'm': timedelta(minutes=amount),
+                    'h': timedelta(hours=amount),
+                    'd': timedelta(days=amount),
+                    'w': timedelta(weeks=amount),
+                }[unit]
+                since = (timezone.now() - delta).isoformat()
             else:
                 since = time_range
 
