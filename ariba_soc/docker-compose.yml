@@ -1,38 +1,87 @@
-version: '3.8'
 services:
   db:
     image: postgres:15
     environment:
-      POSTGRES_DB: ariba_soc
-      POSTGRES_USER: ariba_soc
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-ariba_soc}
+      POSTGRES_DB: ${DATABASE_NAME:-ariba_soc}
+      POSTGRES_USER: ${DATABASE_USER:-ariba_soc}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: pg_isready -U ariba_soc
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-ariba_soc}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
   redis:
     image: redis:7
+    volumes:
+      - redis_data:/data
     healthcheck:
-      test: redis-cli ping
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
   web:
     build: .
-    ports:
-      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_HOST: db
+      REDIS_URL: redis://redis:6379/1
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    expose:
+      - "8000"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-L", "http://localhost:8000/accounts/login/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  scheduler:
+    build: .
+    env_file: .env
     environment:
-      DATABASE_ENGINE: django.db.backends.postgresql
-      DATABASE_NAME: ariba_soc
-      DATABASE_USER: ariba_soc
-      DATABASE_PASSWORD: ${DB_PASSWORD:-ariba_soc}
       DATABASE_HOST: db
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production}
-      DJANGO_DEBUG: 'False'
       REDIS_URL: redis://redis:6379/1
+      SKIP_COLLECTSTATIC: "1"
+    volumes:
+      - media_volume:/app/media
+    entrypoint: ["docker/entrypoint.sh"]
+    command: ["docker/scheduler.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./deploy/nginx.docker.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_volume:/app/staticfiles:ro
+      - media_volume:/app/media:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
