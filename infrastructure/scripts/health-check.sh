@@ -11,7 +11,7 @@ echo " SOC Stack Health Check "
 echo "======================================"
 
 echo -e "\n[1] Docker Compose Services Status:"
-docker-compose ps
+docker compose ps
 
 echo -e "\n[2] Checking Wazuh Manager API..."
 MGR_STATUS=$(curl -k -s -o /dev/null -w "%{http_code}" https://localhost:55000 || echo "failed")

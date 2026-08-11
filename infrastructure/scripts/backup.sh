@@ -15,12 +15,12 @@ mkdir -p "$BACKUP_DIR"
 
 echo "[1] Backing up Ariba SOC PostgreSQL Database..."
 # Determine the container name for the database. Usually something like 'infrastructure-db-1'
-# If docker-compose exec fails, it means the container is offline.
-DB_CONTAINER=$(docker-compose ps -q db)
+# If docker compose exec fails, it means the container is offline.
+DB_CONTAINER=$(docker compose ps -q db)
 if [ -n "$DB_CONTAINER" ]; then
     # Running pg_dumpall to backup everything
-    # We use docker-compose exec to run the command inside the container
-    docker-compose exec -T db pg_dumpall -c -U ariba_soc > "$BACKUP_DIR/ariba_soc_db.sql"
+    # We use docker compose exec to run the command inside the container
+    docker compose exec -T db pg_dumpall -c -U ariba_soc > "$BACKUP_DIR/ariba_soc_db.sql"
     echo " -> Database backed up successfully."
 else
     echo " -> ERROR: Database container is not running! Cannot backup."

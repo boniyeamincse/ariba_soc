@@ -8,11 +8,11 @@ echo " Push to Docker Hub "
 echo "======================================"
 
 echo "Building the Ariba SOC images..."
-docker-compose build web scheduler
+docker compose build web scheduler
 
 echo "Pushing images to Docker Hub (boniyeamincse/ariba_soc)..."
 # Note: Ensure you are logged in to docker hub before running this (docker login)
-docker-compose push web scheduler
+docker compose push web scheduler
 
 echo "======================================"
 echo " Push complete! "

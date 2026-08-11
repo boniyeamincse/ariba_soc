@@ -14,15 +14,15 @@ fi
 
 echo "Generating Wazuh Indexer certificates..."
 # This generates certs in the config folder if they don't already exist
-docker-compose -f generate-indexer-certs.yml run --rm generator
+docker compose -f generate-indexer-certs.yml run --rm generator
 
 echo "Starting unified SOC stack (Wazuh + Ariba SOC)..."
-docker-compose up --build -d
+docker compose up --build -d
 
 echo "Waiting for web service to be healthy before seeding..."
 # We sleep a bit to give time for db and web to start, though ideally we'd use a healthcheck
 sleep 20
-docker-compose exec -T web python seed_wazuh_config.py || echo "Warning: seeding failed, perhaps db isn't ready?"
+docker compose exec -T web python seed_wazuh_config.py || echo "Warning: seeding failed, perhaps db isn't ready?"
 
 echo "SOC stack is starting up!"
 echo "Wazuh Dashboard: https://localhost (allow a few minutes for OpenSearch to start)"

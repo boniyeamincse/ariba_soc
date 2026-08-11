@@ -13,6 +13,7 @@ ariba_soc/staticfiles/
 # Environment
 .env
 ariba_soc/.env
+infrastructure/.env
 
 # OS
 .DS_Store

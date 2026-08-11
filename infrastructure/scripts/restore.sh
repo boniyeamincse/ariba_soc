@@ -43,11 +43,11 @@ fi
 
 echo "[2] Restoring Ariba SOC Database..."
 if [ -f "$BACKUP_DIR/ariba_soc_db.sql" ]; then
-    DB_CONTAINER=$(docker-compose ps -q db)
+    DB_CONTAINER=$(docker compose ps -q db)
     if [ -n "$DB_CONTAINER" ]; then
         # Drop existing connections and restore
         echo " -> Loading SQL dump into database container..."
-        cat "$BACKUP_DIR/ariba_soc_db.sql" | docker-compose exec -T db psql -U ariba_soc -d postgres
+        cat "$BACKUP_DIR/ariba_soc_db.sql" | docker compose exec -T db psql -U ariba_soc -d postgres
         echo " -> Database restored successfully."
     else
         echo " -> ERROR: Database container is not running! Please start the stack first."
@@ -57,7 +57,7 @@ else
 fi
 
 echo "[3] Restarting services to apply changes..."
-docker-compose restart
+docker compose restart
 
 echo "======================================"
 echo " Restore completed."
