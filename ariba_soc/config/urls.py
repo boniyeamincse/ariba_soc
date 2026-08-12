@@ -9,6 +9,7 @@ urlpatterns = [
     path('', include('alerts.urls')),
     path('wazuh/', include('wazuh_integration.urls')),
     path('dashboard/', include('dashboard.urls')),
+    path('monitor/', include('monitor.urls')),
     path('reports/', include('reports.urls')),
     path('audit/', include('audit.urls')),
     path('settings/', include('settings_manager.urls')),

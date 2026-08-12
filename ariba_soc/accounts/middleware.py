@@ -1,10 +1,11 @@
 from django.shortcuts import redirect
 
 # Paths a MONITOR-role account may reach directly. Everything else redirects
-# to the dashboard -- this is the real access control; nav-link hiding in
+# to the wallboard -- this is the real access control; nav-link hiding in
 # base.html is cosmetic on top of this, not a substitute for it.
 MONITOR_ALLOWED_PREFIXES = (
     '/dashboard/',
+    '/monitor/',
     '/accounts/',
     '/static/',
     '/media/',
@@ -20,5 +21,5 @@ class MonitorAccessMiddleware:
         if user is not None and user.is_authenticated:
             profile = getattr(user, 'analyst_profile', None)
             if profile and profile.role == 'MONITOR' and not request.path.startswith(MONITOR_ALLOWED_PREFIXES):
-                return redirect('dashboard:home')
+                return redirect('monitor:wallboard')
         return self.get_response(request)

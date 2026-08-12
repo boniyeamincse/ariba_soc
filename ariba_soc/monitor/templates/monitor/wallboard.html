@@ -1,0 +1,89 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ariba SOC — Live Monitor Wallboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{% static 'css/ariba-soc.css' %}" rel="stylesheet">
+    <link href="{% static 'css/wallboard.css' %}" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/globe.gl"></script>
+</head>
+<body class="wallboard-body">
+    <div class="wallboard-header">
+        <div class="wallboard-brand"><i class="bi bi-shield-shaded"></i> ARIBA SOC — LIVE MONITOR</div>
+        <div class="wallboard-header-right">
+            <div class="wallboard-live-counter">
+                <span class="dot"></span>
+                <span id="wb-live-count">–</span> open alerts
+            </div>
+            <div class="wallboard-clock" id="wb-clock">--:--:--</div>
+            <div class="wb-section-dots" id="wb-section-dots">
+                <span data-section="0" class="active"></span>
+                <span data-section="1"></span>
+            </div>
+            <button class="wallboard-kiosk-btn" id="wb-kiosk-btn"><i class="bi bi-arrows-fullscreen"></i> Kiosk Mode</button>
+        </div>
+    </div>
+
+    <div class="wallboard-body-area">
+        <div class="wb-section active" id="wb-section-ops" data-section-index="0">
+            <div class="row g-3 h-100">
+                <div class="col-12 text-center text-secondary pt-5">
+                    <i class="bi bi-hourglass-split fs-1"></i>
+                    <p class="mt-2">Live Ops section — loading real data...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="wb-section" id="wb-section-exec" data-section-index="1">
+            <div class="row g-3 h-100">
+                <div class="col-12 text-center text-secondary pt-5">
+                    <i class="bi bi-hourglass-split fs-1"></i>
+                    <p class="mt-2">Executive section — loading real data...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Live clock
+        function wbTickClock() {
+            document.getElementById('wb-clock').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+        }
+        setInterval(wbTickClock, 1000);
+        wbTickClock();
+
+        // Kiosk fullscreen
+        document.getElementById('wb-kiosk-btn').addEventListener('click', function() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(function() {});
+            } else {
+                document.exitFullscreen();
+            }
+        });
+
+        // Section auto-rotation
+        var wbSections = [document.getElementById('wb-section-ops'), document.getElementById('wb-section-exec')];
+        var wbDots = document.querySelectorAll('#wb-section-dots span');
+        var wbCurrentSection = 0;
+        var WB_ROTATE_MS = 18000;
+
+        function wbShowSection(index) {
+            wbSections.forEach(function(el, i) {
+                el.classList.toggle('active', i === index);
+            });
+            wbDots.forEach(function(el, i) {
+                el.classList.toggle('active', i === index);
+            });
+            wbCurrentSection = index;
+        }
+
+        setInterval(function() {
+            wbShowSection((wbCurrentSection + 1) % wbSections.length);
+        }, WB_ROTATE_MS);
+    </script>
+</body>
+</html>
