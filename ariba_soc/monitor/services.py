@@ -193,7 +193,11 @@ def wazuh_tool_status():
     try:
         from wazuh_integration.services import ManagerClient
         result = ManagerClient().get_manager_status()
-        status = 'Down' if 'error' in result else 'Operational'
+        # Wazuh's own API convention: successful responses still include
+        # 'error': 0 (0 = no error), they don't omit the key. ManagerClient
+        # wraps exceptions as {'error': str(e)} instead, so 0 vs anything
+        # else is the real success/failure signal, not key presence.
+        status = 'Operational' if result.get('error') == 0 else 'Down'
     except Exception:
         status = 'Unknown'
     cache.set('wallboard_wazuh_status', status, 30)
