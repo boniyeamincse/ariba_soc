@@ -1,11 +1,26 @@
 import os
 from pathlib import Path
 from django.contrib.messages import constants as messages
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'dev-secret-key-change-in-production')
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() == 'true'
+
+_INSECURE_SECRET_KEY_DEFAULTS = {'', 'dev-secret-key-change-in-production', 'change-this-to-a-secure-random-key'}
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '')
+if SECRET_KEY in _INSECURE_SECRET_KEY_DEFAULTS:
+    if DEBUG:
+        SECRET_KEY = 'dev-secret-key-change-in-production'
+    else:
+        # A guessable SECRET_KEY lets an attacker forge session cookies, CSRF
+        # tokens, and password-reset links -- refuse to start rather than run
+        # a production instance signed with a key anyone can read in this repo.
+        raise ImproperlyConfigured(
+            'DJANGO_SECRET_KEY is unset or using a known insecure default. '
+            'Set a unique DJANGO_SECRET_KEY in the environment before running with DJANGO_DEBUG=False.'
+        )
+
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
 
 INSTALLED_APPS = [
@@ -128,6 +143,20 @@ CSRF_COOKIE_SECURE = _USE_HTTPS
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
+
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
+]
+
+# Inert while DJANGO_USE_HTTPS is unset (matches SESSION/CSRF_COOKIE_SECURE
+# above) -- HSTS/redirect headers are meaningless without TLS in front of
+# nginx. Flip DJANGO_USE_HTTPS once real certs are in place; if nginx
+# terminates TLS and proxies to this app over plain HTTP, SECURE_PROXY_SSL_HEADER
+# also needs to be set then, otherwise SECURE_SSL_REDIRECT will redirect-loop.
+SECURE_SSL_REDIRECT = _USE_HTTPS
+SECURE_HSTS_SECONDS = 31536000 if _USE_HTTPS else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _USE_HTTPS
+SECURE_HSTS_PRELOAD = _USE_HTTPS
 
 # Email Configuration
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
