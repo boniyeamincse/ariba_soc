@@ -200,18 +200,6 @@ def wazuh_tool_status():
     return status
 
 
-def manual_tool_statuses():
-    """Firewall/EDR/Aruba aren't integrated at all -- there's nothing to
-    poll. An admin sets these by hand via Settings > System Settings
-    (reusing the existing generic SystemSetting key/value model) instead
-    of faking a status this app has no way to actually know."""
-    return {
-        'Firewall': SystemSetting.get_setting('wallboard_status_firewall', 'Not Configured'),
-        'EDR': SystemSetting.get_setting('wallboard_status_edr', 'Not Configured'),
-        'Aruba': SystemSetting.get_setting('wallboard_status_aruba', 'Not Configured'),
-    }
-
-
 # ---- Attack globe ----
 
 def geolocate_ip(ip):
@@ -285,5 +273,5 @@ def wallboard_executive():
         'response_time_minutes': incident_response_time(),
         'sla_breakdown': sla_status_breakdown(),
         'monthly': monthly_comparison(),
-        'tool_status': {'Wazuh': wazuh_tool_status(), **manual_tool_statuses()},
+        'tool_status': {'Wazuh': wazuh_tool_status()},
     }
