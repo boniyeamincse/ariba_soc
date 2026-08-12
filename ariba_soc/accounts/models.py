@@ -10,6 +10,7 @@ ROLE_CHOICES = [
     ('SOC_MGR', 'SOC Manager'),
     ('ADMIN', 'Admin'),
     ('VIEWER', 'Viewer'),
+    ('MONITOR', 'Monitor'),
 ]
 
 SETTINGS_ALLOWED_ROLES = ['SOC_MGR', 'SOC_ENG', 'ADMIN']

@@ -23,14 +23,18 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
+                    {% if user.analyst_profile.role != 'MONITOR' %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'alerts:table' %}"><i class="bi bi-table"></i> Alerts</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'alerts:board' %}"><i class="bi bi-kanban"></i> Board</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'alerts:my_alerts' %}"><i class="bi bi-person-check"></i> My Alerts {% if my_assigned_count %}<span class="badge bg-danger ms-1">{{ my_assigned_count }}</span>{% endif %}</a></li>
+                    {% endif %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'dashboard:home' %}"><i class="bi bi-graph-up"></i> Dashboard</a></li>
+                    {% if user.analyst_profile.role != 'MONITOR' %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'reports:home' %}"><i class="bi bi-file-text"></i> Reports</a></li>
 
                     <li class="nav-item"><a class="nav-link" href="{% url 'audit:list' %}"><i class="bi bi-journal-text"></i> Audit Logs</a></li>
-                    
+                    {% endif %}
+
                     {% if user.analyst_profile.role in settings_roles %}
                     <li class="nav-item dropdown dropdown-mega">
                         <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
