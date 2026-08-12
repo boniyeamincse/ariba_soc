@@ -30,10 +30,25 @@
 
     <div class="wallboard-body-area">
         <div class="wb-section active" id="wb-section-ops" data-section-index="0">
-            <div class="row g-3 h-100">
-                <div class="col-12 text-center text-secondary pt-5">
-                    <i class="bi bi-hourglass-split fs-1"></i>
-                    <p class="mt-2">Live Ops section — loading real data...</p>
+            <div class="row g-3 mb-3" id="wb-severity-row"></div>
+            <div class="row g-3" style="height: calc(100% - 130px);">
+                <div class="col-md-5 h-100">
+                    <div class="wb-tile h-100">
+                        <div class="wb-tile-label mb-2"><i class="bi bi-exclamation-octagon"></i> Active Incidents</div>
+                        <div id="wb-incidents-list"></div>
+                    </div>
+                </div>
+                <div class="col-md-4 h-100">
+                    <div class="wb-tile h-100">
+                        <div class="wb-tile-label mb-2"><i class="bi bi-hdd-network"></i> Top Attacked Assets</div>
+                        <div id="wb-assets-list"></div>
+                    </div>
+                </div>
+                <div class="col-md-3 h-100">
+                    <div class="wb-tile h-100">
+                        <div class="wb-tile-label mb-2"><i class="bi bi-person-check"></i> Online L1/L2 Analysts</div>
+                        <div id="wb-analysts-list"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -84,6 +99,122 @@
         setInterval(function() {
             wbShowSection((wbCurrentSection + 1) % wbSections.length);
         }, WB_ROTATE_MS);
+
+        // ---- Live Ops data ----
+        var WB_SEVERITY_COLORS = {
+            'Critical': 'var(--severity-critical)', 'High': 'var(--severity-high)',
+            'Medium': 'var(--severity-medium)', 'Low': 'var(--severity-low)',
+            'Informational': 'var(--severity-info)'
+        };
+
+        function wbEscape(s) {
+            var div = document.createElement('div');
+            div.textContent = s == null ? '' : s;
+            return div.innerHTML;
+        }
+
+        function wbRenderSeverity(rows) {
+            var el = document.getElementById('wb-severity-row');
+            el.innerHTML = rows.map(function(r) {
+                var color = WB_SEVERITY_COLORS[r.severity] || '#888';
+                return '<div class="col"><div class="wb-tile text-center py-2">' +
+                    '<div class="wb-tile-label">' + wbEscape(r.severity) + '</div>' +
+                    '<div class="wb-tile-value" style="color:' + color + '">' + r.count + '</div>' +
+                    '</div></div>';
+            }).join('');
+        }
+
+        function wbFormatCountdown(dueIso) {
+            if (!dueIso) return '<span class="text-muted">no SLA</span>';
+            var diffMs = new Date(dueIso).getTime() - Date.now();
+            var breached = diffMs < 0;
+            var abs = Math.abs(diffMs);
+            var h = Math.floor(abs / 3600000);
+            var m = Math.floor((abs % 3600000) / 60000);
+            var text = h + 'h ' + m + 'm';
+            return breached
+                ? '<span style="color:var(--severity-critical)">BREACHED ' + text + ' ago</span>'
+                : '<span style="color:var(--severity-low)">' + text + ' left</span>';
+        }
+
+        function wbRenderIncidents(incidents) {
+            var el = document.getElementById('wb-incidents-list');
+            if (!incidents.length) {
+                el.innerHTML = '<p class="text-muted small">No active incidents.</p>';
+                return;
+            }
+            el.innerHTML = incidents.map(function(inc) {
+                var color = WB_SEVERITY_COLORS[inc.severity] || '#888';
+                return '<div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;" data-sla-due="' + wbEscape(inc.sla_due_at) + '">' +
+                    '<div style="min-width:0;">' +
+                    '<div class="text-truncate" style="max-width: 22vw;"><span style="color:' + color + '">●</span> ' + wbEscape(inc.name) + '</div>' +
+                    '<div class="text-muted small">' + wbEscape(inc.hostname || '—') + ' · ' + wbEscape(inc.assignee) + ' · ' + wbEscape(inc.status) + '</div>' +
+                    '</div>' +
+                    '<div class="wb-sla-countdown small text-nowrap ms-2">' + wbFormatCountdown(inc.sla_due_at) + '</div>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function wbRenderAssets(assets) {
+            var el = document.getElementById('wb-assets-list');
+            if (!assets.length) {
+                el.innerHTML = '<p class="text-muted small">No data.</p>';
+                return;
+            }
+            var max = Math.max.apply(null, assets.map(function(a) { return a.count; }));
+            el.innerHTML = assets.map(function(a) {
+                var pct = max ? Math.round((a.count / max) * 100) : 0;
+                return '<div class="mb-2">' +
+                    '<div class="d-flex justify-content-between small"><span>' + wbEscape(a.hostname) + '</span><span>' + a.count + '</span></div>' +
+                    '<div style="background: var(--border-color); border-radius: 4px; height: 6px;"><div style="width:' + pct + '%; background: var(--accent-blue); height: 6px; border-radius: 4px;"></div></div>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function wbRenderAnalysts(analysts) {
+            var el = document.getElementById('wb-analysts-list');
+            if (!analysts.length) {
+                el.innerHTML = '<p class="text-muted small">No analysts online.</p>';
+                return;
+            }
+            el.innerHTML = analysts.map(function(a) {
+                return '<div class="d-flex align-items-center gap-2 py-1">' +
+                    '<span style="width:8px;height:8px;border-radius:50%;background:var(--severity-low);display:inline-block;"></span>' +
+                    '<span>' + wbEscape(a.username) + '</span>' +
+                    '<span class="text-muted small ms-auto">' + wbEscape(a.role) + '</span>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function wbTickSlaCountdowns() {
+            document.querySelectorAll('#wb-incidents-list [data-sla-due]').forEach(function(row) {
+                var due = row.getAttribute('data-sla-due');
+                var target = row.querySelector('.wb-sla-countdown');
+                if (target) target.innerHTML = wbFormatCountdown(due || null);
+            });
+        }
+        setInterval(wbTickSlaCountdowns, 30000);
+
+        function wbLoadStats() {
+            fetch('{% url "monitor:stats_api" %}')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (typeof data.live_open_count === 'number') {
+                        var countEl = document.getElementById('wb-live-count');
+                        countEl.textContent = data.live_open_count;
+                        countEl.classList.remove('wb-tick');
+                        void countEl.offsetWidth;
+                        countEl.classList.add('wb-tick');
+                    }
+                    if (data.severity_breakdown) wbRenderSeverity(data.severity_breakdown);
+                    if (data.incidents) wbRenderIncidents(data.incidents);
+                    if (data.top_assets) wbRenderAssets(data.top_assets);
+                    if (data.online_analysts) wbRenderAnalysts(data.online_analysts);
+                })
+                .catch(function(e) { console.error('wallboard stats fetch failed', e); });
+        }
+        wbLoadStats();
+        setInterval(wbLoadStats, 10000);
     </script>
 </body>
 </html>
