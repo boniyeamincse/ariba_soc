@@ -5,9 +5,11 @@ or faked. Filled in incrementally: Phase 2 (live ops), Phase 3
 """
 from datetime import timedelta
 from django.contrib.auth import get_user_model
-from django.db.models import Count, Q
+from django.core.cache import cache
+from django.db.models import Count, Q, Avg, F
 from django.utils import timezone
 from alerts.models import Alert
+from settings_manager.models import SystemSetting
 
 OPEN_STATUSES = ['New', 'Awaiting Action', 'In Progress', 'Pending',
                   'Escalated to L2', 'Escalated to IR/IT', 'Escalated to Management', 'Remediation']
@@ -76,4 +78,125 @@ def wallboard_live_ops():
         'incidents': active_incidents(),
         'top_assets': top_attacked_assets(),
         'online_analysts': online_analysts(),
+    }
+
+
+# ---- Executive section ----
+
+def health_score():
+    """Simple weighted deduction off real counts, clamped 0-100. Not a
+    formal industry formula -- a readable, defensible approximation:
+    each open Critical costs 10 points, each open High costs 5, each SLA
+    breach costs 8, each alert escalated to Management costs 6."""
+    open_critical = Alert.objects.filter(severity='Critical', status__in=OPEN_STATUSES).count()
+    open_high = Alert.objects.filter(severity='High', status__in=OPEN_STATUSES).count()
+    sla_breached = Alert.objects.filter(sla_status='Breached', status__in=OPEN_STATUSES).count()
+    mgmt_escalated = Alert.objects.filter(status='Escalated to Management').exclude(status__in=['Closed', 'Archived']).count()
+    score = 100 - (open_critical * 10 + open_high * 5 + sla_breached * 8 + mgmt_escalated * 6)
+    return max(0, min(100, score))
+
+
+def today_severity_counts():
+    today = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    qs = Alert.objects.filter(alert_time__gte=today)
+    return {
+        'critical': qs.filter(severity='Critical').count(),
+        'high': qs.filter(severity='High').count(),
+    }
+
+
+def resolved_vs_unresolved():
+    resolved = Alert.objects.filter(status__in=['Closed', 'Archived']).count()
+    unresolved = Alert.objects.filter(status__in=OPEN_STATUSES).count()
+    return {'resolved': resolved, 'unresolved': unresolved}
+
+
+def threat_trend(days=7):
+    today = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    out = []
+    for i in range(days - 1, -1, -1):
+        start = today - timedelta(days=i)
+        end = start + timedelta(days=1)
+        out.append({'date': start.strftime('%Y-%m-%d'), 'count': Alert.objects.filter(alert_time__gte=start, alert_time__lt=end).count()})
+    return out
+
+
+def most_targeted_systems(limit=6):
+    """All-time, unlike Live Ops' top_attacked_assets which is open-alerts-only
+    -- this is meant to show the strategic pattern, not the operational one."""
+    rows = Alert.objects.exclude(hostname='').values('hostname').annotate(count=Count('id')).order_by('-count')[:limit]
+    return list(rows)
+
+
+def incident_response_time():
+    """Average minutes from alert_time to acknowledged_at, over alerts that
+    have actually been acknowledged (i.e. someone worked it)."""
+    qs = Alert.objects.filter(acknowledged_at__isnull=False).annotate(
+        response_seconds=F('acknowledged_at') - F('alert_time')
+    )
+    avg = qs.aggregate(avg=Avg('response_seconds'))['avg']
+    return round(avg.total_seconds() / 60, 1) if avg else None
+
+
+def sla_status_breakdown():
+    rows = Alert.objects.filter(status__in=OPEN_STATUSES).values('sla_status').annotate(count=Count('id'))
+    counts = {r['sla_status']: r['count'] for r in rows}
+    return [{'sla_status': s, 'count': counts.get(s, 0)} for s in ('Within SLA', 'Near SLA breach', 'Breached')]
+
+
+def monthly_comparison():
+    now = timezone.now()
+    this_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    last_month_end = this_month_start - timedelta(seconds=1)
+    last_month_start = last_month_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    this_month_total = Alert.objects.filter(alert_time__gte=this_month_start).count()
+    last_month_total = Alert.objects.filter(alert_time__gte=last_month_start, alert_time__lte=last_month_end).count()
+    this_month_resolved = Alert.objects.filter(alert_time__gte=this_month_start, status__in=['Closed', 'Archived']).count()
+    last_month_resolved = Alert.objects.filter(alert_time__gte=last_month_start, alert_time__lte=last_month_end, status__in=['Closed', 'Archived']).count()
+
+    return {
+        'this_month_total': this_month_total, 'last_month_total': last_month_total,
+        'this_month_resolved': this_month_resolved, 'last_month_resolved': last_month_resolved,
+    }
+
+
+def wazuh_tool_status():
+    cached = cache.get('wallboard_wazuh_status')
+    if cached is not None:
+        return cached
+    try:
+        from wazuh_integration.services import ManagerClient
+        result = ManagerClient().get_manager_status()
+        status = 'Down' if 'error' in result else 'Operational'
+    except Exception:
+        status = 'Unknown'
+    cache.set('wallboard_wazuh_status', status, 30)
+    return status
+
+
+def manual_tool_statuses():
+    """Firewall/EDR/Aruba aren't integrated at all -- there's nothing to
+    poll. An admin sets these by hand via Settings > System Settings
+    (reusing the existing generic SystemSetting key/value model) instead
+    of faking a status this app has no way to actually know."""
+    return {
+        'Firewall': SystemSetting.get_setting('wallboard_status_firewall', 'Not Configured'),
+        'EDR': SystemSetting.get_setting('wallboard_status_edr', 'Not Configured'),
+        'Aruba': SystemSetting.get_setting('wallboard_status_aruba', 'Not Configured'),
+    }
+
+
+def wallboard_executive():
+    return {
+        'health_score': health_score(),
+        'today': today_severity_counts(),
+        'incidents_count': len(active_incidents(limit=1000)),
+        'resolved_vs_unresolved': resolved_vs_unresolved(),
+        'threat_trend': threat_trend(),
+        'most_targeted': most_targeted_systems(),
+        'response_time_minutes': incident_response_time(),
+        'sla_breakdown': sla_status_breakdown(),
+        'monthly': monthly_comparison(),
+        'tool_status': {'Wazuh': wazuh_tool_status(), **manual_tool_statuses()},
     }

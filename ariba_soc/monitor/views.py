@@ -13,6 +13,7 @@ def wallboard(request):
 def wallboard_stats_api(request):
     data = {}
     data.update(services.wallboard_live_ops())
+    data.update(services.wallboard_executive())
     return JsonResponse(data)
 
 

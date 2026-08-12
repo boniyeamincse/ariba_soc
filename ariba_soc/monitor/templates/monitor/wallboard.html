@@ -54,10 +54,54 @@
         </div>
 
         <div class="wb-section" id="wb-section-exec" data-section-index="1">
-            <div class="row g-3 h-100">
-                <div class="col-12 text-center text-secondary pt-5">
-                    <i class="bi bi-hourglass-split fs-1"></i>
-                    <p class="mt-2">Executive section — loading real data...</p>
+            <div class="row g-3 mb-3">
+                <div class="col">
+                    <div class="wb-tile text-center py-2">
+                        <div class="wb-tile-label">Security Health Score</div>
+                        <div class="wb-tile-value" id="wb-health-score" style="color:var(--accent-cyan)">–</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="wb-tile text-center py-2">
+                        <div class="wb-tile-label">Today: Critical + High</div>
+                        <div class="wb-tile-value" id="wb-today-ch" style="color:var(--severity-high)">–</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="wb-tile text-center py-2">
+                        <div class="wb-tile-label">Active Major Incidents</div>
+                        <div class="wb-tile-value" id="wb-incidents-count" style="color:var(--severity-critical)">–</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="wb-tile text-center py-2">
+                        <div class="wb-tile-label">Avg Response Time</div>
+                        <div class="wb-tile-value" id="wb-response-time" style="color:var(--accent-blue)">–</div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3" style="height: calc(100% - 210px);">
+                <div class="col-md-5 h-100">
+                    <div class="wb-tile h-100">
+                        <div class="wb-tile-label mb-2"><i class="bi bi-graph-up"></i> 7-Day Threat Trend</div>
+                        <canvas id="wb-trend-chart"></canvas>
+                    </div>
+                </div>
+                <div class="col-md-3 h-100">
+                    <div class="wb-tile h-100">
+                        <div class="wb-tile-label mb-2"><i class="bi bi-check2-circle"></i> Resolved vs Unresolved</div>
+                        <canvas id="wb-resolved-chart"></canvas>
+                        <div class="wb-tile-label mt-3 mb-1"><i class="bi bi-clock-history"></i> SLA Status</div>
+                        <div id="wb-sla-breakdown" class="small"></div>
+                    </div>
+                </div>
+                <div class="col-md-4 h-100">
+                    <div class="wb-tile h-100">
+                        <div class="wb-tile-label mb-2"><i class="bi bi-hdd-network"></i> Most Targeted Systems</div>
+                        <div id="wb-targeted-list" class="mb-3"></div>
+                        <div class="wb-tile-label mb-2"><i class="bi bi-hdd-stack"></i> Tool Status</div>
+                        <div id="wb-tool-status"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -155,21 +199,23 @@
             }).join('');
         }
 
-        function wbRenderAssets(assets) {
-            var el = document.getElementById('wb-assets-list');
-            if (!assets.length) {
+        function wbRenderBarList(elId, rows, color) {
+            var el = document.getElementById(elId);
+            if (!rows.length) {
                 el.innerHTML = '<p class="text-muted small">No data.</p>';
                 return;
             }
-            var max = Math.max.apply(null, assets.map(function(a) { return a.count; }));
-            el.innerHTML = assets.map(function(a) {
+            var max = Math.max.apply(null, rows.map(function(a) { return a.count; }));
+            el.innerHTML = rows.map(function(a) {
                 var pct = max ? Math.round((a.count / max) * 100) : 0;
                 return '<div class="mb-2">' +
                     '<div class="d-flex justify-content-between small"><span>' + wbEscape(a.hostname) + '</span><span>' + a.count + '</span></div>' +
-                    '<div style="background: var(--border-color); border-radius: 4px; height: 6px;"><div style="width:' + pct + '%; background: var(--accent-blue); height: 6px; border-radius: 4px;"></div></div>' +
+                    '<div style="background: var(--border-color); border-radius: 4px; height: 6px;"><div style="width:' + pct + '%; background: ' + color + '; height: 6px; border-radius: 4px;"></div></div>' +
                     '</div>';
             }).join('');
         }
+        function wbRenderAssets(assets) { wbRenderBarList('wb-assets-list', assets, 'var(--accent-blue)'); }
+        function wbRenderTargeted(rows) { wbRenderBarList('wb-targeted-list', rows, 'var(--accent-cyan)'); }
 
         function wbRenderAnalysts(analysts) {
             var el = document.getElementById('wb-analysts-list');
@@ -195,6 +241,68 @@
         }
         setInterval(wbTickSlaCountdowns, 30000);
 
+        // ---- Executive section ----
+        var wbTrendChart = null, wbResolvedChart = null;
+
+        function wbRenderSlaBreakdown(rows) {
+            var colors = {'Within SLA': 'var(--severity-low)', 'Near SLA breach': 'var(--severity-medium)', 'Breached': 'var(--severity-critical)'};
+            document.getElementById('wb-sla-breakdown').innerHTML = rows.map(function(r) {
+                return '<div class="d-flex justify-content-between"><span style="color:' + (colors[r.sla_status] || '#888') + '">' + wbEscape(r.sla_status) + '</span><span>' + r.count + '</span></div>';
+            }).join('');
+        }
+
+        function wbRenderToolStatus(statuses) {
+            var colorFor = function(s) {
+                if (s === 'Operational') return 'var(--severity-low)';
+                if (s === 'Not Configured' || s === 'Unknown') return 'var(--text-muted)';
+                return 'var(--severity-critical)';
+            };
+            document.getElementById('wb-tool-status').innerHTML = Object.keys(statuses).map(function(name) {
+                return '<div class="d-flex justify-content-between align-items-center py-1">' +
+                    '<span>' + wbEscape(name) + '</span>' +
+                    '<span style="color:' + colorFor(statuses[name]) + '">● ' + wbEscape(statuses[name]) + '</span>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function wbRenderExecutive(data) {
+            document.getElementById('wb-health-score').textContent = data.health_score != null ? data.health_score : '–';
+            document.getElementById('wb-today-ch').textContent = (data.today.critical + data.today.high);
+            document.getElementById('wb-incidents-count').textContent = data.incidents_count;
+            document.getElementById('wb-response-time').textContent = data.response_time_minutes != null ? data.response_time_minutes + 'm' : 'n/a';
+
+            if (!wbTrendChart) {
+                wbTrendChart = new Chart(document.getElementById('wb-trend-chart'), {
+                    type: 'line',
+                    data: { labels: data.threat_trend.map(function(d) { return d.date.slice(5); }),
+                        datasets: [{ label: 'Alerts', data: data.threat_trend.map(function(d) { return d.count; }),
+                            borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.3, fill: true }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8896b8' } } },
+                        scales: { x: { ticks: { color: '#8896b8' } }, y: { ticks: { color: '#8896b8' } } } }
+                });
+            } else {
+                wbTrendChart.data.labels = data.threat_trend.map(function(d) { return d.date.slice(5); });
+                wbTrendChart.data.datasets[0].data = data.threat_trend.map(function(d) { return d.count; });
+                wbTrendChart.update();
+            }
+
+            var rv = data.resolved_vs_unresolved;
+            if (!wbResolvedChart) {
+                wbResolvedChart = new Chart(document.getElementById('wb-resolved-chart'), {
+                    type: 'doughnut',
+                    data: { labels: ['Resolved', 'Unresolved'], datasets: [{ data: [rv.resolved, rv.unresolved], backgroundColor: ['#22c55e', '#ef4444'] }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#8896b8' } } } }
+                });
+            } else {
+                wbResolvedChart.data.datasets[0].data = [rv.resolved, rv.unresolved];
+                wbResolvedChart.update();
+            }
+
+            wbRenderSlaBreakdown(data.sla_breakdown);
+            wbRenderTargeted(data.most_targeted);
+            wbRenderToolStatus(data.tool_status);
+        }
+
         function wbLoadStats() {
             fetch('{% url "monitor:stats_api" %}')
                 .then(function(r) { return r.json(); })
@@ -210,6 +318,7 @@
                     if (data.incidents) wbRenderIncidents(data.incidents);
                     if (data.top_assets) wbRenderAssets(data.top_assets);
                     if (data.online_analysts) wbRenderAnalysts(data.online_analysts);
+                    if (data.health_score != null) wbRenderExecutive(data);
                 })
                 .catch(function(e) { console.error('wallboard stats fetch failed', e); });
         }
