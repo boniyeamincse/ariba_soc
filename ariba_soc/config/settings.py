@@ -31,6 +31,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'accounts.middleware.MonitorAccessMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'audit.middleware.AuditMiddleware',
@@ -113,8 +114,9 @@ WAZUH_API_PASSWORD = os.environ.get('WAZUH_API_PASSWORD', '')
 WAZUH_VERIFY_SSL = os.environ.get('WAZUH_VERIFY_SSL', 'False').lower() == 'true'
 WAZUH_API_TIMEOUT = int(os.environ.get('WAZUH_API_TIMEOUT', '30'))
 
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
+_USE_HTTPS = os.environ.get('DJANGO_USE_HTTPS', 'False').lower() == 'true'
+SESSION_COOKIE_SECURE = _USE_HTTPS
+CSRF_COOKIE_SECURE = _USE_HTTPS
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
