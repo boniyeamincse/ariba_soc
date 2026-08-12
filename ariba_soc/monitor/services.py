@@ -3,13 +3,17 @@ real data from existing models -- nothing on the wallboard is hardcoded
 or faked. Filled in incrementally: Phase 2 (live ops), Phase 3
 (executive), Phase 4 (globe geo-lookup).
 """
+import logging
 from datetime import timedelta
+import requests
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db.models import Count, Q, Avg, F
 from django.utils import timezone
 from alerts.models import Alert
 from settings_manager.models import SystemSetting
+
+logger = logging.getLogger(__name__)
 
 OPEN_STATUSES = ['New', 'Awaiting Action', 'In Progress', 'Pending',
                   'Escalated to L2', 'Escalated to IR/IT', 'Escalated to Management', 'Remediation']
@@ -185,6 +189,68 @@ def manual_tool_statuses():
         'EDR': SystemSetting.get_setting('wallboard_status_edr', 'Not Configured'),
         'Aruba': SystemSetting.get_setting('wallboard_status_aruba', 'Not Configured'),
     }
+
+
+# ---- Attack globe ----
+
+def geolocate_ip(ip):
+    """Free IP->lat/long lookup (ip-api.com, no key required), cached 7
+    days per IP in Redis so a live-polling wallboard doesn't hammer a
+    free rate-limited API. Returns None for private/reserved IPs (can't
+    be plotted on a world map) or lookup failures."""
+    import ipaddress
+    try:
+        if ipaddress.ip_address(ip).is_private:
+            return None
+    except ValueError:
+        return None
+
+    cache_key = f'wallboard_geoip_{ip}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached or None
+
+    try:
+        resp = requests.get(f'http://ip-api.com/json/{ip}', timeout=3)
+        data = resp.json()
+        if data.get('status') != 'success':
+            cache.set(cache_key, False, 60 * 60 * 24 * 7)
+            return None
+        result = {'lat': data['lat'], 'lon': data['lon'], 'city': data.get('city', ''), 'country': data.get('country', '')}
+        cache.set(cache_key, result, 60 * 60 * 24 * 7)
+        return result
+    except Exception as e:
+        logger.warning(f'geolocate_ip failed for {ip}: {e}')
+        return None
+
+
+def resolve_globe_arcs(limit=50):
+    """Distinct source IPs from recent open alerts -> geolocated arc
+    points. Capped at `limit` distinct IPs per call regardless of cache
+    state, to stay well under ip-api.com's free-tier rate limit even
+    on a cold cache."""
+    rows = (Alert.objects
+            .exclude(source_ip__isnull=True)
+            .filter(status__in=OPEN_STATUSES)
+            .values('source_ip')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:limit])
+
+    arcs = []
+    for row in rows:
+        ip = row['source_ip']
+        geo = geolocate_ip(ip)
+        if not geo:
+            continue
+        top_alert = (Alert.objects.filter(source_ip=ip, status__in=OPEN_STATUSES)
+                     .order_by('-severity_score').first())
+        arcs.append({
+            'ip': ip, 'lat': geo['lat'], 'lon': geo['lon'],
+            'city': geo['city'], 'country': geo['country'],
+            'count': row['count'],
+            'severity': top_alert.severity if top_alert else 'Low',
+        })
+    return arcs
 
 
 def wallboard_executive():

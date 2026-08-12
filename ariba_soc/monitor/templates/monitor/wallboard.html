@@ -32,22 +32,27 @@
         <div class="wb-section active" id="wb-section-ops" data-section-index="0">
             <div class="row g-3 mb-3" id="wb-severity-row"></div>
             <div class="row g-3" style="height: calc(100% - 130px);">
-                <div class="col-md-5 h-100">
-                    <div class="wb-tile h-100">
+                <div class="col-md-6 h-100">
+                    <div class="wb-tile h-100 p-1" style="position: relative; overflow: hidden;">
+                        <div class="wb-tile-label" style="position:absolute; top:0.75rem; left:1rem; z-index:2;"><i class="bi bi-globe2"></i> Attack Source Map</div>
+                        <div id="wb-globe" style="width:100%; height:100%;"></div>
+                        <div id="wb-globe-empty" class="text-center text-muted small" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);">No geolocatable attack traffic right now.</div>
+                    </div>
+                </div>
+                <div class="col-md-6 h-100 d-flex flex-column gap-3">
+                    <div class="wb-tile" style="flex: 1.4; overflow-y: auto;">
                         <div class="wb-tile-label mb-2"><i class="bi bi-exclamation-octagon"></i> Active Incidents</div>
                         <div id="wb-incidents-list"></div>
                     </div>
-                </div>
-                <div class="col-md-4 h-100">
-                    <div class="wb-tile h-100">
-                        <div class="wb-tile-label mb-2"><i class="bi bi-hdd-network"></i> Top Attacked Assets</div>
-                        <div id="wb-assets-list"></div>
-                    </div>
-                </div>
-                <div class="col-md-3 h-100">
-                    <div class="wb-tile h-100">
-                        <div class="wb-tile-label mb-2"><i class="bi bi-person-check"></i> Online L1/L2 Analysts</div>
-                        <div id="wb-analysts-list"></div>
+                    <div class="d-flex gap-3" style="flex: 1;">
+                        <div class="wb-tile flex-fill" style="overflow-y: auto;">
+                            <div class="wb-tile-label mb-2"><i class="bi bi-hdd-network"></i> Top Attacked Assets</div>
+                            <div id="wb-assets-list"></div>
+                        </div>
+                        <div class="wb-tile flex-fill" style="overflow-y: auto;">
+                            <div class="wb-tile-label mb-2"><i class="bi bi-person-check"></i> Online L1/L2 Analysts</div>
+                            <div id="wb-analysts-list"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -324,6 +329,51 @@
         }
         wbLoadStats();
         setInterval(wbLoadStats, 10000);
+
+        // ---- Attack globe ----
+        var WB_SEVERITY_HEX = {
+            'Critical': '#ef4444', 'High': '#f97316', 'Medium': '#eab308', 'Low': '#22c55e', 'Informational': '#6b7280'
+        };
+        var wbGlobeInstance = null;
+        try {
+            wbGlobeInstance = Globe()(document.getElementById('wb-globe'))
+                .backgroundColor('rgba(0,0,0,0)')
+                .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
+                .showAtmosphere(true)
+                .atmosphereColor('#3b82f6')
+                .pointOfView({ lat: 20, lng: 0, altitude: 2.2 });
+            wbGlobeInstance.controls().autoRotate = true;
+            wbGlobeInstance.controls().autoRotateSpeed = 0.4;
+        } catch (e) {
+            console.error('globe init failed', e);
+        }
+
+        function wbLoadGlobe() {
+            if (!wbGlobeInstance) return;
+            fetch('{% url "monitor:globe_api" %}')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var arcs = data.arcs || [];
+                    document.getElementById('wb-globe-empty').style.display = arcs.length ? 'none' : 'block';
+
+                    wbGlobeInstance
+                        .pointsData(arcs)
+                        .pointLat('lat').pointLng('lon')
+                        .pointColor(function(d) { return WB_SEVERITY_HEX[d.severity] || '#888'; })
+                        .pointAltitude(0.01)
+                        .pointRadius(function(d) { return Math.min(1.2, 0.3 + d.count * 0.05); })
+                        .pointLabel(function(d) { return (d.city || d.country || d.ip) + ' — ' + d.count + ' alert(s), ' + d.severity; })
+                        .ringsData(arcs.filter(function(d) { return d.severity === 'Critical'; }))
+                        .ringLat('lat').ringLng('lon')
+                        .ringColor(function() { return function(t) { return 'rgba(239,68,68,' + (1 - t) + ')'; }; })
+                        .ringMaxRadius(4)
+                        .ringPropagationSpeed(2)
+                        .ringRepeatPeriod(800);
+                })
+                .catch(function(e) { console.error('wallboard globe fetch failed', e); });
+        }
+        wbLoadGlobe();
+        setInterval(wbLoadGlobe, 45000);
     </script>
 </body>
 </html>

@@ -19,4 +19,4 @@ def wallboard_stats_api(request):
 
 @login_required
 def wallboard_globe_api(request):
-    return JsonResponse({'arcs': []})
+    return JsonResponse({'arcs': services.resolve_globe_arcs()})

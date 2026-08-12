@@ -109,6 +109,13 @@ MESSAGE_TAGS = {
     messages.ERROR: 'danger',
 }
 
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/1'),
+    }
+}
+
 WAZUH_API_URL = os.environ.get('WAZUH_API_URL', '')
 WAZUH_API_USERNAME = os.environ.get('WAZUH_API_USERNAME', '')
 WAZUH_API_PASSWORD = os.environ.get('WAZUH_API_PASSWORD', '')
