@@ -278,6 +278,9 @@ def severity_settings(request):
     return render(request, 'settings_manager/severity_settings.html', ctx)
 
 def severity_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(SeveritySettings, id=pk)
     if request.method == 'POST':
         form = SeveritySettingsForm(request.POST, instance=obj)
@@ -292,6 +295,9 @@ def severity_edit(request, pk):
     return render(request, 'settings_manager/severity_edit.html', ctx)
 
 def severity_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(SeveritySettings, id=pk)
     obj.is_active = not obj.is_active
     obj.save()
@@ -316,6 +322,9 @@ def status_settings(request):
     return render(request, 'settings_manager/status_settings.html', ctx)
 
 def status_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(StatusSettings, id=pk)
     if request.method == 'POST':
         form = StatusSettingsForm(request.POST, instance=obj)
@@ -330,6 +339,9 @@ def status_edit(request, pk):
     return render(request, 'settings_manager/status_edit.html', ctx)
 
 def status_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(StatusSettings, id=pk)
     obj.is_active = not obj.is_active
     obj.save()
@@ -354,6 +366,9 @@ def verdict_settings(request):
     return render(request, 'settings_manager/verdict_settings.html', ctx)
 
 def verdict_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(VerdictSettings, id=pk)
     if request.method == 'POST':
         form = VerdictSettingsForm(request.POST, instance=obj)
@@ -368,6 +383,9 @@ def verdict_edit(request, pk):
     return render(request, 'settings_manager/verdict_edit.html', ctx)
 
 def verdict_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(VerdictSettings, id=pk)
     obj.is_active = not obj.is_active
     obj.save()
@@ -392,6 +410,9 @@ def sla_settings(request):
     return render(request, 'settings_manager/sla_settings.html', ctx)
 
 def sla_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(SLASettings, id=pk)
     if request.method == 'POST':
         form = SLASettingsForm(request.POST, instance=obj)
@@ -406,6 +427,9 @@ def sla_edit(request, pk):
     return render(request, 'settings_manager/sla_edit.html', ctx)
 
 def sla_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(SLASettings, id=pk)
     obj.is_active = not obj.is_active
     obj.save()
@@ -430,6 +454,9 @@ def escalation_settings(request):
     return render(request, 'settings_manager/escalation_settings.html', ctx)
 
 def escalation_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(EscalationRule, id=pk)
     if request.method == 'POST':
         form = EscalationRuleForm(request.POST, instance=obj)
@@ -444,6 +471,9 @@ def escalation_edit(request, pk):
     return render(request, 'settings_manager/escalation_edit.html', ctx)
 
 def escalation_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(EscalationRule, id=pk)
     obj.is_active = not obj.is_active
     obj.save()
@@ -468,6 +498,9 @@ def notification_settings(request):
     return render(request, 'settings_manager/notification_settings.html', ctx)
 
 def notification_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(NotificationSetting, id=pk)
     if request.method == 'POST':
         form = NotificationSettingForm(request.POST, instance=obj)
@@ -482,6 +515,9 @@ def notification_edit(request, pk):
     return render(request, 'settings_manager/notification_edit.html', ctx)
 
 def notification_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(NotificationSetting, id=pk)
     obj.is_active = not obj.is_active
     obj.save()
@@ -506,6 +542,9 @@ def report_settings(request):
     return render(request, 'settings_manager/report_settings.html', ctx)
 
 def report_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(ReportSetting, id=pk)
     if request.method == 'POST':
         form = ReportSettingForm(request.POST, instance=obj)
@@ -520,6 +559,9 @@ def report_edit(request, pk):
     return render(request, 'settings_manager/report_edit.html', ctx)
 
 def report_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(ReportSetting, id=pk)
     obj.is_active = not obj.is_active
     obj.save()
@@ -544,6 +586,9 @@ def dashboard_settings(request):
     return render(request, 'settings_manager/dashboard_settings.html', ctx)
 
 def dashboard_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(DashboardSetting, id=pk)
     if request.method == 'POST':
         form = DashboardSettingForm(request.POST, instance=obj)
@@ -575,6 +620,9 @@ def audit_log_settings(request):
     return render(request, 'settings_manager/audit_log_settings.html', ctx)
 
 def audit_log_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(AuditLogSetting, id=pk)
     if request.method == 'POST':
         form = AuditLogSettingForm(request.POST, instance=obj)
@@ -589,6 +637,9 @@ def audit_log_edit(request, pk):
     return render(request, 'settings_manager/audit_log_edit.html', ctx)
 
 def audit_log_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(AuditLogSetting, id=pk)
     obj.log_enabled = not obj.log_enabled
     obj.save()
@@ -613,6 +664,9 @@ def system_settings(request):
     return render(request, 'settings_manager/system_settings.html', ctx)
 
 def system_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
     obj = get_object_or_404(SystemSetting, id=pk)
     if request.method == 'POST':
         form = SystemSettingForm(request.POST, instance=obj)
