@@ -1,4 +1,4 @@
-Django>=4.2,<4.3
+Django>=5.0,<5.1
 psycopg2-binary>=2.9
 requests>=2.31
 openpyxl>=3.1
