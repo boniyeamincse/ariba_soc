@@ -18,6 +18,21 @@ logger = logging.getLogger(__name__)
 OPEN_STATUSES = ['New', 'Awaiting Action', 'In Progress', 'Pending',
                   'Escalated to L2', 'Escalated to IR/IT', 'Escalated to Management', 'Remediation']
 
+# The Wazuh manager monitors itself (and, depending on setup, its own
+# neighbor containers) as part of its own CIS-benchmark/vulnerability
+# ruleset. That's legitimate self-monitoring data, but it's not a real
+# "attacked asset" on the org's estate -- showing it as one on the
+# wallboard is misleading. Excluded from both attacked-asset widgets by
+# default; admin can extend the list via System Settings without a
+# code change.
+DEFAULT_OWN_INFRA_HOSTNAMES = ['wazuh.manager', 'wazuh.indexer', 'wazuh.dashboard']
+
+
+def _own_infra_hostnames():
+    extra = SystemSetting.get_setting('wallboard_excluded_hostnames', '')
+    extra_list = [h.strip() for h in extra.split(',') if h.strip()]
+    return DEFAULT_OWN_INFRA_HOSTNAMES + extra_list
+
 User = get_user_model()
 
 
@@ -56,6 +71,7 @@ def active_incidents(limit=8):
 def top_attacked_assets(limit=6):
     rows = (Alert.objects
             .exclude(hostname='')
+            .exclude(hostname__in=_own_infra_hostnames())
             .filter(status__in=OPEN_STATUSES)
             .values('hostname')
             .annotate(count=Count('id'))
@@ -128,7 +144,12 @@ def threat_trend(days=7):
 def most_targeted_systems(limit=6):
     """All-time, unlike Live Ops' top_attacked_assets which is open-alerts-only
     -- this is meant to show the strategic pattern, not the operational one."""
-    rows = Alert.objects.exclude(hostname='').values('hostname').annotate(count=Count('id')).order_by('-count')[:limit]
+    rows = (Alert.objects
+            .exclude(hostname='')
+            .exclude(hostname__in=_own_infra_hostnames())
+            .values('hostname')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:limit])
     return list(rows)
 
 
