@@ -23,6 +23,21 @@ if SECRET_KEY in _INSECURE_SECRET_KEY_DEFAULTS:
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
 
+# Kept independent from SECRET_KEY on purpose: SECRET_KEY signs sessions/CSRF/
+# password-reset tokens and should be rotatable on its own for security hygiene
+# without silently breaking decryption of data-at-rest (django-cryptography
+# derives its key from CRYPTOGRAPHY_KEY, falling back to SECRET_KEY if unset --
+# that fallback is what broke the 3 encrypted fields when SECRET_KEY rotated).
+CRYPTOGRAPHY_KEY = os.environ.get('DJANGO_CRYPTOGRAPHY_KEY', '')
+if not CRYPTOGRAPHY_KEY:
+    if DEBUG:
+        CRYPTOGRAPHY_KEY = 'dev-cryptography-key-change-in-production'
+    else:
+        raise ImproperlyConfigured(
+            'DJANGO_CRYPTOGRAPHY_KEY is unset. Set a unique DJANGO_CRYPTOGRAPHY_KEY '
+            'in the environment before running with DJANGO_DEBUG=False.'
+        )
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
