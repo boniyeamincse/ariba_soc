@@ -42,13 +42,16 @@
                         <td>
                             <div class="d-flex gap-1">
                                 <a href="{% url 'settings:escalation_edit' r.id %}" class="btn btn-ariba-outline btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
-                                <a href="{% url 'settings:escalation_toggle' r.id %}" class="btn btn-ariba-outline btn-sm" title="Toggle">
+                                <form method="post" action="{% url 'settings:escalation_toggle' r.id %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-ariba-outline btn-sm" title="Toggle">
                                     {% if r.is_active %}
                                     <i class="bi bi-toggle-on text-success"></i>
                                     {% else %}
                                     <i class="bi bi-toggle-off text-danger"></i>
                                     {% endif %}
-                                </a>
+                                    </button>
+                                </form>
                             </div>
                         </td>
                     </tr>

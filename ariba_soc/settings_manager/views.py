@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.contrib.auth.models import User
 from django.db.models import Q
@@ -93,6 +94,7 @@ def user_edit(request, user_id):
     ctx = {'section': 'users', 'form': form, 'edit_user': user}
     return render(request, 'settings_manager/user_edit.html', ctx)
 
+@require_POST
 def user_toggle_active(request, user_id):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -249,6 +251,7 @@ def alert_source_edit(request, pk):
     ctx = {'section': 'sources', 'form': form, 'object': obj}
     return render(request, 'settings_manager/alert_source_edit.html', ctx)
 
+@require_POST
 def alert_source_toggle(request, pk):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -294,6 +297,7 @@ def severity_edit(request, pk):
     ctx = {'section': 'severities', 'form': form, 'object': obj}
     return render(request, 'settings_manager/severity_edit.html', ctx)
 
+@require_POST
 def severity_toggle(request, pk):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -338,6 +342,7 @@ def status_edit(request, pk):
     ctx = {'section': 'statuses', 'form': form, 'object': obj}
     return render(request, 'settings_manager/status_edit.html', ctx)
 
+@require_POST
 def status_toggle(request, pk):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -382,6 +387,7 @@ def verdict_edit(request, pk):
     ctx = {'section': 'verdicts', 'form': form, 'object': obj}
     return render(request, 'settings_manager/verdict_edit.html', ctx)
 
+@require_POST
 def verdict_toggle(request, pk):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -426,6 +432,7 @@ def sla_edit(request, pk):
     ctx = {'section': 'sla', 'form': form, 'object': obj}
     return render(request, 'settings_manager/sla_edit.html', ctx)
 
+@require_POST
 def sla_toggle(request, pk):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -470,6 +477,7 @@ def escalation_edit(request, pk):
     ctx = {'section': 'escalation', 'form': form, 'object': obj}
     return render(request, 'settings_manager/escalation_edit.html', ctx)
 
+@require_POST
 def escalation_toggle(request, pk):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -514,6 +522,7 @@ def notification_edit(request, pk):
     ctx = {'section': 'notifications', 'form': form, 'object': obj}
     return render(request, 'settings_manager/notification_edit.html', ctx)
 
+@require_POST
 def notification_toggle(request, pk):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -558,6 +567,7 @@ def report_edit(request, pk):
     ctx = {'section': 'reports', 'form': form, 'object': obj}
     return render(request, 'settings_manager/report_edit.html', ctx)
 
+@require_POST
 def report_toggle(request, pk):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -636,6 +646,7 @@ def audit_log_edit(request, pk):
     ctx = {'section': 'audit_log', 'form': form, 'object': obj}
     return render(request, 'settings_manager/audit_log_edit.html', ctx)
 
+@require_POST
 def audit_log_toggle(request, pk):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')

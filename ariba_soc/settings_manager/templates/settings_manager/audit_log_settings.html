@@ -44,13 +44,16 @@
                         <td>
                             <div class="d-flex gap-1">
                                 <a href="{% url 'settings:audit_log_edit' l.id %}" class="btn btn-ariba-outline btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
-                                <a href="{% url 'settings:audit_log_toggle' l.id %}" class="btn btn-ariba-outline btn-sm" title="Toggle Logging">
+                                <form method="post" action="{% url 'settings:audit_log_toggle' l.id %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-ariba-outline btn-sm" title="Toggle Logging">
                                     {% if l.log_enabled %}
                                     <i class="bi bi-toggle-on text-success"></i>
                                     {% else %}
                                     <i class="bi bi-toggle-off text-danger"></i>
                                     {% endif %}
-                                </a>
+                                    </button>
+                                </form>
                             </div>
                         </td>
                     </tr>

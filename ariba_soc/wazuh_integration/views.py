@@ -11,11 +11,24 @@ from accounts.models import WAZUH_ALLOWED_ROLES
 
 ALLOWED_ROLES = WAZUH_ALLOWED_ROLES
 
+# Editing the Wazuh API URL/credentials changes where this app sends
+# authenticated outbound requests -- an infrastructure-level change, not
+# routine analyst work. Restricted tighter than viewing status/agents
+# (ALLOWED_ROLES includes L1/L2) to prevent a low-privilege analyst
+# redirecting those requests to an attacker-controlled host.
+CONFIG_EDIT_ROLES = ['ADMIN', 'SOC_ENG', 'SOC_MGR']
+
 
 def _check_wazuh_access(user):
     role = user.analyst_profile.role
     if role not in ALLOWED_ROLES:
         raise PermissionDenied("You do not have permission to access Wazuh integration.")
+
+
+def _check_wazuh_config_edit_access(user):
+    role = user.analyst_profile.role
+    if role not in CONFIG_EDIT_ROLES:
+        raise PermissionDenied("You do not have permission to edit Wazuh connection settings.")
 
 
 @login_required
@@ -34,12 +47,13 @@ def wazuh_status(request):
         'sync_logs': sync_logs,
         'form': form,
         'manager_form': manager_form,
+        'can_edit_wazuh_config': request.user.analyst_profile.role in CONFIG_EDIT_ROLES,
     })
 
 
 @login_required
 def wazuh_config_update(request):
-    _check_wazuh_access(request.user)
+    _check_wazuh_config_edit_access(request.user)
     if request.method == 'POST':
         config = WazuhConfiguration.objects.first()
         if config:
@@ -56,7 +70,7 @@ def wazuh_config_update(request):
 
 @login_required
 def wazuh_manager_config_update(request):
-    _check_wazuh_access(request.user)
+    _check_wazuh_config_edit_access(request.user)
     if request.method == 'POST':
         config = WazuhManagerConfig.objects.first()
         if config:
@@ -142,6 +156,7 @@ def test_indexer_connection(request):
         return JsonResponse({'status': 'error', 'detail': str(e)}, status=503)
 
 
+@login_required
 def wazuh_health(request):
     """Health check endpoint for monitoring systems, load balancers, etc."""
     try:

@@ -248,7 +248,11 @@
                                     </div>
                                 </div>
                                 <div class="col-12 mt-3 text-end border-top border-secondary pt-3">
+                                    {% if can_edit_wazuh_config %}
                                     <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-save"></i> Save Manager Config</button>
+                                    {% else %}
+                                    <span class="text-muted small">Only Admin/Engineer/Manager roles can edit connection settings.</span>
+                                    {% endif %}
                                 </div>
                             </div>
                         </form>
@@ -312,7 +316,11 @@
                                     </div>
                                 </div>
                                 <div class="col-12 mt-3 text-end border-top border-secondary pt-3">
+                                    {% if can_edit_wazuh_config %}
                                     <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-save"></i> Save Indexer Config</button>
+                                    {% else %}
+                                    <span class="text-muted small">Only Admin/Engineer/Manager roles can edit connection settings.</span>
+                                    {% endif %}
                                 </div>
                             </div>
                         </form>

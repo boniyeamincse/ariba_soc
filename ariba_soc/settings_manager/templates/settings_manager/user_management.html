@@ -58,13 +58,16 @@
                             <div class="d-flex gap-1">
                                 <a href="{% url 'settings:user_edit' u.id %}" class="btn btn-ariba-outline btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
                                 <a href="{% url 'settings:user_reset_password' u.id %}" class="btn btn-ariba-outline btn-sm" title="Reset Password"><i class="bi bi-key"></i></a>
-                                <a href="{% url 'settings:user_toggle' u.id %}" class="btn btn-ariba-outline btn-sm" title="Toggle Active">
+                                <form method="post" action="{% url 'settings:user_toggle' u.id %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-ariba-outline btn-sm" title="Toggle Active">
                                     {% if u.analyst_profile.is_active %}
                                     <i class="bi bi-toggle-on text-success"></i>
                                     {% else %}
                                     <i class="bi bi-toggle-off text-danger"></i>
                                     {% endif %}
-                                </a>
+                                    </button>
+                                </form>
                             </div>
                         </td>
                     </tr>
