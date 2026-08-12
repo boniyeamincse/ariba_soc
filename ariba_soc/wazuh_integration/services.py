@@ -313,14 +313,14 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
             Alert.objects.bulk_create(batch, ignore_conflicts=True, batch_size=100)
             created_count = len(batch)
 
-            # bulk_create() doesn't fire post_save, so auto-escalation never
-            # runs for it. Re-query the rows we just inserted (this gives us
-            # real PKs, unlike the in-memory `batch` objects) and evaluate
-            # escalation rules against each.
+            # Evaluate escalation rules against each, and enrich.
             from alerts.signals import evaluate_auto_escalation
+            from .enrichment_service import EnrichmentService
             new_ids = [a.wazuh_alert_id for a in batch]
             for alert in Alert.objects.filter(wazuh_alert_id__in=new_ids, status='New'):
                 evaluate_auto_escalation(alert)
+                if EnrichmentService.enrich_alert(alert):
+                    alert.save(update_fields=['enrichment_data'])
 
         sync_log.status = 'Success'
         sync_log.alerts_fetched = fetched_count

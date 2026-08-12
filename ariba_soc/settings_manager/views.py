@@ -7,14 +7,16 @@ from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES, SETTIN
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
-    DashboardSetting, AuditLogSetting, SystemSetting, SettingAuditLog
+    DashboardSetting, AuditLogSetting, SystemSetting, SettingAuditLog,
+    IOCEnrichmentSetting
 )
 from .forms import (
     UserManagementForm, UserEditForm, AnalystProfileForm,
     AlertSourceSettingsForm, SeveritySettingsForm, StatusSettingsForm,
     VerdictSettingsForm, SLASettingsForm, EscalationRuleForm,
     NotificationSettingForm, ReportSettingForm, DashboardSettingForm,
-    AuditLogSettingForm, SystemSettingForm, ResetPasswordForm
+    AuditLogSettingForm, SystemSettingForm, ResetPasswordForm,
+    IOCEnrichmentSettingForm
 )
 
 def _get_allowed_roles():
@@ -623,3 +625,52 @@ def system_edit(request, pk):
         form = SystemSettingForm(instance=obj)
     ctx = {'section': 'system', 'form': form, 'object': obj}
     return render(request, 'settings_manager/system_edit.html', ctx)
+
+@login_required
+def ioc_enrichment_list(request):
+    profile = getattr(request.user, 'analyst_profile', None)
+    if not profile or profile.role not in ['ADMIN', 'SOC_MGR']:
+        messages.error(request, 'Access denied.')
+        return redirect('dashboard:home')
+        
+    settings_list = IOCEnrichmentSetting.objects.all()
+    if request.method == 'POST':
+        form = IOCEnrichmentSettingForm(request.POST)
+        if form.is_valid():
+            form.save()
+            _log_setting_change(request.user, f"Created IOC Enrichment Setting: {form.cleaned_data['provider_name']}", 'IOCEnrichmentSetting', 0, '', 'Created', request)
+            messages.success(request, 'IOC Enrichment setting added successfully.')
+            return redirect('settings:ioc_enrichment')
+    else:
+        form = IOCEnrichmentSettingForm()
+    
+    ctx = {'section': 'ioc_enrichment', 'settings_list': settings_list, 'form': form, 'title': 'IOC Enrichment Settings'}
+    return render(request, 'settings_manager/ioc_enrichment.html', ctx)
+
+@login_required
+def ioc_enrichment_update(request, pk):
+    profile = getattr(request.user, 'analyst_profile', None)
+    if not profile or profile.role not in ['ADMIN', 'SOC_MGR']:
+        messages.error(request, 'Access denied.')
+        return redirect('dashboard:home')
+        
+    setting = get_object_or_404(IOCEnrichmentSetting, pk=pk)
+    if request.method == 'POST':
+        if 'delete' in request.POST:
+            name = setting.provider_name
+            setting.delete()
+            _log_setting_change(request.user, f"Deleted IOC Enrichment Setting: {name}", 'IOCEnrichmentSetting', pk, '', 'Deleted', request)
+            messages.success(request, 'Setting deleted successfully.')
+            return redirect('settings:ioc_enrichment')
+            
+        form = IOCEnrichmentSettingForm(request.POST, instance=setting)
+        if form.is_valid():
+            form.save()
+            _log_setting_change(request.user, f"Updated IOC Enrichment Setting: {setting.provider_name}", 'IOCEnrichmentSetting', pk, '', 'Updated', request)
+            messages.success(request, 'Setting updated successfully.')
+            return redirect('settings:ioc_enrichment')
+    else:
+        form = IOCEnrichmentSettingForm(instance=setting)
+        
+    ctx = {'section': 'ioc_enrichment', 'form': form, 'edit_mode': True, 'edit_obj': setting, 'title': 'Edit IOC Enrichment Setting'}
+    return render(request, 'settings_manager/ioc_enrichment.html', ctx)

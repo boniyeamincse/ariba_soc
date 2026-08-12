@@ -5,7 +5,7 @@ from accounts.models import AnalystProfile, ROLE_CHOICES, TEAM_CHOICES
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
-    DashboardSetting, AuditLogSetting, SystemSetting
+    DashboardSetting, AuditLogSetting, SystemSetting, IOCEnrichmentSetting
 )
 
 class UserManagementForm(UserCreationForm):
@@ -238,3 +238,17 @@ class ResetPasswordForm(forms.Form):
         if cleaned.get('new_password') != cleaned.get('confirm_password'):
             raise forms.ValidationError('Passwords do not match.')
         return cleaned
+
+class IOCEnrichmentSettingForm(forms.ModelForm):
+    class Meta:
+        model = IOCEnrichmentSetting
+        fields = ['provider_name', 'api_key', 'is_active', 'auto_enrich']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for f in self.fields.values():
+            if not isinstance(f.widget, forms.CheckboxInput):
+                f.widget.attrs.update({'class': 'form-control form-control-sm'})
+        self.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
+        self.fields['auto_enrich'].widget.attrs.update({'class': 'form-check-input'})
+        self.fields['provider_name'].widget.attrs.update({'class': 'form-select form-select-sm'})

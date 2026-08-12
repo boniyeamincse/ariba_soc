@@ -109,6 +109,44 @@
                 </div>
                 {% endif %}
 
+                {% if alert.enrichment_data %}
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <h6 class="text-secondary"><i class="bi bi-shield-check"></i> Threat Intelligence (Enrichment)</h6>
+                    <div class="row g-3 mt-1">
+                        {% if alert.enrichment_data.VirusTotal %}
+                        <div class="col-md-6">
+                            <div class="p-3" style="background: rgba(220,38,38,0.1); border-radius: 6px; border-left: 3px solid var(--bs-danger);">
+                                <div class="d-flex justify-content-between">
+                                    <strong class="text-danger"><i class="bi bi-bug"></i> VirusTotal</strong>
+                                    <small class="text-muted">{{ alert.enrichment_data.VirusTotal.timestamp|slice:":10" }}</small>
+                                </div>
+                                <div class="mt-2">
+                                    <span class="badge bg-danger rounded-pill">{{ alert.enrichment_data.VirusTotal.malicious }} Malicious</span>
+                                    <span class="badge bg-warning rounded-pill text-dark">{{ alert.enrichment_data.VirusTotal.suspicious }} Suspicious</span>
+                                    <span class="badge bg-success rounded-pill">{{ alert.enrichment_data.VirusTotal.harmless }} Harmless</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if alert.enrichment_data.IPInfo %}
+                        <div class="col-md-6">
+                            <div class="p-3" style="background: rgba(59,130,246,0.1); border-radius: 6px; border-left: 3px solid var(--accent-blue);">
+                                <div class="d-flex justify-content-between">
+                                    <strong class="text-info"><i class="bi bi-geo-alt"></i> IP Geolocation</strong>
+                                    <small class="text-muted">{{ alert.enrichment_data.IPInfo.ip }}</small>
+                                </div>
+                                <div class="mt-2 small text-light">
+                                    {{ alert.enrichment_data.IPInfo.city|default:'Unknown City' }}, {{ alert.enrichment_data.IPInfo.country|default:'Unknown Country' }}<br>
+                                    <span class="text-muted">{{ alert.enrichment_data.IPInfo.org|default:'Unknown Org' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
                 <hr style="border-color: var(--border-color);">
                 <div class="detail-section">
                     <h6 class="text-secondary"><i class="bi bi-chat-dots"></i> Analyst Comments</h6>

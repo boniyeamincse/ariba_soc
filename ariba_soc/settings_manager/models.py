@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
+from django_cryptography.fields import encrypt
 from accounts.models import ROLE_CHOICES
 
 class SettingAuditLog(models.Model):
@@ -260,3 +261,24 @@ class SystemSetting(models.Model):
             return SystemSetting.objects.get(key=key).value
         except SystemSetting.DoesNotExist:
             return default
+
+class IOCEnrichmentSetting(models.Model):
+    PROVIDER_CHOICES = [
+        ('VirusTotal', 'VirusTotal'),
+        ('IPInfo', 'IPInfo'),
+        ('AbuseIPDB', 'AbuseIPDB'),
+        ('OTX', 'AlienVault OTX'),
+    ]
+    provider_name = models.CharField(max_length=50, choices=PROVIDER_CHOICES, unique=True)
+    api_key = encrypt(models.CharField(max_length=500, blank=True))
+    is_active = models.BooleanField(default=True)
+    auto_enrich = models.BooleanField(default=True, help_text="Automatically enrich new alerts")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'IOC Enrichment Setting'
+        verbose_name_plural = 'IOC Enrichment Settings'
+
+    def __str__(self):
+        return self.provider_name

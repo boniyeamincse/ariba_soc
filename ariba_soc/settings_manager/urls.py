@@ -43,4 +43,6 @@ urlpatterns = [
     path('audit-log/<int:pk>/toggle/', views.audit_log_toggle, name='audit_log_toggle'),
     path('system/', views.system_settings, name='system'),
     path('system/<int:pk>/edit/', views.system_edit, name='system_edit'),
+    path('ioc-enrichment/', views.ioc_enrichment_list, name='ioc_enrichment'),
+    path('ioc-enrichment/<int:pk>/edit/', views.ioc_enrichment_update, name='ioc_enrichment_update'),
 ]

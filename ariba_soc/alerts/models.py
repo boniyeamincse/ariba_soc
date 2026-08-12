@@ -105,6 +105,7 @@ class Alert(models.Model):
 
     alert_fields = models.JSONField(default=dict, blank=True)
     raw_json = models.JSONField(default=dict, blank=True)
+    enrichment_data = models.JSONField(default=dict, blank=True)
 
     analyst_comment = models.TextField(blank=True)
     escalation_reason = models.TextField(blank=True)
