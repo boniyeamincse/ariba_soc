@@ -1,5 +1,5 @@
 from django.db import models
-from django_cryptography.fields import encrypt
+from config.fields import EncryptedCharField
 
 
 class WazuhSyncLog(models.Model):
@@ -20,7 +20,7 @@ class WazuhSyncLog(models.Model):
 class WazuhConfiguration(models.Model):
     api_url = models.CharField(max_length=500, default='https://10.24.66.2:9200')
     api_username = models.CharField(max_length=200, blank=True)
-    api_password = encrypt(models.CharField(max_length=500, blank=True))
+    api_password = EncryptedCharField(max_length=500, blank=True)
     verify_ssl = models.BooleanField(default=False)
     timeout = models.IntegerField(default=30)
     sync_interval_minutes = models.IntegerField(default=5)
@@ -39,7 +39,7 @@ class WazuhConfiguration(models.Model):
 class WazuhManagerConfig(models.Model):
     api_url = models.CharField(max_length=500, default='https://10.24.66.2:55000')
     api_username = models.CharField(max_length=200, blank=True)
-    api_password = encrypt(models.CharField(max_length=500, blank=True))
+    api_password = EncryptedCharField(max_length=500, blank=True)
     verify_ssl = models.BooleanField(default=False)
     timeout = models.IntegerField(default=30)
 

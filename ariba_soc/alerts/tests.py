@@ -40,7 +40,15 @@ class AlertSourceTest(TestCase):
 
 class RolePermissionTest(TestCase):
     def setUp(self):
-        RolePermission.objects.create(role='ADMIN', can_manage_users=True)
+        # RolePermission rows for every role are seeded by a migration
+        # (accounts/migrations/0003_seed_role_permissions.py), so ADMIN's row
+        # already exists in a fresh test DB -- update it rather than assuming
+        # a clean table. can_archive is pinned False explicitly since the
+        # real seed defaults grant it to ADMIN, but this test wants a known
+        # not-granted permission to check the false case against.
+        RolePermission.objects.update_or_create(
+            role='ADMIN', defaults={'can_manage_users': True, 'can_archive': False}
+        )
 
     def test_has_permission_true(self):
         self.assertTrue(RolePermission.has_permission('ADMIN', 'can_manage_users'))
@@ -55,7 +63,7 @@ class RolePermissionTest(TestCase):
 class AnalystProfileTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='analyst', password='pass')
-        RolePermission.objects.create(role='L1', can_view_alerts=True)
+        RolePermission.objects.update_or_create(role='L1', defaults={'can_view_alerts': True})
 
     def test_has_permission_delegates(self):
         profile = self.user.analyst_profile

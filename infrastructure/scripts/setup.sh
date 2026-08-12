@@ -17,7 +17,13 @@ echo "Generating Wazuh Indexer certificates..."
 docker compose -f generate-indexer-certs.yml run --rm generator
 
 echo "Starting unified SOC stack (Wazuh + Ariba SOC)..."
-docker compose up --build -d
+if [ ! -d "../ariba_soc" ] && [ -f "docker-compose.prod.yml" ]; then
+    echo "Production environment detected. Using docker-compose.prod.yml"
+    docker compose -f docker-compose.prod.yml up -d
+else
+    echo "Development environment detected. Using docker-compose.yml with --build"
+    docker compose up --build -d
+fi
 
 echo "Waiting for web service to be healthy before seeding..."
 # We sleep a bit to give time for db and web to start, though ideally we'd use a healthcheck
