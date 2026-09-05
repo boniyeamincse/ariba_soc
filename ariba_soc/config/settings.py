@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'audit',
     'settings_manager',
     'monitor',
+    'hunting',
 ]
 
 MIDDLEWARE = [

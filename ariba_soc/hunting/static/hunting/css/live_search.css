@@ -1,0 +1,10 @@
+.hunt-table { font-size: 0.85rem; }
+.hunt-table th { white-space: nowrap; }
+.hunt-table td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.severity-critical { color: #dc3545; font-weight: bold; }
+.severity-high { color: #fd7e14; font-weight: bold; }
+.severity-medium { color: #ffc107; }
+.severity-low { color: #198754; }
+.severity-informational { color: #6c757d; }
+#results-table tbody tr:hover { background-color: rgba(13,110,253,0.05); }
+.loading-overlay { opacity: 0.6; pointer-events: none; }

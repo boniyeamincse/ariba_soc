@@ -13,6 +13,7 @@ urlpatterns = [
     path('reports/', include('reports.urls')),
     path('audit/', include('audit.urls')),
     path('settings/', include('settings_manager.urls')),
+    path('hunting/', include('hunting.urls')),
 ]
 
 if settings.DEBUG:

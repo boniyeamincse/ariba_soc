@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Threat Hunting - Live Search{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'hunting/css/live_search.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0"><i class="fas fa-crosshairs me-2"></i>Threat Hunting - Live Search</h4>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-secondary" id="data-source">Data Source: Wazuh Indexer</span>
+            <span class="badge bg-info" id="last-updated"></span>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Search Filters</h6>
+        </div>
+        <div class="card-body">
+            <form id="hunt-search-form" method="post">
+                {% csrf_token %}
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Search Query</label>
+                        {{ form.query }}
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Time Range</label>
+                        {{ form.time_range }}
+                    </div>
+                    <div class="col-md-2" id="custom-start-group" style="display:none;">
+                        <label class="form-label">Start Time</label>
+                        {{ form.start_time }}
+                    </div>
+                    <div class="col-md-2" id="custom-end-group" style="display:none;">
+                        <label class="form-label">End Time</label>
+                        {{ form.end_time }}
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-md-2">
+                        <label class="form-label">Agent ID</label>
+                        {{ form.agent_id }}
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Agent Name</label>
+                        {{ form.agent_name }}
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Hostname</label>
+                        {{ form.hostname }}
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Source IP</label>
+                        {{ form.source_ip }}
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Destination IP</label>
+                        {{ form.destination_ip }}
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Username</label>
+                        {{ form.username }}
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-md-2">
+                        <label class="form-label">Rule ID</label>
+                        {{ form.rule_id }}
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Rule Level</label>
+                        {{ form.rule_level }}
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Severity</label>
+                        {{ form.severity }}
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">MITRE Tactic</label>
+                        {{ form.mitre_tactic }}
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">MITRE Technique</label>
+                        {{ form.mitre_technique }}
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label">Limit</label>
+                        {{ form.limit }}
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100 me-1" id="btn-search">
+                            <i class="fas fa-search"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="btn-reset">
+                            <i class="fas fa-undo"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="loading-spinner" class="text-center py-4" style="display:none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Searching...</span>
+        </div>
+        <p class="mt-2 text-muted">Searching Wazuh Indexer...</p>
+    </div>
+
+    <div id="error-alert" class="alert alert-danger" style="display:none;"></div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0"><i class="fas fa-table me-2"></i>Search Results</h6>
+            <span class="badge bg-primary" id="result-count">0 events</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0" id="results-table">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Level</th>
+                            <th>Severity</th>
+                            <th>Rule ID</th>
+                            <th>Description</th>
+                            <th>Agent</th>
+                            <th>Source IP</th>
+                            <th>Dst IP</th>
+                            <th>User</th>
+                            <th>MITRE</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-body">
+                        <tr><td colspan="11" class="text-center text-muted py-4">Enter filters and click Search</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer" id="pagination-footer" style="display:none;">
+            <button class="btn btn-sm btn-outline-primary" id="btn-next-page" disabled>
+                <i class="fas fa-arrow-right me-1"></i>Next Page
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="eventModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Event Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="event-json" class="bg-dark text-light p-3 rounded" style="max-height:500px;overflow:auto;font-size:0.85em;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'hunting/js/live_search.js' %}"></script>
+{% endblock %}

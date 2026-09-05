@@ -114,6 +114,19 @@ class IndexerClient:
             logger.error(f'Indexer connection test failed: {e}')
             raise
 
+    def search(self, index_pattern, query_body):
+        try:
+            response = self.session.post(
+                f'{self.base_url}/{index_pattern}/_search',
+                json=query_body,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f'Indexer search failed: {e}')
+            raise
+
     def fetch_alerts(self, time_range='1h', max_alerts=5000):
         try:
             match = re.fullmatch(r'(\d+)([mhdw])', time_range)

@@ -65,6 +65,8 @@ class RolePermission(models.Model):
     can_add_remediation = models.BooleanField(default=False)
     can_mark_incident = models.BooleanField(default=False)
     can_export_reports = models.BooleanField(default=False)
+    can_use_basic_hunting = models.BooleanField(default=True)
+    can_use_advanced_hunting = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = 'Role Permission'

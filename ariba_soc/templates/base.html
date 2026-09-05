@@ -44,6 +44,9 @@
 
                     {% if role != 'MONITOR' %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'reports:home' %}"><i class="bi bi-file-text"></i> Reports</a></li>
+                    {% if role != 'VIEWER' and role != 'MONITOR' %}
+                    <li class="nav-item"><a class="nav-link" href="{% url 'hunting:live_search' %}"><i class="bi bi-crosshair"></i> Threat Hunting</a></li>
+                    {% endif %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'audit:list' %}"><i class="bi bi-journal-text"></i> Audit Logs</a></li>
                     {% endif %}
 
