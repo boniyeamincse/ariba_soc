@@ -8,161 +8,256 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0"><i class="fas fa-crosshairs me-2"></i>Threat Hunting - Live Search</h4>
-        <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-secondary" id="data-source">Data Source: Wazuh Indexer</span>
-            <span class="badge bg-info" id="last-updated"></span>
-        </div>
-    </div>
-
-    <div class="card mb-3">
-        <div class="card-header">
-            <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Search Filters</h6>
-        </div>
-        <div class="card-body">
-            <form id="hunt-search-form" method="post">
-                {% csrf_token %}
-                <div class="row g-2 mb-3">
-                    <div class="col-md-6">
-                        <label class="form-label">Search Query</label>
-                        {{ form.query }}
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Time Range</label>
-                        {{ form.time_range }}
-                    </div>
-                    <div class="col-md-2" id="custom-start-group" style="display:none;">
-                        <label class="form-label">Start Time</label>
-                        {{ form.start_time }}
-                    </div>
-                    <div class="col-md-2" id="custom-end-group" style="display:none;">
-                        <label class="form-label">End Time</label>
-                        {{ form.end_time }}
-                    </div>
+<div class="hunt-page">
+    <section class="hunt-hero ariba-card mb-3">
+        <div class="hunt-hero__inner">
+            <div class="hunt-hero__copy">
+                <div class="hunt-kicker">
+                    <i class="bi bi-crosshair"></i>
+                    Live Search
                 </div>
-
-                <div class="row g-2 mb-3">
-                    <div class="col-md-2">
-                        <label class="form-label">Agent ID</label>
-                        {{ form.agent_id }}
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Agent Name</label>
-                        {{ form.agent_name }}
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Hostname</label>
-                        {{ form.hostname }}
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Source IP</label>
-                        {{ form.source_ip }}
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Destination IP</label>
-                        {{ form.destination_ip }}
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Username</label>
-                        {{ form.username }}
-                    </div>
+                <h1 class="hunt-title">Threat Hunting</h1>
+                <p class="hunt-description mb-0">
+                    Search Wazuh Indexer events with safe filters, role-aware limits, and a paginated result stream.
+                </p>
+            </div>
+            <div class="hunt-hero__meta">
+                <div class="hunt-stat">
+                    <span class="hunt-stat__label">Data source</span>
+                    <span class="hunt-stat__value" id="data-source">Wazuh Indexer</span>
                 </div>
-
-                <div class="row g-2 mb-3">
-                    <div class="col-md-2">
-                        <label class="form-label">Rule ID</label>
-                        {{ form.rule_id }}
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Rule Level</label>
-                        {{ form.rule_level }}
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Severity</label>
-                        {{ form.severity }}
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">MITRE Tactic</label>
-                        {{ form.mitre_tactic }}
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">MITRE Technique</label>
-                        {{ form.mitre_technique }}
-                    </div>
-                    <div class="col-md-1">
-                        <label class="form-label">Limit</label>
-                        {{ form.limit }}
-                    </div>
-                    <div class="col-md-1 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100 me-1" id="btn-search">
-                            <i class="fas fa-search"></i>
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary" id="btn-reset">
-                            <i class="fas fa-undo"></i>
-                        </button>
-                    </div>
+                <div class="hunt-stat">
+                    <span class="hunt-stat__label">Last updated</span>
+                    <span class="hunt-stat__value" id="last-updated">Ready</span>
                 </div>
-            </form>
-        </div>
-    </div>
-
-    <div id="loading-spinner" class="text-center py-4" style="display:none;">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Searching...</span>
-        </div>
-        <p class="mt-2 text-muted">Searching Wazuh Indexer...</p>
-    </div>
-
-    <div id="error-alert" class="alert alert-danger" style="display:none;"></div>
-
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h6 class="mb-0"><i class="fas fa-table me-2"></i>Search Results</h6>
-            <span class="badge bg-primary" id="result-count">0 events</span>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0" id="results-table">
-                    <thead class="table-dark">
-                        <tr>
-                            <th>Timestamp</th>
-                            <th>Level</th>
-                            <th>Severity</th>
-                            <th>Rule ID</th>
-                            <th>Description</th>
-                            <th>Agent</th>
-                            <th>Source IP</th>
-                            <th>Dst IP</th>
-                            <th>User</th>
-                            <th>MITRE</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="results-body">
-                        <tr><td colspan="11" class="text-center text-muted py-4">Enter filters and click Search</td></tr>
-                    </tbody>
-                </table>
+                <div class="hunt-stat">
+                    <span class="hunt-stat__label">Access mode</span>
+                    <span class="hunt-stat__value">{% if is_basic %}Basic hunting{% else %}Advanced hunting{% endif %}</span>
+                </div>
             </div>
         </div>
-        <div class="card-footer" id="pagination-footer" style="display:none;">
-            <button class="btn btn-sm btn-outline-primary" id="btn-next-page" disabled>
-                <i class="fas fa-arrow-right me-1"></i>Next Page
-            </button>
+    </section>
+
+    <div class="row g-3">
+        <div class="col-12 col-xxl-4">
+            <div class="ariba-card hunt-panel h-100">
+                <div class="ariba-card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="hunt-panel__eyebrow">Search</div>
+                        <h2 class="hunt-panel__title mb-0">Filters</h2>
+                    </div>
+                    <span class="badge rounded-pill text-bg-secondary">Safe search only</span>
+                </div>
+                <div class="card-body">
+                    <form id="hunt-search-form" method="post" class="hunt-form">
+                        {% csrf_token %}
+                        <div class="hunt-field-group">
+                            <label class="form-label">Search Query</label>
+                            {{ form.query }}
+                            <div class="form-text">Search rule description, log content, and approved indexed fields.</div>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-7">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">Time Range</label>
+                                    {{ form.time_range }}
+                                </div>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">Result Limit</label>
+                                    {{ form.limit }}
+                                    <div class="form-text">Defaults to 100. Role limits apply automatically.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hunt-custom-range" id="custom-start-group" style="display:none;">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="hunt-field-group">
+                                        <label class="form-label">Start Time</label>
+                                        {{ form.start_time }}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="hunt-field-group">
+                                        <label class="form-label">End Time</label>
+                                        {{ form.end_time }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hunt-section-label">Entity filters</div>
+                        <div class="row g-3">
+                            <div class="col-sm-6">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">Agent ID</label>
+                                    {{ form.agent_id }}
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">Agent Name</label>
+                                    {{ form.agent_name }}
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">Hostname</label>
+                                    {{ form.hostname }}
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">Username</label>
+                                    {{ form.username }}
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">Source IP</label>
+                                    {{ form.source_ip }}
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">Destination IP</label>
+                                    {{ form.destination_ip }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hunt-section-label">Detection filters</div>
+                        <div class="row g-3">
+                            <div class="col-sm-6">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">Rule ID</label>
+                                    {{ form.rule_id }}
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">Rule Level</label>
+                                    {{ form.rule_level }}
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">Severity</label>
+                                    {{ form.severity }}
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">Event Category / Group</label>
+                                    {{ form.groups }}
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">MITRE Tactic</label>
+                                    {{ form.mitre_tactic }}
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="hunt-field-group">
+                                    <label class="form-label">MITRE Technique</label>
+                                    {{ form.mitre_technique }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hunt-actions">
+                            <button type="submit" class="btn btn-primary hunt-btn-primary" id="btn-search">
+                                <i class="bi bi-search me-2"></i>
+                                Search
+                            </button>
+                            <button type="button" class="btn btn-outline-light hunt-btn-secondary" id="btn-reset">
+                                <i class="bi bi-arrow-counterclockwise me-2"></i>
+                                Reset
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xxl-8">
+            <div id="loading-spinner" class="hunt-loading ariba-card mb-3" style="display:none;">
+                <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
+                <div>
+                    <div class="hunt-loading__title">Searching Wazuh Indexer</div>
+                    <div class="hunt-loading__text">Applying approved filters and loading safe results.</div>
+                </div>
+            </div>
+
+            <div id="error-alert" class="alert alert-danger hunt-alert" style="display:none;"></div>
+
+            <div class="ariba-card hunt-results">
+                <div class="ariba-card-header hunt-results__header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <div class="hunt-panel__eyebrow">Results</div>
+                        <h2 class="hunt-panel__title mb-0">Event table</h2>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="badge rounded-pill text-bg-primary" id="result-count">0 events</span>
+                        <button class="btn btn-sm btn-outline-info" id="btn-next-page" disabled style="display:none;">
+                            <i class="bi bi-arrow-right me-1"></i>Next page
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0 hunt-table" id="results-table">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Level</th>
+                                    <th>Severity</th>
+                                    <th>Rule ID</th>
+                                    <th>Description</th>
+                                    <th>Agent</th>
+                                    <th>Source IP</th>
+                                    <th>Dst IP</th>
+                                    <th>User</th>
+                                    <th>MITRE</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-body">
+                                <tr>
+                                    <td colspan="11">
+                                        <div class="hunt-empty">
+                                            <i class="bi bi-funnel"></i>
+                                            <div class="hunt-empty__title">Ready to search</div>
+                                            <div class="hunt-empty__text">Choose a time range and filters, then run a live search.</div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
-<div class="modal fade" id="eventModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
+<div class="modal fade" id="eventModal" tabindex="-1" aria-labelledby="eventModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content hunt-modal">
             <div class="modal-header">
-                <h5 class="modal-title">Event Details</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div>
+                    <h5 class="modal-title mb-0" id="eventModalLabel">Event Details</h5>
+                    <div class="text-secondary small">Sanitized event payload</div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <pre id="event-json" class="bg-dark text-light p-3 rounded" style="max-height:500px;overflow:auto;font-size:0.85em;"></pre>
+                <pre id="event-json" class="hunt-json mb-0"></pre>
             </div>
         </div>
     </div>
