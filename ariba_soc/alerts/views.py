@@ -11,6 +11,7 @@ from django.core.paginator import Paginator
 from django.utils import timezone
 from django.contrib.auth.models import User
 from settings_manager.models import SeveritySettings, StatusSettings, VerdictSettings
+from accounts.decorators import role_required, permission_required, TIER_ORDER
 from .models import Alert, AlertComment, AlertAuditLog, Notification
 from .forms import AlertEditForm, AlertCommentForm
 from .services import update_alert, assign_alert, create_audit_log, _notify_escalation
@@ -18,11 +19,14 @@ from .services import update_alert, assign_alert, create_audit_log, _notify_esca
 
 def check_perm(user, perm):
     profile = getattr(user, 'analyst_profile', None)
-    if not profile or not profile.has_permission(perm):
+    if not profile or not profile.is_active:
+        raise PermissionDenied('Your account is inactive.')
+    if not profile.has_permission(perm):
         raise PermissionDenied(f"You don't have permission: {perm}")
 
 
 @login_required
+@permission_required('can_view_alerts')
 def alert_table(request):
     alerts = Alert.objects.select_related('assignee', 'source').all()
     severity = request.GET.get('severity')
@@ -90,6 +94,7 @@ def alert_table(request):
 
 
 @login_required
+@permission_required('can_view_alerts')
 def alert_board(request):
     alerts = Alert.objects.select_related('assignee', 'source').all()
 
@@ -142,6 +147,7 @@ def alert_board(request):
 
 
 @login_required
+@permission_required('can_view_alerts')
 def alert_detail(request, alert_id):
     alert = get_object_or_404(Alert.objects.select_related('assignee', 'source', 'assigned_by'), id=alert_id)
     comments = alert.comments.select_related('user').all()
@@ -208,33 +214,120 @@ def alert_add_comment(request, alert_id):
 
 ESCALATION_TIERS = {
     'l2': 'Escalated to L2',
+    'l3': 'Escalated to L3',
     'irit': 'Escalated to IR/IT',
     'management': 'Escalated to Management',
 }
 
 
 @login_required
+@permission_required('can_escalate_alert')
 def alert_escalate(request, alert_id):
-    check_perm(request.user, 'can_escalate_alert')
     alert = get_object_or_404(Alert, id=alert_id)
     if request.method == 'POST':
-        reason = request.POST.get('escalation_reason', '')
-        tier = request.POST.get('tier', 'l2')
-        if not reason:
-            messages.error(request, 'Escalation reason is required.')
+        with transaction.atomic():
+            reason = request.POST.get('escalation_reason', '')
+            tier = request.POST.get('tier', 'l2')
+            if not reason:
+                messages.error(request, 'Escalation reason is required.')
+                return redirect('alerts:detail', alert_id=alert_id)
+
+            target_status = ESCALATION_TIERS.get(tier, 'Escalated to L2')
+            source_tier = getattr(request.user.analyst_profile, 'role', '')
+            target_tier_map = {'l2': 'L2', 'l3': 'L3', 'irit': 'IR/IT', 'management': 'Management'}
+            target_tier = target_tier_map.get(tier, tier.upper())
+
+            alert.status = target_status
+            alert.is_escalated = True
+            alert.escalated_at = alert.escalated_at or timezone.now()
+            alert.escalation_reason = reason
+            alert.escalated_from_tier = source_tier
+            alert.escalated_to_tier = target_tier
+            alert.escalation_status = 'pending_acceptance'
+            alert.current_tier = target_tier
+            alert.save()
+
+            AlertComment.objects.create(
+                alert=alert, user=request.user,
+                comment=f"{target_status}: {reason}", comment_type='Escalation Note'
+            )
+            create_audit_log(alert, request.user, 'Escalated', '', f'{target_status}: {reason}', request)
+            _notify_escalation(alert, f'{target_status} — {reason}')
+            messages.success(request, f'Alert escalated: {target_status}.')
+    return redirect('alerts:detail', alert_id=alert_id)
+
+
+@login_required
+def alert_escalation_accept(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    if request.method != 'POST':
+        return redirect('alerts:detail', alert_id=alert_id)
+
+    profile = getattr(request.user, 'analyst_profile', None)
+    if not profile:
+        raise PermissionDenied('No profile.')
+
+    target_tier = alert.escalated_to_tier
+    user_role = profile.role
+    tier_level = TIER_ORDER.get(user_role, 0)
+    required_level = TIER_ORDER.get(target_tier, 0)
+    if tier_level < required_level and user_role not in ('SOC_MGR', 'ADMIN'):
+        raise PermissionDenied(f'You cannot accept alerts escalated to {target_tier}.')
+
+    with transaction.atomic():
+        alert = Alert.objects.select_for_update().get(id=alert_id)
+        if alert.escalation_status != 'pending_acceptance':
+            messages.error(request, 'This escalation is no longer pending.')
             return redirect('alerts:detail', alert_id=alert_id)
-        target_status = ESCALATION_TIERS.get(tier, 'Escalated to L2')
-        alert.status = target_status
-        alert.is_escalated = True
-        alert.escalated_at = alert.escalated_at or timezone.now()
-        alert.escalation_reason = reason
+
+        alert.escalation_status = 'accepted'
+        alert.accepted_by = request.user
+        alert.accepted_at = timezone.now()
+        alert.assignee = request.user
         alert.save()
+
         AlertComment.objects.create(
-            alert=alert, user=request.user, comment=f"{target_status}: {reason}", comment_type='Escalation Note'
+            alert=alert, user=request.user,
+            comment=f'Accepted by {request.user.username}', comment_type='Analyst Note'
         )
-        create_audit_log(alert, request.user, 'Escalated', '', f'{target_status}: {reason}', request)
-        _notify_escalation(alert, f'{target_status} — {reason}')
-        messages.success(request, f'Alert escalated: {target_status}.')
+        create_audit_log(alert, request.user, 'Status Changed', 'pending_acceptance', 'accepted', request)
+        messages.success(request, 'Escalation accepted.')
+    return redirect('alerts:detail', alert_id=alert_id)
+
+
+@login_required
+def alert_escalation_return(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    if request.method != 'POST':
+        return redirect('alerts:detail', alert_id=alert_id)
+
+    profile = getattr(request.user, 'analyst_profile', None)
+    if not profile:
+        raise PermissionDenied('No profile.')
+
+    with transaction.atomic():
+        alert = Alert.objects.select_for_update().get(id=alert_id)
+        if alert.escalation_status != 'accepted':
+            messages.error(request, 'This alert is not in accepted state.')
+            return redirect('alerts:detail', alert_id=alert_id)
+
+        return_reason = request.POST.get('return_reason', '')
+        alert.escalation_status = 'returned'
+        alert.returned_by = request.user
+        alert.returned_at = timezone.now()
+        alert.return_reason = return_reason
+
+        source_tier = alert.escalated_from_tier or 'L1'
+        alert.status = f'Escalated to {source_tier}'
+        alert.current_tier = source_tier
+        alert.save()
+
+        AlertComment.objects.create(
+            alert=alert, user=request.user,
+            comment=f'Returned to {source_tier}: {return_reason}', comment_type='Escalation Note'
+        )
+        create_audit_log(alert, request.user, 'Status Changed', 'accepted', f'returned to {source_tier}', request)
+        messages.success(request, f'Alert returned to {source_tier}.')
     return redirect('alerts:detail', alert_id=alert_id)
 
 
@@ -277,7 +370,7 @@ def alert_archive(request, alert_id):
 
 
 @login_required
-@require_POST
+@permission_required('can_close_alert')
 def alert_reopen(request, alert_id):
     alert = get_object_or_404(Alert, id=alert_id)
     if alert.status not in ('Closed', 'Archived'):
@@ -295,6 +388,7 @@ def alert_reopen(request, alert_id):
 
 
 @login_required
+@permission_required('can_view_alerts')
 def my_alerts(request):
     alerts = Alert.objects.filter(assignee=request.user).select_related('source')
     if not alerts.exists():
@@ -306,6 +400,7 @@ def my_alerts(request):
 
 
 @login_required
+@permission_required('can_view_alerts')
 def alerts_api(request):
     data = list(Alert.objects.select_related('assignee').only(
         'id', 'alert_name', 'severity', 'status', 'verdict', 'priority',
@@ -336,7 +431,7 @@ def alert_bulk_action(request):
         return redirect('alerts:table')
     alerts = Alert.objects.filter(id__in=alert_ids)
     count = alerts.count()
-    
+
     with transaction.atomic():
         if action == 'assign':
             check_perm(request.user, 'can_assign_others')
@@ -348,6 +443,10 @@ def alert_bulk_action(request):
             messages.success(request, f'{count} alerts assigned.')
         elif action == 'status':
             check_perm(request.user, 'can_change_status')
+            allowed_statuses = list(StatusSettings.objects.filter(is_active=True).values_list('name', flat=True))
+            if value not in allowed_statuses:
+                messages.error(request, f'Invalid status: {value}')
+                return redirect('alerts:table')
             old_val = ', '.join(alerts.values_list('status', flat=True).distinct())
             alerts.update(status=value)
             for alert in alerts:
@@ -355,6 +454,10 @@ def alert_bulk_action(request):
             messages.success(request, f'{count} alerts status changed to {value}.')
         elif action == 'verdict':
             check_perm(request.user, 'can_change_verdict')
+            allowed_verdicts = list(VerdictSettings.objects.filter(is_active=True).values_list('name', flat=True))
+            if value not in allowed_verdicts:
+                messages.error(request, f'Invalid verdict: {value}')
+                return redirect('alerts:table')
             old_val = ', '.join(alerts.values_list('verdict', flat=True).distinct())
             alerts.update(verdict=value)
             for alert in alerts:
@@ -382,12 +485,13 @@ def alert_bulk_action(request):
 
 
 @login_required
-@require_POST
+@permission_required('can_change_status')
 def alert_move_api(request, alert_id):
     alert = get_object_or_404(Alert, id=alert_id)
     data = json.loads(request.body)
     new_status = data.get('status')
-    if new_status and StatusSettings.objects.filter(name=new_status, is_active=True).exists():
+    allowed_statuses = list(StatusSettings.objects.filter(is_active=True).values_list('name', flat=True))
+    if new_status and new_status in allowed_statuses:
         old = alert.status
         alert.status = new_status
         if new_status == 'In Progress':

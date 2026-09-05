@@ -1,0 +1,158 @@
+{% extends 'ariba_soc/_dashboard_base.html' %}
+{% load humanize %}
+
+{% block dashboard_stats %}
+<div class="row g-3 mb-4">
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">Pending Acceptance</div>
+            <div class="kpi-value" style="color: var(--status-new);">{{ l3_stats.pending_acceptance }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">Active Incidents</div>
+            <div class="kpi-value" style="color: var(--severity-critical);">{{ l3_stats.active_incidents }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">Detection Gaps (Week)</div>
+            <div class="kpi-value text-warning">{{ l3_stats.detection_gaps }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">Root Causes Done</div>
+            <div class="kpi-value text-success">{{ l3_stats.root_causes_done }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">Lessons Learned</div>
+            <div class="kpi-value text-info">{{ l3_stats.lessons_learned_week }}</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block dashboard_panels %}
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-arrow-up-circle"></i> Escalated from L2 (Pending Acceptance)</h6>
+        {% if escalated_from_l2 %}
+        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>Alert</th><th>Severity</th><th>Escalated</th><th>Action</th></tr></thead>
+                <tbody>
+                {% for a in escalated_from_l2 %}
+                <tr>
+                    <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:35 }}</a></td>
+                    <td><span class="badge bg-danger">{{ a.severity }}</span></td>
+                    <td><small class="text-muted">{{ a.escalated_at|timesince }} ago</small></td>
+                    <td>
+                        <form method="post" action="{% url 'alerts:escalation_accept' a.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-success py-0"><i class="bi bi-check"></i> Accept</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4"><i class="bi bi-check-circle"></i> No pending L2 escalations</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-exclamation-diamond"></i> Active Incidents</h6>
+        {% if active_incidents %}
+        {% for a in active_incidents %}
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:35 }}</a>
+            <div>
+                <span class="badge bg-danger">{{ a.severity }}</span>
+                <small class="text-muted ms-1">{{ a.status }}</small>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-shield-check"></i> No active incidents</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block dashboard_bottom %}
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-search"></i> Root Cause Analysis Items</h6>
+        {% if rca_items %}
+        {% for a in rca_items %}
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:35 }}</a>
+            <small class="text-muted">{{ a.severity }} | {{ a.status }}</small>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> All incidents have root causes documented</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-bug"></i> Detection Gaps (Repeated False Positives)</h6>
+        {% if detection_gaps %}
+        {% for d in detection_gaps %}
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <small>{{ d.alert_name|truncatechars:40 }}</small>
+            <span class="badge bg-warning text-dark">{{ d.fp_count }} FPs</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No detection gaps identified</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-funnel"></i> Rule-Tuning Backlog</h6>
+        {% if rule_tuning_backlog %}
+        {% for r in rule_tuning_backlog %}
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <small>{{ r.alert_name|truncatechars:35 }} <span class="text-muted">(Rule: {{ r.rule_id|default:"N/A" }})</span></small>
+            <span class="badge bg-info">{{ r.fp_count }} FPs</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No tuning backlog</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-braces"></i> Advanced Investigation Queue</h6>
+        {% if advanced_investigation %}
+        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>Alert</th><th>Status</th><th>Accepted</th></tr></thead>
+                <tbody>
+                {% for a in advanced_investigation %}
+                <tr>
+                    <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:35 }}</a></td>
+                    <td><small>{{ a.status }}</small></td>
+                    <td><small class="text-muted">{{ a.accepted_at|timesince }} ago</small></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-inbox"></i> No advanced investigations</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

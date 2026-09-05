@@ -17,6 +17,7 @@ STATUS_CHOICES = [
     ('In Progress', 'In Progress'),
     ('Pending', 'Pending'),
     ('Escalated to L2', 'Escalated to L2'),
+    ('Escalated to L3', 'Escalated to L3'),
     ('Escalated to IR/IT', 'Escalated to IR/IT'),
     ('Escalated to Management', 'Escalated to Management'),
     ('Remediation', 'Remediation'),
@@ -124,6 +125,16 @@ class Alert(models.Model):
 
     is_incident_candidate = models.BooleanField(default=False)
     is_escalated = models.BooleanField(default=False)
+
+    current_tier = models.CharField(max_length=20, blank=True, default='', help_text='Current SOC tier handling this alert')
+    escalation_status = models.CharField(max_length=30, blank=True, default='', help_text='pending_acceptance, accepted, returned')
+    escalated_from_tier = models.CharField(max_length=20, blank=True, default='')
+    escalated_to_tier = models.CharField(max_length=20, blank=True, default='')
+    accepted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='accepted_alerts')
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    returned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='returned_alerts')
+    returned_at = models.DateTimeField(null=True, blank=True)
+    return_reason = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -1,0 +1,137 @@
+{% extends 'ariba_soc/_dashboard_base.html' %}
+{% load humanize %}
+
+{% block dashboard_stats %}
+<div class="row g-3 mb-4">
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">New/Unassigned</div>
+            <div class="kpi-value" style="color: var(--status-new);">{{ new_unassigned|length }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">My Assigned</div>
+            <div class="kpi-value" style="color: var(--status-progress);">{{ my_alerts|length }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">Critical/High</div>
+            <div class="kpi-value" style="color: var(--severity-critical);">{{ critical_high|length }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">SLA Near Breach</div>
+            <div class="kpi-value" style="color: var(--severity-high);">{{ sla_near_breach|length }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">SLA Breached</div>
+            <div class="kpi-value" style="color: var(--severity-critical);">{{ sla_breached|length }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">Need Escalation</div>
+            <div class="kpi-value" style="color: var(--status-escalated);">{{ needs_escalation|length }}</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block dashboard_panels %}
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-inbox"></i> Triage Queue (Unassigned)</h6>
+        {% if triage_queue %}
+        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>Alert</th><th>Severity</th><th>Time</th></tr></thead>
+                <tbody>
+                {% for a in triage_queue %}
+                <tr>
+                    <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:40 }}</a></td>
+                    <td><span class="badge bg-{% if a.severity == 'Critical' %}danger{% elif a.severity == 'High' %}warning{% elif a.severity == 'Medium' %}info{% else %}secondary{% endif %}">{{ a.severity }}</span></td>
+                    <td><small class="text-muted">{{ a.alert_time|timesince }} ago</small></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4"><i class="bi bi-check-circle"></i> No unassigned alerts</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-person-check"></i> My Active Alerts</h6>
+        {% if my_alerts %}
+        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>Alert</th><th>Status</th><th>SLA</th></tr></thead>
+                <tbody>
+                {% for a in my_alerts %}
+                <tr>
+                    <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:40 }}</a></td>
+                    <td><small>{{ a.status }}</small></td>
+                    <td><small class="{% if a.sla_status == 'Breached' %}text-danger{% elif a.sla_status == 'Near SLA breach' %}text-warning{% else %}text-success{% endif %}">{{ a.sla_status }}</small></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4"><i class="bi bi-inbox"></i> No alerts assigned to you</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block dashboard_bottom %}
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-exclamation-triangle"></i> SLA Near Breach</h6>
+        {% if sla_near_breach %}
+        {% for a in sla_near_breach %}
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:35 }}</a>
+            <small class="text-warning">{{ a.sla_due_at|timeuntil }}</small>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No alerts near SLA breach</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-arrow-up-circle"></i> Alerts Requiring Escalation to L2</h6>
+        {% if needs_escalation %}
+        {% for a in needs_escalation %}
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:35 }}</a>
+            <span class="badge bg-{% if a.severity == 'Critical' %}danger{% else %}warning{% endif %}">{{ a.severity }}</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No alerts need escalation</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-12">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-bar-chart"></i> L1 Shift Performance (Today)</h6>
+        <div class="row text-center">
+            <div class="col-md-2"><div class="kpi-label">Total Today</div><div class="fs-5 fw-bold">{{ shift_stats.total_today }}</div></div>
+            <div class="col-md-2"><div class="kpi-label">Closed Today</div><div class="fs-5 fw-bold text-success">{{ shift_stats.closed_today }}</div></div>
+            <div class="col-md-2"><div class="kpi-label">Escalated Today</div><div class="fs-5 fw-bold text-warning">{{ shift_stats.escalated_today }}</div></div>
+            <div class="col-md-3"><div class="kpi-label">Avg Response Time</div><div class="fs-5 fw-bold">{% if shift_stats.avg_response_today %}{{ shift_stats.avg_response_today }} min{% else %}N/A{% endif %}</div></div>
+            <div class="col-md-3"><div class="kpi-label">Weekly Total</div><div class="fs-5 fw-bold">{{ shift_stats.weekly_total }}</div></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

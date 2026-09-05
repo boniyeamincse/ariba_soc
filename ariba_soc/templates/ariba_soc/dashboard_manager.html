@@ -1,0 +1,194 @@
+{% extends 'ariba_soc/_dashboard_base.html' %}
+{% load humanize %}
+
+{% block dashboard_stats %}
+<div class="row g-3 mb-4">
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="kpi-label">Critical Open</div>
+                <i class="bi bi-fire kpi-icon text-danger"></i>
+            </div>
+            <div class="kpi-value" style="color: var(--severity-critical);">{{ critical_open|length }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="kpi-label">High Open</div>
+                <i class="bi bi-exclamation-triangle kpi-icon text-warning"></i>
+            </div>
+            <div class="kpi-value" style="color: var(--severity-high);">{{ high_open|length }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="kpi-label">SLA Breached</div>
+                <i class="bi bi-clock-history kpi-icon text-danger"></i>
+            </div>
+            <div class="kpi-value" style="color: var(--severity-critical);">{{ sla_breached|length }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">Avg Response</div>
+            <div class="kpi-value">{% if avg_response %}{{ avg_response }}m{% else %}N/A{% endif %}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">Avg Resolve</div>
+            <div class="kpi-value">{% if avg_resolve %}{{ avg_resolve }}m{% else %}N/A{% endif %}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">Reopens (Week)</div>
+            <div class="kpi-value text-warning">{{ reopen_count }}</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block dashboard_panels %}
+<div class="col-lg-4">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-fire"></i> Critical Alerts Open</h6>
+        {% if critical_open %}
+        {% for a in critical_open %}
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:30 }}</a>
+            <div>
+                <small class="text-muted">{{ a.assignee|default:"Unassigned" }}</small>
+                <small class="text-muted ms-1">{{ a.sla_status }}</small>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-4"><i class="bi bi-shield-check text-success"></i> No critical alerts</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-4">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-clock-history"></i> SLA Breaches</h6>
+        {% if sla_breached %}
+        {% for a in sla_breached %}
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:30 }}</a>
+            <small class="text-danger">{{ a.sla_due_at|timesince }} overdue</small>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-4"><i class="bi bi-check-circle text-success"></i> No SLA breaches</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-4">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-graph-up"></i> Risk-Weighted Backlog</h6>
+        <div class="row text-center">
+            <div class="col-6">
+                <div class="kpi-label">Total</div>
+                <div class="fs-4 fw-bold">{{ risk_backlog.total|default:0 }}</div>
+            </div>
+            <div class="col-6">
+                <div class="kpi-label">Critical</div>
+                <div class="fs-4 fw-bold text-danger">{{ risk_backlog.critical_count|default:0 }}</div>
+            </div>
+        </div>
+        <hr class="border-secondary">
+        <div class="row text-center">
+            <div class="col-6">
+                <div class="kpi-label">High</div>
+                <div class="fs-4 fw-bold text-warning">{{ risk_backlog.high_count|default:0 }}</div>
+            </div>
+            <div class="col-6">
+                <div class="kpi-label">FP Rate</div>
+                <div class="fs-4 fw-bold">{% if fp_rate.total %}{{ fp_rate.fp|default:0 }}/{{ fp_rate.total }}{% else %}N/A{% endif %}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block dashboard_bottom %}
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-person-lines-fill"></i> Analyst Workload</h6>
+        {% if analyst_workload %}
+        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>Analyst</th><th>Role</th><th>Open Alerts</th></tr></thead>
+                <tbody>
+                {% for a in analyst_workload %}
+                <tr>
+                    <td><small>{{ a.assignee__username }}</small></td>
+                    <td><small class="badge bg-secondary">{{ a.assignee__analyst_profile__role }}</small></td>
+                    <td><strong>{{ a.count }}</strong></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-inbox"></i> No workload data</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-arrow-up-circle"></i> Escalation Metrics (Week)</h6>
+        <div class="row text-center">
+            <div class="col-4">
+                <div class="kpi-label">Escalated</div>
+                <div class="fs-4 fw-bold">{{ escalation_stats.total_escalated|default:0 }}</div>
+            </div>
+            <div class="col-4">
+                <div class="kpi-label">Accepted</div>
+                <div class="fs-4 fw-bold text-success">{{ escalation_stats.accepted|default:0 }}</div>
+            </div>
+            <div class="col-4">
+                <div class="kpi-label">Returned</div>
+                <div class="fs-4 fw-bold text-warning">{{ escalation_stats.returned|default:0 }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-hdd-rack"></i> Source Health (Week)</h6>
+        {% if source_health %}
+        {% for s in source_health %}
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <small>{{ s.source_name|default:"Unknown" }}</small>
+            <span class="badge bg-secondary">{{ s.count }} alerts</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-hdd-rack"></i> No source data</div>
+        {% endif %}
+        {% if ingestion_freshness %}
+        <div class="mt-2 text-center">
+            <small class="text-muted">Last alert: {{ ingestion_freshness.alert_time|timesince }} ago</small>
+        </div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-list-check"></i> Queue Age by Tier</h6>
+        {% if queue_age %}
+        {% for q in queue_age %}
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <small>{{ q.current_tier|default:"Unassigned" }}</small>
+            <span class="badge bg-secondary">{{ q.count }} alerts</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-inbox"></i> No queue data</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

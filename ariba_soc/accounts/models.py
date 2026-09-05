@@ -6,6 +6,7 @@ from django.dispatch import receiver
 ROLE_CHOICES = [
     ('L1', 'SOC L1 Analyst'),
     ('L2', 'SOC L2 Analyst'),
+    ('L3', 'SOC L3 Analyst'),
     ('SOC_ENG', 'SOC Engineer'),
     ('SOC_MGR', 'SOC Manager'),
     ('ADMIN', 'Admin'),
@@ -14,11 +15,12 @@ ROLE_CHOICES = [
 ]
 
 SETTINGS_ALLOWED_ROLES = ['SOC_MGR', 'SOC_ENG', 'ADMIN']
-WAZUH_ALLOWED_ROLES = ['ADMIN', 'SOC_ENG', 'SOC_MGR', 'L1', 'L2']
+WAZUH_ALLOWED_ROLES = ['ADMIN', 'SOC_ENG', 'SOC_MGR', 'L1', 'L2', 'L3']
 
 TEAM_CHOICES = [
     ('L1', 'L1 Team'),
     ('L2', 'L2 Team'),
+    ('L3', 'L3 Team'),
     ('ENG', 'Engineering'),
     ('MANAGEMENT', 'Management'),
 ]

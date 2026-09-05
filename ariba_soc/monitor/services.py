@@ -85,7 +85,7 @@ def online_analysts():
     activity-ping added later if this isn't precise enough."""
     cutoff = timezone.now() - timedelta(minutes=15)
     profiles = (User.objects
-                .filter(is_active=True, last_login__gte=cutoff, analyst_profile__role__in=['L1', 'L2'])
+                .filter(is_active=True, last_login__gte=cutoff, analyst_profile__role__in=['L1', 'L2', 'L3'])
                 .select_related('analyst_profile')
                 .order_by('username'))
     return [{'username': u.username, 'role': u.analyst_profile.role} for u in profiles]

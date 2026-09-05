@@ -1,8 +1,31 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
 from django.contrib import messages
+from django.urls import reverse
 from .models import AnalystProfile
 from .forms import ProfileForm
+
+
+@login_required
+def role_redirect(request):
+    profile = getattr(request.user, 'analyst_profile', None)
+    if not profile:
+        return redirect('alerts:table')
+    role_dashboard_map = {
+        'L1': 'dashboard:l1',
+        'L2': 'dashboard:l2',
+        'L3': 'dashboard:l3',
+        'SOC_MGR': 'dashboard:manager',
+        'ADMIN': 'dashboard:manager',
+        'MONITOR': 'monitor:wallboard',
+        'VIEWER': 'dashboard:l1',
+        'SOC_ENG': 'dashboard:l3',
+    }
+    url_name = role_dashboard_map.get(profile.role, 'alerts:table')
+    try:
+        return redirect(reverse(url_name))
+    except Exception:
+        return redirect('alerts:table')
 
 
 @login_required
