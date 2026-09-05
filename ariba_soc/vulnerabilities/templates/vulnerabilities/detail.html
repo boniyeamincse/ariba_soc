@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ case.cve_id }} - Vulnerability Detail{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">
+            <i class="fas fa-bug me-2"></i>{{ case.cve_id }}
+            <span class="badge bg-{% if case.priority == 'CRITICAL' %}danger{% elif case.priority == 'HIGH' %}warning text-dark{% elif case.priority == 'MEDIUM' %}info{% else %}secondary{% endif %} ms-2">{{ case.priority }}</span>
+        </h4>
+        <a href="{% url 'vulnerabilities:inventory' %}" class="btn btn-outline-secondary btn-sm">Back to Inventory</a>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-8">
+            <div class="card mb-3">
+                <div class="card-header"><h6 class="mb-0">Details</h6></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Package:</strong> {{ case.package_name }}</p>
+                            <p><strong>Installed:</strong> {{ case.installed_version }}</p>
+                            <p><strong>Vulnerable:</strong> {{ case.vulnerable_version }}</p>
+                            <p><strong>CVSS:</strong> {{ case.cvss_score|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Agent:</strong> {{ case.agent_id }}</p>
+                            <p><strong>Status:</strong> <span class="badge bg-info">{{ case.get_status_display }}</span></p>
+                            <p><strong>Owner:</strong> {{ case.owner.username|default:"Unassigned" }}</p>
+                            <p><strong>Due:</strong> {% if case.due_at %}{{ case.due_at|date:"d M Y H:i" }}{% else %}-{% endif %}</p>
+                        </div>
+                    </div>
+                    {% if case.description %}
+                    <p class="mt-2"><strong>Description:</strong><br>{{ case.description }}</p>
+                    {% endif %}
+                    {% if case.reference_url %}
+                    <p><strong>Reference:</strong> <a href="{{ case.reference_url }}" target="_blank">{{ case.reference_url }}</a></p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header"><h6 class="mb-0">Remediation</h6></div>
+                <div class="card-body">
+                    {% if case.remediation_note %}
+                    <pre class="bg-light p-2 rounded">{{ case.remediation_note }}</pre>
+                    {% else %}
+                    <p class="text-muted">No remediation notes yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if case.risk_accepted %}
+            <div class="card mb-3 border-warning">
+                <div class="card-header bg-warning text-dark"><h6 class="mb-0">Risk Accepted</h6></div>
+                <div class="card-body">
+                    <p><strong>Reason:</strong> {{ case.risk_acceptance_reason }}</p>
+                    <p><strong>By:</strong> {{ case.risk_accepted_by.username|default:"-" }} on {{ case.risk_accepted_at|date:"d M Y H:i" }}</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-md-4">
+            <div class="card mb-3">
+                <div class="card-header"><h6 class="mb-0">Actions</h6></div>
+                <div class="card-body">
+                    {% if 'ASSIGNED' in allowed_transitions or 'IN_PROGRESS' in allowed_transitions %}
+                    <form method="post" action="{% url 'vulnerabilities:assign' key=case.vulnerability_key %}" class="mb-2">
+                        {% csrf_token %}
+                        <select name="owner" class="form-select form-select-sm mb-1">
+                            <option value="">Select owner...</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-primary btn-sm w-100">Assign</button>
+                    </form>
+                    {% endif %}
+
+                    {% if 'IN_PROGRESS' in allowed_transitions %}
+                    <form method="post" action="{% url 'vulnerabilities:remediate' key=case.vulnerability_key %}" class="mb-2">
+                        {% csrf_token %}{% csrf_token %}
+                        <input type="hidden" name="action" value="start">
+                        <textarea name="remediation_note" class="form-control form-control-sm mb-1" rows="2" placeholder="Note..."></textarea>
+                        <button type="submit" class="btn btn-warning btn-sm w-100">Start Progress</button>
+                    </form>
+                    {% endif %}
+
+                    {% if 'AWAITING_PATCH' in allowed_transitions %}
+                    <form method="post" action="{% url 'vulnerabilities:remediate' key=case.vulnerability_key %}" class="mb-2">
+                        {% csrf_token %}{% csrf_token %}
+                        <input type="hidden" name="action" value="await_patch">
+                        <textarea name="remediation_note" class="form-control form-control-sm mb-1" rows="2" placeholder="Note..."></textarea>
+                        <button type="submit" class="btn btn-info btn-sm w-100">Await Patch</button>
+                    </form>
+                    {% endif %}
+
+                    {% if 'AWAITING_VERIFICATION' in allowed_transitions %}
+                    <form method="post" action="{% url 'vulnerabilities:remediate' key=case.vulnerability_key %}" class="mb-2">
+                        {% csrf_token %}{% csrf_token %}
+                        <input type="hidden" name="action" value="await_verification">
+                        <textarea name="remediation_note" class="form-control form-control-sm mb-1" rows="2" placeholder="Note..."></textarea>
+                        <button type="submit" class="btn btn-info btn-sm w-100">Await Verification</button>
+                    </form>
+                    {% endif %}
+
+                    {% if 'RESOLVED' in allowed_transitions %}
+                    <form method="post" action="{% url 'vulnerabilities:verify' key=case.vulnerability_key %}" class="mb-2">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-success btn-sm w-100"><i class="fas fa-check me-1"></i>Verify & Resolve</button>
+                    </form>
+                    {% endif %}
+
+                    {% if 'REOPENED' in allowed_transitions %}
+                    <form method="post" action="{% url 'vulnerabilities:reopen' key=case.vulnerability_key %}" class="mb-2">
+                        {% csrf_token %}
+                        <textarea name="reason" class="form-control form-control-sm mb-1" rows="2" placeholder="Reason..."></textarea>
+                        <button type="submit" class="btn btn-danger btn-sm w-100">Reopen</button>
+                    </form>
+                    {% endif %}
+
+                    {% if 'RISK_ACCEPTED' in allowed_transitions %}
+                    <form method="post" action="{% url 'vulnerabilities:accept_risk' key=case.vulnerability_key %}" class="mb-2">
+                        {% csrf_token %}
+                        <textarea name="reason" class="form-control form-control-sm mb-1" rows="2" placeholder="Acceptance reason..."></textarea>
+                        <button type="submit" class="btn btn-secondary btn-sm w-100">Accept Risk</button>
+                    </form>
+                    {% endif %}
+
+                    {% if 'FALSE_POSITIVE' in allowed_transitions %}
+                    <form method="post" action="{% url 'vulnerabilities:false_positive' key=case.vulnerability_key %}" class="mb-2">
+                        {% csrf_token %}
+                        <textarea name="reason" class="form-control form-control-sm mb-1" rows="2" placeholder="Reason..."></textarea>
+                        <button type="submit" class="btn btn-outline-secondary btn-sm w-100">False Positive</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h6 class="mb-0">Audit Log</h6></div>
+                <div class="card-body" style="max-height:400px;overflow-y:auto;">
+                    {% for log in audit_logs %}
+                    <div class="border-bottom pb-2 mb-2">
+                        <small class="text-muted">{{ log.created_at|date:"d M Y H:i" }}</small><br>
+                        <strong>{{ log.action }}</strong> by {{ log.user.username|default:"system" }}
+                        {% if log.note %}<br><em>{{ log.note }}</em>{% endif %}
+                    </div>
+                    {% empty %}
+                    <p class="text-muted">No audit entries</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,5 @@
+.vuln-card-critical { border-left: 4px solid #dc3545; }
+.vuln-card-high { border-left: 4px solid #fd7e14; }
+.vuln-card-medium { border-left: 4px solid #ffc107; }
+.vuln-card-low { border-left: 4px solid #198754; }
+.vuln-status-badge { font-size: 0.8em; }

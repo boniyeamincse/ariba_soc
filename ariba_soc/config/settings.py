@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'settings_manager',
     'monitor',
     'hunting',
+    'vulnerabilities',
 ]
 
 MIDDLEWARE = [

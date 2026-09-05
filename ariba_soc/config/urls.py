@@ -14,6 +14,7 @@ urlpatterns = [
     path('audit/', include('audit.urls')),
     path('settings/', include('settings_manager.urls')),
     path('hunting/', include('hunting.urls')),
+    path('vulnerabilities/', include('vulnerabilities.urls')),
 ]
 
 if settings.DEBUG:

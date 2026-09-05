@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% load static humanize %}
+
+{% block title %}Vulnerability Management - Overview{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'vulnerabilities/css/vulnerabilities.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Vulnerability Management</h4>
+        <form method="post" action="{% url 'vulnerabilities:sync' %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-sync me-1"></i>Sync from Wazuh</button>
+        </form>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card bg-danger text-white"><div class="card-body">
+                <h6 class="card-title">Critical Open</h6>
+                <h2>{{ metrics.critical_open }}</h2>
+            </div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark"><div class="card-body">
+                <h6 class="card-title">High Open</h6>
+                <h2>{{ metrics.high_open }}</h2>
+            </div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white"><div class="card-body">
+                <h6 class="card-title">Overdue</h6>
+                <h2>{{ metrics.overdue }}</h2>
+            </div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-secondary text-white"><div class="card-body">
+                <h6 class="card-title">Risk Accepted</h6>
+                <h2>{{ metrics.risk_accepted }}</h2>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header"><h6 class="mb-0">By Status</h6></div>
+                <div class="card-body">
+                    {% for status, count in metrics.by_status.items %}
+                    <div class="d-flex justify-content-between border-bottom py-1">
+                        <span>{{ status }}</span>
+                        <span class="badge bg-primary">{{ count }}</span>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted">No data</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header"><h6 class="mb-0">By Priority</h6></div>
+                <div class="card-body">
+                    {% for priority, count in metrics.by_priority.items %}
+                    <div class="d-flex justify-content-between border-bottom py-1">
+                        <span>{{ priority }}</span>
+                        <span class="badge bg-secondary">{{ count }}</span>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted">No data</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5>{{ metrics.new_last_7d }}</h5>
+                    <small class="text-muted">New (7 days)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5>{{ metrics.new_last_30d }}</h5>
+                    <small class="text-muted">New (30 days)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5>{{ metrics.total }}</h5>
+                    <small class="text-muted">Total Cases</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
