@@ -1,27 +1,71 @@
-# Python
+# ─── Python ────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+*$py.class
 *.so
 *.egg-info/
 dist/
 build/
+.eggs/
+*.egg
 
-# Django
+# ─── Django ────────────────────────────────────────────────
 ariba_soc/db.sqlite3
 ariba_soc/staticfiles/
+ariba_soc/media/avatars/
+*.log
 
-# Environment
+# ─── Environment ───────────────────────────────────────────
 .env
+.env.local
+.env.production
 ariba_soc/.env
 infrastructure/.env
 
-# OS
+# ─── Docker ────────────────────────────────────────────────
+infrastructure/data/
+infrastructure/backups/*.sql
+infrastructure/backups/*.tar.gz
+
+# ─── SSL Certs ─────────────────────────────────────────────
+infrastructure/config/wazuh_indexer_ssl_certs/
+
+# ─── OS ────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-
-# IDE
-.vscode/
-.idea/
 *.swp
 *.swo
-infrastructure/config/wazuh_indexer_ssl_certs/
+*~
+
+# ─── IDE ───────────────────────────────────────────────────
+.vscode/
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+
+# ─── Testing ───────────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+
+# ─── Mypy ──────────────────────────────────────────────────
+.mypy_cache/
+
+# ─── Pre-commit ────────────────────────────────────────────
+.pre-commit-cache/
+
+# ─── Node (if frontend assets) ────────────────────────────
+node_modules/
+package-lock.json
+
+# ─── Security ──────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets.yml
