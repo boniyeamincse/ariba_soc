@@ -1,0 +1,86 @@
+{% extends 'settings_manager/settings_base.html' %}
+{% load humanize %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4 class="m-0"><i class="bi bi-gear-wide-connected"></i> Settings Dashboard</h4>
+    </div>
+    <p class="settings-page-desc">Overview of all configured settings and recent activity.</p>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value">{{ user_count }}</div>
+                <div class="settings-stat-label"><i class="bi bi-people"></i> Users</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value">{{ severity_count }}</div>
+                <div class="settings-stat-label"><i class="bi bi-exclamation-triangle"></i> Severities</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value">{{ status_count }}</div>
+                <div class="settings-stat-label"><i class="bi bi-list-check"></i> Statuses</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value">{{ source_count }}</div>
+                <div class="settings-stat-label"><i class="bi bi-diagram-3"></i> Sources</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value">{{ sla_count }}</div>
+                <div class="settings-stat-label"><i class="bi bi-clock"></i> SLA Rules</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value">{{ escalation_count }}</div>
+                <div class="settings-stat-label"><i class="bi bi-arrow-up-circle"></i> Escalation Rules</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value">{{ verdict_count }}</div>
+                <div class="settings-stat-label"><i class="bi bi-check2-square"></i> Verdicts</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-journal-text"></i> Recent Audit Log</h6>
+        <div class="table-responsive">
+            <table class="table ariba-table">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Model</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in recent_logs %}
+                    <tr>
+                        <td>{{ log.user.get_full_name|default:log.user.username }}</td>
+                        <td>{{ log.action }}</td>
+                        <td>{{ log.model_name }}</td>
+                        <td>{{ log.created_at|date:"M d, H:i" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-muted text-center">No audit entries yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

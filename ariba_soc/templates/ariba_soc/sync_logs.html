@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <h4 class="mb-3"><i class="bi bi-clock-history"></i> Wazuh Sync Logs</h4>
+    <div class="ariba-card">
+        <div class="table-responsive">
+            <table class="table ariba-table">
+                <thead>
+                    <tr><th>Started</th><th>Status</th><th class="d-none d-md-table-cell">Finished</th><th>Fetched</th><th class="d-none d-md-table-cell">Created</th><th class="d-none d-md-table-cell">Error</th></tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ log.started_at|date:"M d, H:i" }}</td>
+                        <td><span class="badge {% if log.status == 'Success' %}bg-success{% elif log.status == 'Failed' %}bg-danger{% else %}bg-warning{% endif %}">{{ log.status }}</span></td>
+                        <td class="d-none d-md-table-cell">{{ log.finished_at|date:"M d, H:i:s"|default:'—' }}</td>
+                        <td>{{ log.alerts_fetched }}</td>
+                        <td class="d-none d-md-table-cell">{{ log.alerts_created }}</td>
+                        <td class="d-none d-md-table-cell"><small class="text-danger">{{ log.error_message|truncatechars:100 }}</small></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center py-4">{% include 'ariba_soc/_empty_state.html' with icon='bi-clock-history' message='No sync logs yet.' %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,123 @@
+{% extends 'settings_manager/settings_base.html' %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0"><i class="bi bi-layout-wtf"></i> Dashboard Settings</h4>
+            <p class="settings-page-desc mb-0">Configure per-role dashboard defaults and widgets.</p>
+        </div>
+        <button class="btn btn-ariba-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addDashboardModal"><i class="bi bi-plus-lg"></i> Add Setting</button>
+    </div>
+
+    <div class="ariba-card p-0">
+        <div class="table-responsive">
+            <table class="table ariba-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Role</th>
+                        <th>Default Page</th>
+                        <th>Date Range</th>
+                        <th>Refresh (s)</th>
+                        <th>KPI</th>
+                        <th>Charts</th>
+                        <th>Workload</th>
+                        <th>SLA</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in dashboards %}
+                    <tr>
+                        <td><span class="severity-badge severity-{{ d.role|lower }}">{{ d.get_role_display }}</span></td>
+                        <td>{{ d.get_default_page_display }}</td>
+                        <td>{{ d.get_default_date_range_display }}</td>
+                        <td>{{ d.auto_refresh_interval }}</td>
+                        <td>{% if d.show_kpi_cards %}<i class="bi bi-check-circle text-success"></i>{% else %}<i class="bi bi-x-circle text-danger"></i>{% endif %}</td>
+                        <td>{% if d.show_charts %}<i class="bi bi-check-circle text-success"></i>{% else %}<i class="bi bi-x-circle text-danger"></i>{% endif %}</td>
+                        <td>{% if d.show_analyst_workload %}<i class="bi bi-check-circle text-success"></i>{% else %}<i class="bi bi-x-circle text-danger"></i>{% endif %}</td>
+                        <td>{% if d.show_sla_widget %}<i class="bi bi-check-circle text-success"></i>{% else %}<i class="bi bi-x-circle text-danger"></i>{% endif %}</td>
+                        <td>
+                            <a href="{% url 'settings:dashboard_edit' d.id %}" class="btn btn-ariba-outline btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-muted text-center">No dashboard settings found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade ariba-modal" id="addDashboardModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Add Dashboard Setting</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <div class="modal-body">
+                    {% if form.errors %}
+                    <div class="alert alert-danger py-2 small">
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}<div>{{ field|title }}: {{ error }}</div>{% endfor %}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small">Role</label>
+                            {{ form.role }}
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small">Default Page</label>
+                            {{ form.default_page }}
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small">Default Date Range</label>
+                            {{ form.default_date_range }}
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small">Auto Refresh (seconds)</label>
+                            {{ form.auto_refresh_interval }}
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <div class="form-check">
+                                {{ form.show_kpi_cards }}
+                                <label class="form-check-label small">Show KPI Cards</label>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <div class="form-check">
+                                {{ form.show_charts }}
+                                <label class="form-check-label small">Show Charts</label>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <div class="form-check">
+                                {{ form.show_analyst_workload }}
+                                <label class="form-check-label small">Show Workload</label>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <div class="form-check">
+                                {{ form.show_sla_widget }}
+                                <label class="form-check-label small">Show SLA</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-check-lg"></i> Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

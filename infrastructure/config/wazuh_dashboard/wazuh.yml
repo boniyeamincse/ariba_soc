@@ -1,0 +1,8 @@
+hosts:
+  - 1513629884013:
+      url: "https://wazuh.manager"
+      port: 55000
+      username: admin
+      password: "Wazuh#Api1"
+      run_as: false
+enrollment.dns: "10.24.66.2"

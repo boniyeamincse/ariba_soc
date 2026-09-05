@@ -1,0 +1,117 @@
+{% extends 'settings_manager/settings_base.html' %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0"><i class="bi bi-clock"></i> SLA Settings</h4>
+            <p class="settings-page-desc mb-0">Configure Service Level Agreements per severity.</p>
+        </div>
+        <button class="btn btn-ariba-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addSLAModal"><i class="bi bi-plus-lg"></i> Add SLA</button>
+    </div>
+
+    <div class="ariba-card p-0">
+        <div class="table-responsive">
+            <table class="table ariba-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Acknowledge (min)</th>
+                        <th>Resolve (min)</th>
+                        <th>Breach Warning (min)</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in slas %}
+                    <tr>
+                        <td><span class="severity-badge severity-{{ s.severity|lower }}">{{ s.severity }}</span></td>
+                        <td>{{ s.acknowledge_minutes }}</td>
+                        <td>{{ s.resolve_minutes }}</td>
+                        <td>{{ s.breach_warning_minutes }}</td>
+                        <td>
+                            {% if s.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-danger">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                <a href="{% url 'settings:sla_edit' s.id %}" class="btn btn-ariba-outline btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
+                                <form method="post" action="{% url 'settings:sla_toggle' s.id %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-ariba-outline btn-sm" title="Toggle">
+                                    {% if s.is_active %}
+                                    <i class="bi bi-toggle-on text-success"></i>
+                                    {% else %}
+                                    <i class="bi bi-toggle-off text-danger"></i>
+                                    {% endif %}
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-muted text-center">No SLA rules found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade ariba-modal" id="addSLAModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Add SLA Rule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <div class="modal-body">
+                    {% if form.errors %}
+                    <div class="alert alert-danger py-2 small">
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}<div>{{ field|title }}: {{ error }}</div>{% endfor %}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small">Severity</label>
+                            {{ form.severity }}
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small">Acknowledge (min)</label>
+                            {{ form.acknowledge_minutes }}
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small">Resolve (min)</label>
+                            {{ form.resolve_minutes }}
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small">Breach Warning (min)</label>
+                            {{ form.breach_warning_minutes }}
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                {{ form.is_active }}
+                                <label class="form-check-label small">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-check-lg"></i> Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,237 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h4 class="m-0"><i class="bi bi-table"></i> Alert Table</h4>
+        <div class="d-flex gap-2">
+            <a href="{% url 'alerts:board' %}" class="btn btn-ariba-outline btn-sm"><i class="bi bi-kanban"></i> Board View</a>
+            <button class="btn btn-ariba-outline btn-sm" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+        </div>
+    </div>
+
+    {% include 'ariba_soc/_alert_filters.html' %}
+
+    <div id="bulkActionBar" class="ariba-card p-2 mb-2 d-none">
+        <form method="post" action="{% url 'alerts:bulk_action' %}" class="d-flex align-items-center gap-2 flex-wrap" id="bulkForm">
+            {% csrf_token %}
+            <span class="text-light me-2" id="selectedCount">0 selected</span>
+            <div id="bulkActionFields" class="d-flex align-items-center gap-2 flex-wrap">
+                <select name="action" class="form-select form-select-sm" style="width:auto;" id="bulkActionSelect">
+                    <option value="">Choose action...</option>
+                    <option value="status">Change Status</option>
+                    <option value="verdict">Change Verdict</option>
+                    <option value="close">Close</option>
+                    <option value="archive">Archive</option>
+                    <option value="assign">Assign</option>
+                </select>
+                <select name="value" class="form-select form-select-sm" style="width:auto; display:none;" id="bulkValueSelect">
+                </select>
+                <select name="value" class="form-select form-select-sm" style="width:auto; display:none;" id="bulkAssigneeSelect">
+                    <option value="">Select user...</option>
+                    {% for u in users %}
+                    <option value="{{ u.id }}">{{ u.username }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="closure_comment" class="form-control form-control-sm" style="width:250px; display:none;" id="bulkClosureComment" placeholder="Closure comment (required)" required>
+                <button type="submit" class="btn btn-ariba-primary btn-sm" id="bulkApplyBtn">Apply</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="ariba-card">
+        <form id="bulkFormInner">
+        <div class="table-responsive">
+            <table class="table ariba-table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 30px;"><input type="checkbox" id="selectAll" class="form-check-input"></th>
+                        <th style="width: 30px;"></th>
+                        <th style="width: 90px;">ID</th>
+                        <th><a href="?sort={% if current_filters.sort == 'alert_time' %}-{% endif %}alert_time" class="text-decoration-none text-secondary">Time</a></th>
+                        <th><a href="?sort={% if current_filters.sort == 'alert_name' %}-{% endif %}alert_name" class="text-decoration-none text-secondary">Name</a></th>
+                        <th><a href="?sort={% if current_filters.sort == 'severity' %}-{% endif %}severity" class="text-decoration-none text-secondary">Severity</a></th>
+                        <th><a href="?sort={% if current_filters.sort == 'status' %}-{% endif %}status" class="text-decoration-none text-secondary">Status</a></th>
+                        <th class="d-none d-lg-table-cell"><a href="?sort={% if current_filters.sort == 'verdict' %}-{% endif %}verdict" class="text-decoration-none text-secondary">Verdict</a></th>
+                        <th class="d-none d-lg-table-cell">Assignee</th>
+                        <th class="d-none d-lg-table-cell">Source</th>
+                        <th class="d-none d-lg-table-cell">Host</th>
+                        <th class="d-none d-lg-table-cell">SLA</th>
+                        <th style="width: 80px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alert in alerts %}
+                    <tr class="clickable-row {% if alert.severity == 'Critical' %}critical-row{% elif alert.severity == 'High' %}high-row{% endif %}">
+                        <td><input type="checkbox" name="alert_ids" value="{{ alert.id }}" class="form-check-input alert-checkbox" onclick="event.stopPropagation();"></td>
+                        <td><button type="button" class="btn btn-sm btn-link text-secondary p-0 expand-row-btn" data-row-id="{{ alert.id }}"><i class="bi bi-chevron-down"></i></button></td>
+                        <td><small><code class="text-info">{{ alert.wazuh_alert_id|default:alert.id }}</code></small></td>
+                        <td class="text-nowrap"><small>{{ alert.alert_time|date:"M d, H:i" }}</small></td>
+                        <td><span class="fw-medium">{{ alert.alert_name|truncatechars:50 }}</span></td>
+                        <td>{% include 'ariba_soc/_severity_badge.html' with severity=alert.severity %}</td>
+                        <td>{% include 'ariba_soc/_status_pill.html' with status=alert.status %}</td>
+                        <td class="d-none d-lg-table-cell">{% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}</td>
+                        <td class="d-none d-lg-table-cell">
+                            {% if alert.assignee %}
+                            <span class="badge bg-info bg-opacity-25 text-info">{{ alert.assignee.username }}</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="d-none d-lg-table-cell"><small>{{ alert.source_name }}</small></td>
+                        <td class="d-none d-lg-table-cell"><small>{{ alert.hostname|default:'—' }}</small></td>
+                        <td class="d-none d-lg-table-cell">
+                            {% if alert.sla_status == 'Breached' %}
+                            <span class="badge bg-danger">Breached</span>
+                            {% elif alert.sla_status == 'Near SLA breach' %}
+                            <span class="badge bg-warning text-dark">Near SLA</span>
+                            {% else %}
+                            <span class="badge bg-success">Within SLA</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-nowrap">
+                            <button type="button" class="btn btn-sm btn-link text-info p-0 me-1"
+                                data-bs-toggle="modal" data-bs-target="#editAlertModal"
+                                data-alert-id="{{ alert.id }}"
+                                data-alert-name="{{ alert.alert_name|escapejs }}"
+                                data-assignee-id="{{ alert.assignee_id|default:'' }}"
+                                data-status="{{ alert.status }}"
+                                data-severity="{{ alert.severity }}"
+                                data-verdict="{{ alert.verdict }}"
+                                data-priority="{{ alert.priority }}"
+                                title="Edit Alert"><i class="bi bi-pencil"></i></button>
+                            <a href="{% url 'alerts:detail' alert.id %}" class="btn btn-sm btn-link text-secondary p-0" title="View Details"><i class="bi bi-eye"></i></a>
+                        </td>
+                    </tr>
+                    <tr class="d-none expanded-detail" id="detail-{{ alert.id }}">
+                        <td colspan="12" class="p-3">
+                            {% include 'ariba_soc/_alert_expanded.html' with alert=alert %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="12" class="text-center py-5">
+                            <i class="bi bi-inbox" style="font-size: 3rem; color: var(--text-muted);"></i>
+                            <p class="mt-2 text-muted">No alerts found</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if alerts.has_other_pages %}
+        <div class="p-3 border-top" style="border-color: var(--border-color) !important;">
+            <nav>
+                <ul class="pagination pagination-sm mb-0 justify-content-center">
+                    {% if alerts.has_previous %}
+                    <li class="page-item"><a class="page-link ariba-input" href="?page=1">&laquo;</a></li>
+                    <li class="page-item"><a class="page-link ariba-input" href="?page={{ alerts.previous_page_number }}">&lsaquo;</a></li>
+                    {% endif %}
+                    <li class="page-item disabled"><span class="page-link ariba-input">Page {{ alerts.number }} of {{ alerts.paginator.num_pages }}</span></li>
+                    {% if alerts.has_next %}
+                    <li class="page-item"><a class="page-link ariba-input" href="?page={{ alerts.next_page_number }}">&rsaquo;</a></li>
+                    <li class="page-item"><a class="page-link ariba-input" href="?page={{ alerts.paginator.num_pages }}">&raquo;</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+    </form>
+</div>
+
+{% include 'ariba_soc/_edit_alert_modal.html' %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-target="#editAlertModal"]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var alertId = this.getAttribute('data-alert-id');
+            document.getElementById('editAlertForm').action = "{% url 'alerts:edit' 0 %}".replace('/0/', '/' + alertId + '/');
+            ['assignee','status','severity','verdict','priority'].forEach(function(field) {
+                var el = document.getElementById('id_' + field);
+                var val = btn.getAttribute('data-' + field.replace('_','-'));
+                if (el && val) el.value = val;
+            });
+        });
+    });
+
+    // Bulk selection
+    var selectAll = document.getElementById('selectAll');
+    var checkboxes = document.querySelectorAll('.alert-checkbox');
+    var bulkBar = document.getElementById('bulkActionBar');
+    var selectedCount = document.getElementById('selectedCount');
+    var bulkForm = document.getElementById('bulkForm');
+    var bulkActionSelect = document.getElementById('bulkActionSelect');
+    var bulkValueSelect = document.getElementById('bulkValueSelect');
+    var bulkAssigneeSelect = document.getElementById('bulkAssigneeSelect');
+
+    function updateBulkBar() {
+        var checked = document.querySelectorAll('.alert-checkbox:checked');
+        if (checked.length > 0) {
+            bulkBar.classList.remove('d-none');
+            selectedCount.textContent = checked.length + ' selected';
+        } else {
+            bulkBar.classList.add('d-none');
+        }
+    }
+
+    selectAll.addEventListener('change', function() {
+        checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; });
+        updateBulkBar();
+    });
+
+    checkboxes.forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            selectAll.checked = checkboxes.length === document.querySelectorAll('.alert-checkbox:checked').length;
+            updateBulkBar();
+        });
+    });
+
+    bulkActionSelect.addEventListener('change', function() {
+        var val = this.value;
+        bulkValueSelect.style.display = 'none';
+        bulkAssigneeSelect.style.display = 'none';
+        bulkClosureComment.style.display = 'none';
+        bulkClosureComment.value = '';
+        bulkClosureComment.required = false;
+        bulkValueSelect.innerHTML = '';
+        if (val === 'status') {
+            bulkValueSelect.style.display = 'inline-block';
+            [{% for s in statuses %}'{{ s.name|escapejs }}'{% if not forloop.last %},{% endif %}{% endfor %}].forEach(function(s) {
+                bulkValueSelect.innerHTML += '<option value="' + s + '">' + s + '</option>';
+            });
+        } else if (val === 'verdict') {
+            bulkValueSelect.style.display = 'inline-block';
+            [{% for v in verdicts %}'{{ v.name|escapejs }}'{% if not forloop.last %},{% endif %}{% endfor %}].forEach(function(v) {
+                bulkValueSelect.innerHTML += '<option value="' + v + '">' + v + '</option>';
+            });
+        } else if (val === 'close') {
+            bulkValueSelect.style.display = 'inline-block';
+            [{% for v in verdicts %}{% if v.name != 'None' %}'{{ v.name|escapejs }}'{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}].forEach(function(v) {
+                bulkValueSelect.innerHTML += '<option value="' + v + '">' + v + '</option>';
+            });
+            bulkClosureComment.style.display = 'inline-block';
+            bulkClosureComment.required = true;
+        } else if (val === 'assign') {
+            bulkAssigneeSelect.style.display = 'inline-block';
+        }
+    });
+
+    bulkForm.addEventListener('submit', function(e) {
+        var checked = document.querySelectorAll('.alert-checkbox:checked');
+        checked.forEach(function(cb) {
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'alert_ids';
+            input.value = cb.value;
+            bulkForm.appendChild(input);
+        });
+    });
+});
+</script>
+{% endblock %}

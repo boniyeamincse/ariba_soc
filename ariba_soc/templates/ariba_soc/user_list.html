@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <h4 class="mb-3"><i class="bi bi-people"></i> Analysts</h4>
+    <div class="ariba-card p-3">
+        <div class="table-responsive">
+            <table class="table ariba-table">
+                <thead>
+                    <tr><th>Username</th><th>Full Name</th><th>Role</th><th class="d-none d-md-table-cell">Team</th><th class="d-none d-md-table-cell">Designation</th><th>Active</th></tr>
+                </thead>
+                <tbody>
+                    {% for p in profiles %}
+                    <tr>
+                        <td>{{ p.user.username }}</td>
+                        <td>{{ p.user.get_full_name|default:'—' }}</td>
+                        <td><span class="severity-badge severity-{{ p.role }}">{{ p.get_role_display }}</span></td>
+                        <td class="d-none d-md-table-cell">{{ p.get_team_display|default:'—' }}</td>
+                        <td class="d-none d-md-table-cell">{{ p.designation|default:'—' }}</td>
+                        <td>{% if p.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Inactive</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+
+# Django
+ariba_soc/db.sqlite3
+ariba_soc/staticfiles/
+
+# Environment
+.env
+ariba_soc/.env
+infrastructure/.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+infrastructure/config/wazuh_indexer_ssl_certs/

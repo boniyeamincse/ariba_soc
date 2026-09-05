@@ -1,0 +1,15 @@
+[Unit]
+Description=Ariba SOC Django Application
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=ariba-soc
+WorkingDirectory=/var/www/ariba-soc
+EnvironmentFile=/var/www/ariba-soc/.env
+ExecStart=/var/www/ariba-soc/venv/bin/gunicorn -c gunicorn.conf.py config.wsgi:application
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

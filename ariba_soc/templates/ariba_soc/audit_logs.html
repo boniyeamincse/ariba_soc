@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <h4 class="mb-3"><i class="bi bi-journal-text"></i> Audit Logs</h4>
+
+    <div class="ariba-card">
+        <div class="table-responsive">
+                <table class="table ariba-table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Alert</th>
+                        <th class="d-none d-md-table-cell">Old Value</th>
+                        <th class="d-none d-md-table-cell">New Value</th>
+                        <th class="d-none d-md-table-cell">IP Address</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td class="text-nowrap"><small>{{ log.created_at|date:"M d, H:i:s" }}</small></td>
+                        <td>{{ log.user.username|default:'System' }}</td>
+                        <td><span class="badge bg-info bg-opacity-25 text-info">{{ log.action }}</span></td>
+                        <td><a href="{% url 'alerts:detail' log.alert.id %}" class="text-info">{{ log.alert.alert_name|truncatechars:30 }}</a></td>
+                        <td class="d-none d-md-table-cell"><small class="text-muted">{{ log.old_value|truncatechars:40 }}</small></td>
+                        <td class="d-none d-md-table-cell"><small class="text-muted">{{ log.new_value|truncatechars:40 }}</small></td>
+                        <td class="d-none d-md-table-cell"><small>{{ log.ip_address|default:'—' }}</small></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center py-4 text-muted">No audit logs found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if logs.has_other_pages %}
+        <div class="p-3 border-top" style="border-color: var(--border-color) !important;">
+            <nav><ul class="pagination pagination-sm mb-0 justify-content-center">
+                {% if logs.has_previous %}<li class="page-item"><a class="page-link ariba-input" href="?page={{ logs.previous_page_number }}">&laquo;</a></li>{% endif %}
+                <li class="page-item disabled"><span class="page-link ariba-input">Page {{ logs.number }} of {{ logs.paginator.num_pages }}</span></li>
+                {% if logs.has_next %}<li class="page-item"><a class="page-link ariba-input" href="?page={{ logs.next_page_number }}">&raquo;</a></li>{% endif %}
+            </ul></nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

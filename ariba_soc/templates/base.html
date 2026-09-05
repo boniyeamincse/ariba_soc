@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ariba SOC Dashboard{% if title %} - {{ title }}{% endif %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{% static 'css/ariba-soc.css' %}" rel="stylesheet">
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="ariba-soc-body">
+    {% if user.is_authenticated %}
+    <nav class="navbar navbar-expand-lg navbar-dark ariba-navbar fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="{% url 'alerts:table' %}">
+                <span class="brand-icon me-2"><i class="bi bi-shield-shaded"></i></span>
+                <span class="brand-text">Ariba SOC</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    {% if user.analyst_profile.role != 'MONITOR' %}
+                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:table' %}"><i class="bi bi-table"></i> Alerts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:board' %}"><i class="bi bi-kanban"></i> Board</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:my_alerts' %}"><i class="bi bi-person-check"></i> My Alerts {% if my_assigned_count %}<span class="badge bg-danger ms-1">{{ my_assigned_count }}</span>{% endif %}</a></li>
+                    {% endif %}
+                    <li class="nav-item"><a class="nav-link" href="{% url 'dashboard:home' %}"><i class="bi bi-graph-up"></i> Dashboard</a></li>
+                    {% if user.analyst_profile.role != 'MONITOR' %}
+                    <li class="nav-item"><a class="nav-link" href="{% url 'reports:home' %}"><i class="bi bi-file-text"></i> Reports</a></li>
+
+                    <li class="nav-item"><a class="nav-link" href="{% url 'audit:list' %}"><i class="bi bi-journal-text"></i> Audit Logs</a></li>
+                    {% endif %}
+
+                    {% if user.analyst_profile.role in settings_roles %}
+                    <li class="nav-item dropdown dropdown-mega">
+                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                            <i class="bi bi-gear"></i> Settings
+                        </a>
+                        <div class="dropdown-menu ariba-dropdown dropdown-mega-menu p-3">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <h6 class="dropdown-header px-0 border-bottom pb-2 mb-2"><i class="bi bi-people"></i> User & Access</h6>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:user_management' %}"><i class="bi bi-people"></i> User Management</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:role_permission' %}"><i class="bi bi-shield-lock"></i> Role & Permission</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:analyst_profile' %}"><i class="bi bi-person-badge"></i> Analyst Profile</a>
+                                </div>
+                                <div class="col-md-3">
+                                    <h6 class="dropdown-header px-0 border-bottom pb-2 mb-2"><i class="bi bi-exclamation-triangle"></i> Alert Config</h6>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:severities' %}"><i class="bi bi-exclamation-triangle"></i> Severity Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:statuses' %}"><i class="bi bi-list-check"></i> Status Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:verdicts' %}"><i class="bi bi-check2-square"></i> Verdict Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:sla' %}"><i class="bi bi-clock"></i> SLA Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:escalation' %}"><i class="bi bi-arrow-up-circle"></i> Escalation Settings</a>
+                                </div>
+                                <div class="col-md-3">
+                                    <h6 class="dropdown-header px-0 border-bottom pb-2 mb-2"><i class="bi bi-cloud-connect"></i> Integration</h6>
+                                    <a class="dropdown-item ps-0" href="{% url 'wazuh_integration:status' %}"><i class="bi bi-hdd-rack"></i> Wazuh Dashboard</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:wazuh_api' %}"><i class="bi bi-cloud-connect"></i> Wazuh API Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:alert_sources' %}"><i class="bi bi-diagram-3"></i> Alert Source Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:ioc_enrichment' %}"><i class="bi bi-shield-check"></i> IOC Enrichment Settings</a>
+                                </div>
+                                <div class="col-md-3">
+                                    <h6 class="dropdown-header px-0 border-bottom pb-2 mb-2"><i class="bi bi-gear"></i> System</h6>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:notifications' %}"><i class="bi bi-bell"></i> Notification Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:reports' %}"><i class="bi bi-file-earmark-bar-graph"></i> Report Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:dashboard' %}"><i class="bi bi-gear-wide-connected"></i> Settings Overview</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:dashboard_config' %}"><i class="bi bi-layout-wtf"></i> Dashboard Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'audit:list' %}"><i class="bi bi-journal-text"></i> Audit Logs</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:audit_log' %}"><i class="bi bi-journal-check"></i> Audit Log Settings</a>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:system' %}"><i class="bi bi-gear"></i> System Settings</a>
+                                    <div class="dropdown-divider my-2"></div>
+                                    <a class="dropdown-item ps-0 text-info" href="{% url 'admin:index' %}"><i class="bi bi-shield-lock"></i> Django Administration</a>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                    {% endif %}
+                    {% if user.analyst_profile.role != 'MONITOR' %}
+                    <li class="nav-item"><a class="nav-link" href="{% url 'monitor:wallboard' %}" target="_blank"><i class="bi bi-display"></i> Wallboard</a></li>
+                    {% endif %}
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item ms-2">
+                        <div class="dropdown">
+                            <a class="nav-link position-relative dropdown-toggle-no-caret" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" id="notifDropdownToggle">
+                                <i class="bi bi-bell"></i>
+                                {% if unread_notifications_count and unread_notifications_count > 0 %}
+                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem; margin-top: 10px; margin-left: -5px;" id="notifBadge">
+                                    {{ unread_notifications_count }}
+                                </span>
+                                {% endif %}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end ariba-card shadow" style="width: 320px; max-height: 400px; overflow-y: auto;">
+                                <li><h6 class="dropdown-header border-bottom border-secondary mb-2">Notifications</h6></li>
+                                {% for notif in unread_notifications %}
+                                <li>
+                                    <a class="dropdown-item py-2" href="{{ notif.link }}">
+                                        <div class="small text-wrap">{{ notif.message }}</div>
+                                        <div class="text-muted" style="font-size: 0.75rem;">{{ notif.created_at|timesince }} ago</div>
+                                    </a>
+                                </li>
+                                {% empty %}
+                                <li><div class="dropdown-item text-muted small py-3 text-center">No new notifications</div></li>
+                                {% endfor %}
+                                {% if unread_notifications %}
+                                <li><hr class="dropdown-divider border-secondary"></li>
+                                <li><a class="dropdown-item text-center text-primary small" href="#" id="markAllReadBtn">Mark all as read</a></li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                    </li>
+                    <li class="nav-item dropdown ms-2">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            {% if user.analyst_profile.avatar %}
+                            <img src="{{ user.analyst_profile.avatar.url }}" class="rounded-circle me-2" style="width: 24px; height: 24px; object-fit: cover;">
+                            {% else %}
+                            <i class="bi bi-person-circle me-2"></i>
+                            {% endif %}
+                            {{ user.get_full_name|default:user.username }}
+                            <span class="badge bg-secondary ms-2">{{ user.analyst_profile.get_role_display }}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end ariba-dropdown">
+                            <li><a class="dropdown-item" href="{% url 'accounts:profile' %}"><i class="bi bi-person"></i> Profile</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'accounts:logout' %}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <div class="ariba-main-content">
+        {% if new_alerts_count > 0 %}
+        <div class="alert alert-warning alert-dismissible fade show rounded-0 border-0 mb-0 text-center" role="alert">
+            <i class="bi bi-exclamation-triangle"></i>
+            <strong>{{ new_alerts_count }}</strong> new alert{{ new_alerts_count|pluralize }} waiting for review.
+            {% if critical_alerts_count > 0 %}
+            <span class="ms-2 text-danger"><i class="bi bi-fire"></i> <strong>{{ critical_alerts_count }}</strong> critical!</span>
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        {% if messages %}
+        <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1080;">
+            {% for message in messages %}
+            <div class="toast align-items-center text-bg-{{ message.tags }} border-0" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+                <div class="d-flex">
+                    <div class="toast-body">{{ message }}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </div>
+    {% else %}
+    {% block auth_content %}{% endblock %}
+    {% endif %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="{% static 'js/ariba-soc.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+<script>
+    // Notifications Logic
+    const markAllReadBtn = document.getElementById('markAllReadBtn');
+    if (markAllReadBtn) {
+        markAllReadBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            fetch("{% url 'alerts:mark_notifications_read' %}", {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json'
+                }
+            }).then(response => {
+                if (response.ok) {
+                    const badge = document.getElementById('notifBadge');
+                    if (badge) badge.remove();
+                    // Optionally refresh the dropdown items to show "No new notifications"
+                    window.location.reload();
+                }
+            });
+        });
+    }
+</script>
+</body>
+</html>

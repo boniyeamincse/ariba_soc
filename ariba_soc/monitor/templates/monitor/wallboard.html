@@ -1,0 +1,379 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ariba SOC — Live Monitor Wallboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{% static 'css/ariba-soc.css' %}" rel="stylesheet">
+    <link href="{% static 'css/wallboard.css' %}" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/globe.gl"></script>
+</head>
+<body class="wallboard-body">
+    <div class="wallboard-header">
+        <div class="wallboard-brand"><i class="bi bi-shield-shaded"></i> ARIBA SOC — LIVE MONITOR</div>
+        <div class="wallboard-header-right">
+            <div class="wallboard-live-counter">
+                <span class="dot"></span>
+                <span id="wb-live-count">–</span> open alerts
+            </div>
+            <div class="wallboard-clock" id="wb-clock">--:--:--</div>
+            <div class="wb-section-dots" id="wb-section-dots">
+                <span data-section="0" class="active"></span>
+                <span data-section="1"></span>
+            </div>
+            <button class="wallboard-kiosk-btn" id="wb-kiosk-btn"><i class="bi bi-arrows-fullscreen"></i> Kiosk Mode</button>
+        </div>
+    </div>
+
+    <div class="wallboard-body-area">
+        <div class="wb-section active" id="wb-section-ops" data-section-index="0">
+            <div class="row g-3 mb-3" id="wb-severity-row"></div>
+            <div class="row g-3" style="height: calc(100% - 130px);">
+                <div class="col-md-6 h-100">
+                    <div class="wb-tile h-100 p-1" style="position: relative; overflow: hidden;">
+                        <div class="wb-tile-label" style="position:absolute; top:0.75rem; left:1rem; z-index:2;"><i class="bi bi-globe2"></i> Attack Source Map</div>
+                        <div id="wb-globe" style="width:100%; height:100%;"></div>
+                        <div id="wb-globe-empty" class="text-center text-muted small" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);">No geolocatable attack traffic right now.</div>
+                    </div>
+                </div>
+                <div class="col-md-6 h-100 d-flex flex-column gap-3">
+                    <div class="wb-tile" style="flex: 1.4; overflow-y: auto;">
+                        <div class="wb-tile-label mb-2"><i class="bi bi-exclamation-octagon"></i> Active Incidents</div>
+                        <div id="wb-incidents-list"></div>
+                    </div>
+                    <div class="d-flex gap-3" style="flex: 1;">
+                        <div class="wb-tile flex-fill" style="overflow-y: auto;">
+                            <div class="wb-tile-label mb-2"><i class="bi bi-hdd-network"></i> Top Attacked Assets</div>
+                            <div id="wb-assets-list"></div>
+                        </div>
+                        <div class="wb-tile flex-fill" style="overflow-y: auto;">
+                            <div class="wb-tile-label mb-2"><i class="bi bi-person-check"></i> Online L1/L2 Analysts</div>
+                            <div id="wb-analysts-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="wb-section" id="wb-section-exec" data-section-index="1">
+            <div class="row g-3 mb-3">
+                <div class="col">
+                    <div class="wb-tile text-center py-2">
+                        <div class="wb-tile-label">Security Health Score</div>
+                        <div class="wb-tile-value" id="wb-health-score" style="color:var(--accent-cyan)">–</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="wb-tile text-center py-2">
+                        <div class="wb-tile-label">Today: Critical + High</div>
+                        <div class="wb-tile-value" id="wb-today-ch" style="color:var(--severity-high)">–</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="wb-tile text-center py-2">
+                        <div class="wb-tile-label">Active Major Incidents</div>
+                        <div class="wb-tile-value" id="wb-incidents-count" style="color:var(--severity-critical)">–</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="wb-tile text-center py-2">
+                        <div class="wb-tile-label">Avg Response Time</div>
+                        <div class="wb-tile-value" id="wb-response-time" style="color:var(--accent-blue)">–</div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3" style="height: calc(100% - 210px);">
+                <div class="col-md-5 h-100">
+                    <div class="wb-tile h-100">
+                        <div class="wb-tile-label mb-2"><i class="bi bi-graph-up"></i> 7-Day Threat Trend</div>
+                        <canvas id="wb-trend-chart"></canvas>
+                    </div>
+                </div>
+                <div class="col-md-3 h-100">
+                    <div class="wb-tile h-100">
+                        <div class="wb-tile-label mb-2"><i class="bi bi-check2-circle"></i> Resolved vs Unresolved</div>
+                        <canvas id="wb-resolved-chart"></canvas>
+                        <div class="wb-tile-label mt-3 mb-1"><i class="bi bi-clock-history"></i> SLA Status</div>
+                        <div id="wb-sla-breakdown" class="small"></div>
+                    </div>
+                </div>
+                <div class="col-md-4 h-100">
+                    <div class="wb-tile h-100">
+                        <div class="wb-tile-label mb-2"><i class="bi bi-hdd-network"></i> Most Targeted Systems</div>
+                        <div id="wb-targeted-list" class="mb-3"></div>
+                        <div class="wb-tile-label mb-2"><i class="bi bi-hdd-stack"></i> Tool Status</div>
+                        <div id="wb-tool-status"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Live clock
+        function wbTickClock() {
+            document.getElementById('wb-clock').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+        }
+        setInterval(wbTickClock, 1000);
+        wbTickClock();
+
+        // Kiosk fullscreen
+        document.getElementById('wb-kiosk-btn').addEventListener('click', function() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(function() {});
+            } else {
+                document.exitFullscreen();
+            }
+        });
+
+        // Section auto-rotation
+        var wbSections = [document.getElementById('wb-section-ops'), document.getElementById('wb-section-exec')];
+        var wbDots = document.querySelectorAll('#wb-section-dots span');
+        var wbCurrentSection = 0;
+        var WB_ROTATE_MS = 18000;
+
+        function wbShowSection(index) {
+            wbSections.forEach(function(el, i) {
+                el.classList.toggle('active', i === index);
+            });
+            wbDots.forEach(function(el, i) {
+                el.classList.toggle('active', i === index);
+            });
+            wbCurrentSection = index;
+        }
+
+        setInterval(function() {
+            wbShowSection((wbCurrentSection + 1) % wbSections.length);
+        }, WB_ROTATE_MS);
+
+        // ---- Live Ops data ----
+        var WB_SEVERITY_COLORS = {
+            'Critical': 'var(--severity-critical)', 'High': 'var(--severity-high)',
+            'Medium': 'var(--severity-medium)', 'Low': 'var(--severity-low)',
+            'Informational': 'var(--severity-info)'
+        };
+
+        function wbEscape(s) {
+            var div = document.createElement('div');
+            div.textContent = s == null ? '' : s;
+            return div.innerHTML;
+        }
+
+        function wbRenderSeverity(rows) {
+            var el = document.getElementById('wb-severity-row');
+            el.innerHTML = rows.map(function(r) {
+                var color = WB_SEVERITY_COLORS[r.severity] || '#888';
+                return '<div class="col"><div class="wb-tile text-center py-2">' +
+                    '<div class="wb-tile-label">' + wbEscape(r.severity) + '</div>' +
+                    '<div class="wb-tile-value" style="color:' + color + '">' + r.count + '</div>' +
+                    '</div></div>';
+            }).join('');
+        }
+
+        function wbFormatCountdown(dueIso) {
+            if (!dueIso) return '<span class="text-muted">no SLA</span>';
+            var diffMs = new Date(dueIso).getTime() - Date.now();
+            var breached = diffMs < 0;
+            var abs = Math.abs(diffMs);
+            var h = Math.floor(abs / 3600000);
+            var m = Math.floor((abs % 3600000) / 60000);
+            var text = h + 'h ' + m + 'm';
+            return breached
+                ? '<span style="color:var(--severity-critical)">BREACHED ' + text + ' ago</span>'
+                : '<span style="color:var(--severity-low)">' + text + ' left</span>';
+        }
+
+        function wbRenderIncidents(incidents) {
+            var el = document.getElementById('wb-incidents-list');
+            if (!incidents.length) {
+                el.innerHTML = '<p class="text-muted small">No active incidents.</p>';
+                return;
+            }
+            el.innerHTML = incidents.map(function(inc) {
+                var color = WB_SEVERITY_COLORS[inc.severity] || '#888';
+                return '<div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;" data-sla-due="' + wbEscape(inc.sla_due_at) + '">' +
+                    '<div style="min-width:0;">' +
+                    '<div class="text-truncate" style="max-width: 22vw;"><span style="color:' + color + '">●</span> ' + wbEscape(inc.name) + '</div>' +
+                    '<div class="text-muted small">' + wbEscape(inc.hostname || '—') + ' · ' + wbEscape(inc.assignee) + ' · ' + wbEscape(inc.status) + '</div>' +
+                    '</div>' +
+                    '<div class="wb-sla-countdown small text-nowrap ms-2">' + wbFormatCountdown(inc.sla_due_at) + '</div>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function wbRenderBarList(elId, rows, color) {
+            var el = document.getElementById(elId);
+            if (!rows.length) {
+                el.innerHTML = '<p class="text-muted small">No data.</p>';
+                return;
+            }
+            var max = Math.max.apply(null, rows.map(function(a) { return a.count; }));
+            el.innerHTML = rows.map(function(a) {
+                var pct = max ? Math.round((a.count / max) * 100) : 0;
+                return '<div class="mb-2">' +
+                    '<div class="d-flex justify-content-between small"><span>' + wbEscape(a.hostname) + '</span><span>' + a.count + '</span></div>' +
+                    '<div style="background: var(--border-color); border-radius: 4px; height: 6px;"><div style="width:' + pct + '%; background: ' + color + '; height: 6px; border-radius: 4px;"></div></div>' +
+                    '</div>';
+            }).join('');
+        }
+        function wbRenderAssets(assets) { wbRenderBarList('wb-assets-list', assets, 'var(--accent-blue)'); }
+        function wbRenderTargeted(rows) { wbRenderBarList('wb-targeted-list', rows, 'var(--accent-cyan)'); }
+
+        function wbRenderAnalysts(analysts) {
+            var el = document.getElementById('wb-analysts-list');
+            if (!analysts.length) {
+                el.innerHTML = '<p class="text-muted small">No analysts online.</p>';
+                return;
+            }
+            el.innerHTML = analysts.map(function(a) {
+                return '<div class="d-flex align-items-center gap-2 py-1">' +
+                    '<span style="width:8px;height:8px;border-radius:50%;background:var(--severity-low);display:inline-block;"></span>' +
+                    '<span>' + wbEscape(a.username) + '</span>' +
+                    '<span class="text-muted small ms-auto">' + wbEscape(a.role) + '</span>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function wbTickSlaCountdowns() {
+            document.querySelectorAll('#wb-incidents-list [data-sla-due]').forEach(function(row) {
+                var due = row.getAttribute('data-sla-due');
+                var target = row.querySelector('.wb-sla-countdown');
+                if (target) target.innerHTML = wbFormatCountdown(due || null);
+            });
+        }
+        setInterval(wbTickSlaCountdowns, 30000);
+
+        // ---- Executive section ----
+        var wbTrendChart = null, wbResolvedChart = null;
+
+        function wbRenderSlaBreakdown(rows) {
+            var colors = {'Within SLA': 'var(--severity-low)', 'Near SLA breach': 'var(--severity-medium)', 'Breached': 'var(--severity-critical)'};
+            document.getElementById('wb-sla-breakdown').innerHTML = rows.map(function(r) {
+                return '<div class="d-flex justify-content-between"><span style="color:' + (colors[r.sla_status] || '#888') + '">' + wbEscape(r.sla_status) + '</span><span>' + r.count + '</span></div>';
+            }).join('');
+        }
+
+        function wbRenderToolStatus(statuses) {
+            var colorFor = function(s) {
+                if (s === 'Operational') return 'var(--severity-low)';
+                if (s === 'Not Configured' || s === 'Unknown') return 'var(--text-muted)';
+                return 'var(--severity-critical)';
+            };
+            document.getElementById('wb-tool-status').innerHTML = Object.keys(statuses).map(function(name) {
+                return '<div class="d-flex justify-content-between align-items-center py-1">' +
+                    '<span>' + wbEscape(name) + '</span>' +
+                    '<span style="color:' + colorFor(statuses[name]) + '">● ' + wbEscape(statuses[name]) + '</span>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function wbRenderExecutive(data) {
+            document.getElementById('wb-health-score').textContent = data.health_score != null ? data.health_score : '–';
+            document.getElementById('wb-today-ch').textContent = (data.today.critical + data.today.high);
+            document.getElementById('wb-incidents-count').textContent = data.incidents_count;
+            document.getElementById('wb-response-time').textContent = data.response_time_minutes != null ? data.response_time_minutes + 'm' : 'n/a';
+
+            if (!wbTrendChart) {
+                wbTrendChart = new Chart(document.getElementById('wb-trend-chart'), {
+                    type: 'line',
+                    data: { labels: data.threat_trend.map(function(d) { return d.date.slice(5); }),
+                        datasets: [{ label: 'Alerts', data: data.threat_trend.map(function(d) { return d.count; }),
+                            borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.3, fill: true }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8896b8' } } },
+                        scales: { x: { ticks: { color: '#8896b8' } }, y: { ticks: { color: '#8896b8' } } } }
+                });
+            } else {
+                wbTrendChart.data.labels = data.threat_trend.map(function(d) { return d.date.slice(5); });
+                wbTrendChart.data.datasets[0].data = data.threat_trend.map(function(d) { return d.count; });
+                wbTrendChart.update();
+            }
+
+            var rv = data.resolved_vs_unresolved;
+            if (!wbResolvedChart) {
+                wbResolvedChart = new Chart(document.getElementById('wb-resolved-chart'), {
+                    type: 'doughnut',
+                    data: { labels: ['Resolved', 'Unresolved'], datasets: [{ data: [rv.resolved, rv.unresolved], backgroundColor: ['#22c55e', '#ef4444'] }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#8896b8' } } } }
+                });
+            } else {
+                wbResolvedChart.data.datasets[0].data = [rv.resolved, rv.unresolved];
+                wbResolvedChart.update();
+            }
+
+            wbRenderSlaBreakdown(data.sla_breakdown);
+            wbRenderTargeted(data.most_targeted);
+            wbRenderToolStatus(data.tool_status);
+        }
+
+        function wbLoadStats() {
+            fetch('{% url "monitor:stats_api" %}')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (typeof data.live_open_count === 'number') {
+                        var countEl = document.getElementById('wb-live-count');
+                        countEl.textContent = data.live_open_count;
+                        countEl.classList.remove('wb-tick');
+                        void countEl.offsetWidth;
+                        countEl.classList.add('wb-tick');
+                    }
+                    if (data.severity_breakdown) wbRenderSeverity(data.severity_breakdown);
+                    if (data.incidents) wbRenderIncidents(data.incidents);
+                    if (data.top_assets) wbRenderAssets(data.top_assets);
+                    if (data.online_analysts) wbRenderAnalysts(data.online_analysts);
+                    if (data.health_score != null) wbRenderExecutive(data);
+                })
+                .catch(function(e) { console.error('wallboard stats fetch failed', e); });
+        }
+        wbLoadStats();
+        setInterval(wbLoadStats, 10000);
+
+        // ---- Attack globe ----
+        var WB_SEVERITY_HEX = {
+            'Critical': '#ef4444', 'High': '#f97316', 'Medium': '#eab308', 'Low': '#22c55e', 'Informational': '#6b7280'
+        };
+        var wbGlobeInstance = null;
+        try {
+            wbGlobeInstance = Globe()(document.getElementById('wb-globe'))
+                .backgroundColor('rgba(0,0,0,0)')
+                .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
+                .showAtmosphere(true)
+                .atmosphereColor('#3b82f6')
+                .pointOfView({ lat: 20, lng: 0, altitude: 2.2 });
+            wbGlobeInstance.controls().autoRotate = true;
+            wbGlobeInstance.controls().autoRotateSpeed = 0.4;
+        } catch (e) {
+            console.error('globe init failed', e);
+        }
+
+        function wbLoadGlobe() {
+            if (!wbGlobeInstance) return;
+            fetch('{% url "monitor:globe_api" %}')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var arcs = data.arcs || [];
+                    document.getElementById('wb-globe-empty').style.display = arcs.length ? 'none' : 'block';
+
+                    wbGlobeInstance
+                        .pointsData(arcs)
+                        .pointLat('lat').pointLng('lon')
+                        .pointColor(function(d) { return WB_SEVERITY_HEX[d.severity] || '#888'; })
+                        .pointAltitude(0.01)
+                        .pointRadius(function(d) { return Math.min(1.2, 0.3 + d.count * 0.05); })
+                        .pointLabel(function(d) { return (d.city || d.country || d.ip) + ' — ' + d.count + ' alert(s), ' + d.severity; })
+                        .ringsData(arcs.filter(function(d) { return d.severity === 'Critical'; }))
+                        .ringLat('lat').ringLng('lon')
+                        .ringColor(function() { return function(t) { return 'rgba(239,68,68,' + (1 - t) + ')'; }; })
+                        .ringMaxRadius(4)
+                        .ringPropagationSpeed(2)
+                        .ringRepeatPeriod(800);
+                })
+                .catch(function(e) { console.error('wallboard globe fetch failed', e); });
+        }
+        wbLoadGlobe();
+        setInterval(wbLoadGlobe, 45000);
+    </script>
+</body>
+</html>

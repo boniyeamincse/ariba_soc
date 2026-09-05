@@ -1,0 +1,119 @@
+<div class="modal fade ariba-modal" id="editAlertModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil-square"></i> Edit Alert</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" id="editAlertForm" action="">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label text-secondary small">Assignee</label>
+                            <select name="assignee" id="id_assignee" class="form-select">
+                                <option value="">Unassigned</option>
+                                {% for u in users %}
+                                <option value="{{ u.id }}">{{ u.username }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-secondary small">Priority</label>
+                            <select name="priority" id="id_priority" class="form-select">
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                                <option value="Critical">Critical</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-secondary small">Status</label>
+                            <select name="status" id="id_status" class="form-select">
+                                {% for s in edit_statuses %}
+                                <option value="{{ s.name }}">{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-secondary small">Severity</label>
+                            <select name="severity" id="id_severity" class="form-select">
+                                {% for s in edit_severities %}
+                                <option value="{{ s.name }}">{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-secondary small">Verdict</label>
+                            <select name="verdict" id="id_verdict" class="form-select">
+                                {% for v in edit_verdicts %}
+                                <option value="{{ v.name }}">{{ v.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label text-secondary small">Analyst Comment</label>
+                            <textarea name="analyst_comment" class="form-control" rows="3" placeholder="Add investigation notes..."></textarea>
+                        </div>
+                        <div class="col-12" id="escalationField" style="display:none;">
+                            <label class="form-label text-secondary small">Escalation Reason <span class="text-danger">*</span></label>
+                            <textarea name="escalation_reason" class="form-control" rows="2" placeholder="Why is this being escalated?"></textarea>
+                        </div>
+                        <div class="col-12" id="remediationField" style="display:none;">
+                            <label class="form-label text-secondary small">Remediation Note</label>
+                            <textarea name="remediation_note" class="form-control" rows="2"></textarea>
+                        </div>
+                        <div class="col-12" id="closureField" style="display:none;">
+                            <label class="form-label text-secondary small">Closure Reason <span class="text-danger">*</span></label>
+                            <textarea name="closure_reason" class="form-control" rows="2" placeholder="Mandatory: Describe why this alert is being closed" id="closureReasonInput"></textarea>
+                            <small class="text-danger d-none" id="closureRequiredMsg">Closure reason is required when closing an alert.</small>
+                        </div>
+                        <div class="col-12" id="lessonsField" style="display:none;">
+                            <label class="form-label text-secondary small">Lessons Learned</label>
+                            <textarea name="lessons_learned" class="form-control" rows="2" placeholder="What should we do differently next time?"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-ariba-outline" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-ariba-primary"><i class="bi bi-check2"></i> Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var statusSelect = document.getElementById('id_status');
+    var closureInput = document.getElementById('closureReasonInput');
+    var closureRequiredMsg = document.getElementById('closureRequiredMsg');
+    if (statusSelect) {
+        statusSelect.addEventListener('change', function() {
+            var val = this.value;
+            document.getElementById('escalationField').style.display = val.indexOf('Escalated') === 0 ? 'block' : 'none';
+            document.getElementById('remediationField').style.display = val === 'Closed' ? 'block' : 'none';
+            document.getElementById('closureField').style.display = val === 'Closed' ? 'block' : 'none';
+            document.getElementById('lessonsField').style.display = val === 'Closed' ? 'block' : 'none';
+            if (val === 'Closed') {
+                closureInput.required = true;
+                closureInput.setAttribute('placeholder', 'Mandatory: Describe why this alert is being closed');
+            } else {
+                closureInput.required = false;
+                closureRequiredMsg.classList.add('d-none');
+            }
+        });
+    }
+    // Validate on form submit
+    var form = closureInput ? closureInput.closest('form') : null;
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (statusSelect && statusSelect.value === 'Closed' && !closureInput.value.trim()) {
+                e.preventDefault();
+                closureRequiredMsg.classList.remove('d-none');
+                closureInput.focus();
+            }
+        });
+    }
+});
+</script>

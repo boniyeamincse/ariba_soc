@@ -1,0 +1,121 @@
+{% extends 'settings_manager/settings_base.html' %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0"><i class="bi bi-file-earmark-bar-graph"></i> Report Settings</h4>
+            <p class="settings-page-desc mb-0">Configure automated report generation and scheduling.</p>
+        </div>
+        <button class="btn btn-ariba-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addReportModal"><i class="bi bi-plus-lg"></i> Add Report</button>
+    </div>
+
+    <div class="ariba-card p-0">
+        <div class="table-responsive">
+            <table class="table ariba-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Report Type</th>
+                        <th>Schedule</th>
+                        <th>Format</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in reports %}
+                    <tr>
+                        <td>{{ r.name }}</td>
+                        <td><span class="badge bg-secondary">{{ r.get_report_type_display }}</span></td>
+                        <td>{{ r.get_schedule_display }}</td>
+                        <td>{{ r.get_export_format_display }}</td>
+                        <td>
+                            {% if r.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-danger">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                <a href="{% url 'settings:report_edit' r.id %}" class="btn btn-ariba-outline btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
+                                <form method="post" action="{% url 'settings:report_toggle' r.id %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-ariba-outline btn-sm" title="Toggle">
+                                    {% if r.is_active %}
+                                    <i class="bi bi-toggle-on text-success"></i>
+                                    {% else %}
+                                    <i class="bi bi-toggle-off text-danger"></i>
+                                    {% endif %}
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-muted text-center">No report settings found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade ariba-modal" id="addReportModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Add Report Setting</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <div class="modal-body">
+                    {% if form.errors %}
+                    <div class="alert alert-danger py-2 small">
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}<div>{{ field|title }}: {{ error }}</div>{% endfor %}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small">Name</label>
+                            {{ form.name }}
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small">Report Type</label>
+                            {{ form.report_type }}
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small">Schedule</label>
+                            {{ form.schedule }}
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small">Export Format</label>
+                            {{ form.export_format }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small">Recipient Email</label>
+                            {{ form.recipient_email }}
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                {{ form.is_active }}
+                                <label class="form-check-label small">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-check-lg"></i> Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

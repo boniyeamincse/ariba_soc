@@ -1,0 +1,55 @@
+{% extends 'settings_manager/settings_base.html' %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4 class="m-0"><i class="bi bi-file-earmark-bar-graph"></i> Edit Report Setting: {{ object.name }}</h4>
+    </div>
+    <p class="settings-page-desc">Update report configuration.</p>
+
+    <div class="ariba-card p-4">
+        <form method="post">
+            {% csrf_token %}
+            {% if form.errors %}
+            <div class="alert alert-danger py-2 small">
+                {% for field, errors in form.errors.items %}
+                    {% for error in errors %}<div>{{ field|title }}: {{ error }}</div>{% endfor %}
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="row g-3">
+                <div class="col-12 col-md-6">
+                    <label class="form-label small">Name</label>
+                    {{ form.name }}
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label small">Report Type</label>
+                    {{ form.report_type }}
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label small">Schedule</label>
+                    {{ form.schedule }}
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label small">Export Format</label>
+                    {{ form.export_format }}
+                </div>
+                <div class="col-12">
+                    <label class="form-label small">Recipient Email</label>
+                    {{ form.recipient_email }}
+                </div>
+                <div class="col-12">
+                    <div class="form-check">
+                        {{ form.is_active }}
+                        <label class="form-check-label small">Active</label>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-ariba-primary"><i class="bi bi-check-lg"></i> Save</button>
+                <a href="{% url 'settings:reports' %}" class="btn btn-ariba-outline"><i class="bi bi-x-lg"></i> Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

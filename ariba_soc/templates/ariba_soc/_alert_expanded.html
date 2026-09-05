@@ -1,0 +1,34 @@
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="detail-label">Description</div>
+        <div class="detail-value mb-2">{{ alert.description|default:alert.rule_description|default:'No description'|truncatechars:200 }}</div>
+        <div class="detail-label">Host / Agent</div>
+        <div class="detail-value mb-2">{{ alert.hostname|default:'—' }} {% if alert.agent_name %}({{ alert.agent_name }}){% endif %}</div>
+        <div class="detail-label">Rule ID</div>
+        <div class="detail-value mb-2">{{ alert.rule_id|default:'—' }} (Level {{ alert.rule_level }})</div>
+        <div class="detail-label">Process</div>
+        <div class="detail-value mb-2">{{ alert.process_name|default:'—' }} {% if alert.process_user %}as {{ alert.process_user }}{% endif %}</div>
+    </div>
+    <div class="col-md-6">
+        <div class="detail-label">Source / Destination IP</div>
+        <div class="detail-value mb-2">{{ alert.source_ip|default:'—' }} → {{ alert.destination_ip|default:'—' }}</div>
+        <div class="detail-label">Username</div>
+        <div class="detail-value mb-2">{{ alert.username|default:'—' }}</div>
+        {% if alert.target_file %}
+        <div class="detail-label">Target File</div>
+        <div class="detail-value mb-2">{{ alert.target_file }}</div>
+        {% endif %}
+        {% if alert.file_hash_sha256 %}
+        <div class="detail-label">SHA256</div>
+        <div class="detail-value mb-2"><code style="font-size: 0.7rem;">{{ alert.file_hash_sha256 }}</code></div>
+        {% endif %}
+        <div class="detail-label">Command Line</div>
+        <div class="detail-value mb-2"><code style="font-size: 0.7rem;">{{ alert.command_line|default:'—'|truncatechars:100 }}</code></div>
+    </div>
+    {% if alert.full_log %}
+    <div class="col-12">
+        <div class="detail-label">Full Log</div>
+        <pre style="background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 4px; max-height: 100px; overflow: auto; font-size: 0.7rem; color: var(--text-secondary);">{{ alert.full_log|truncatechars:500 }}</pre>
+    </div>
+    {% endif %}
+</div>

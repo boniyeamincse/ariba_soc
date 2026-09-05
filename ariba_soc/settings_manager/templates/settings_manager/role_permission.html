@@ -1,0 +1,49 @@
+{% extends 'settings_manager/settings_base.html' %}
+{% load settings_extras %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4 class="m-0"><i class="bi bi-shield-lock"></i> Role & Permission Matrix</h4>
+    </div>
+    <p class="settings-page-desc">Configure permissions for each SOC role. Checked = allowed.</p>
+
+    <div class="ariba-card p-3">
+        <form method="post">
+            {% csrf_token %}
+            <div class="table-responsive">
+                <table class="table ariba-table">
+                    <thead>
+                        <tr>
+                            <th style="min-width:160px">Permission</th>
+                            {% for rc in role_choices %}
+                            <th class="text-center">{{ rc.1 }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for perm_display, perm_field in permissions %}
+                        <tr>
+                            <td><small>{{ perm_display }}</small></td>
+                            {% for rc in role_choices %}
+                            <td class="text-center">
+                                {% for r in roles %}
+                                {% if r.role == rc.0 %}
+                                <input type="checkbox" class="form-check-input" name="{{ r.role }}_{{ perm_field }}"
+                                       {% if r|attr:perm_field %}checked{% endif %}>
+                                {% endif %}
+                                {% endfor %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-3">
+                <button type="submit" class="btn btn-ariba-primary"><i class="bi bi-check-lg"></i> Save Permissions</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

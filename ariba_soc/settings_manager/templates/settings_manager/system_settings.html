@@ -1,0 +1,85 @@
+{% extends 'settings_manager/settings_base.html' %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0"><i class="bi bi-gear"></i> System Settings</h4>
+            <p class="settings-page-desc mb-0">Manage global system configuration key-value pairs.</p>
+        </div>
+        <button class="btn btn-ariba-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addSettingModal"><i class="bi bi-plus-lg"></i> Add Setting</button>
+    </div>
+
+    <div class="ariba-card p-0">
+        <div class="table-responsive">
+            <table class="table ariba-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Key</th>
+                        <th>Value</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in settings_list %}
+                    <tr>
+                        <td><code>{{ s.key }}</code></td>
+                        <td><code>{{ s.value|truncatechars:60 }}</code></td>
+                        <td>{{ s.description|truncatechars:80|default:'—' }}</td>
+                        <td>
+                            <a href="{% url 'settings:system_edit' s.id %}" class="btn btn-ariba-outline btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-muted text-center">No system settings found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade ariba-modal" id="addSettingModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Add System Setting</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <div class="modal-body">
+                    {% if form.errors %}
+                    <div class="alert alert-danger py-2 small">
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}<div>{{ field|title }}: {{ error }}</div>{% endfor %}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small">Key</label>
+                            {{ form.key }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small">Value</label>
+                            {{ form.value }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small">Description</label>
+                            {{ form.description }}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-check-lg"></i> Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
