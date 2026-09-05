@@ -6,9 +6,15 @@ from django.db.models import Count, Q, Avg, F
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.cache import cache_page
-from alerts.models import Alert, AlertAuditLog
+from alerts.models import Alert, AlertAuditLog, AlertEscalation
 from accounts.decorators import role_required, minimum_soc_tier, role_has_dashboard_access
 
+
+OPEN_WORKFLOW_STATES = [
+    'QUEUED_L1', 'IN_PROGRESS_L1', 'PENDING_L2_ACCEPTANCE', 'IN_PROGRESS_L2',
+    'RETURNED_TO_L1', 'PENDING_L3_ACCEPTANCE', 'IN_PROGRESS_L3', 'RETURNED_TO_L2',
+    'INCIDENT', 'REOPENED',
+]
 
 OPEN_STATUSES = ['New', 'Awaiting Action', 'In Progress', 'Pending',
                   'Escalated to L2', 'Escalated to L3', 'Escalated to IR/IT',
@@ -35,45 +41,65 @@ def dashboard_l1(request):
     profile = user.analyst_profile
     role = profile.role
 
-    new_unassigned = Alert.objects.filter(status='New', assignee__isnull=True).select_related('assignee', 'source').order_by('-alert_time')[:20]
-    my_alerts = Alert.objects.filter(assignee=user, status__in=['In Progress', 'Awaiting Action', 'Pending']).select_related('source').order_by('-alert_time')[:20]
-    critical_high = Alert.objects.filter(severity__in=['Critical', 'High'], status__in=['New', 'In Progress', 'Awaiting Action']).select_related('assignee', 'source').order_by('-alert_time')[:20]
+    new_l1_queue = Alert.objects.filter(
+        workflow_state='QUEUED_L1',
+    ).select_related('assignee', 'source').order_by('-alert_time')[:20]
+
+    my_investigations = Alert.objects.filter(
+        assignee=user,
+        workflow_state='IN_PROGRESS_L1',
+    ).select_related('source').order_by('-alert_time')[:20]
+
+    returned_from_l2 = Alert.objects.filter(
+        workflow_state='RETURNED_TO_L1',
+    ).select_related('assignee', 'source').order_by('-returned_at')[:20]
+
+    critical_high = Alert.objects.filter(
+        severity__in=['Critical', 'High'],
+        workflow_state__in=['QUEUED_L1', 'IN_PROGRESS_L1'],
+    ).select_related('assignee', 'source').order_by('-alert_time')[:20]
 
     sla_near_breach = Alert.objects.filter(
-        sla_status='Near SLA breach', status__in=OPEN_STATUSES
+        sla_status='Near SLA breach',
+        workflow_state__in=OPEN_WORKFLOW_STATES,
     ).select_related('assignee').order_by('sla_due_at')[:10]
 
     sla_breached = Alert.objects.filter(
-        sla_status='Breached', status__in=OPEN_STATUSES
+        sla_status='Breached',
+        workflow_state__in=OPEN_WORKFLOW_STATES,
     ).select_related('assignee').order_by('sla_due_at')[:10]
 
-    triage_queue = Alert.objects.filter(
-        status__in=['New', 'Awaiting Action'], assignee__isnull=True
-    ).select_related('source').order_by('-alert_time')[:10]
+    recently_escalated_l2 = Alert.objects.filter(
+        workflow_state='PENDING_L2_ACCEPTANCE',
+    ).select_related('assignee', 'source').order_by('-escalated_at')[:10]
 
     needs_escalation = Alert.objects.filter(
         severity__in=['Critical', 'High'],
-        status__in=['In Progress', 'Awaiting Action'],
-        is_escalated=False
+        workflow_state='IN_PROGRESS_L1',
     ).select_related('assignee').order_by('sla_due_at')[:10]
 
     today = TODAY()
     week_ago = WEEK_AGO()
     shift_stats = {
         'total_today': Alert.objects.filter(alert_time__gte=today).count(),
-        'closed_today': Alert.objects.filter(status='Closed', status_updated_at__gte=today).count(),
-        'escalated_today': Alert.objects.filter(is_escalated=True, escalated_at__gte=today).count(),
+        'closed_today': Alert.objects.filter(
+            workflow_state__in=['CLOSED', 'RESOLVED'], status_updated_at__gte=today,
+        ).count(),
+        'escalated_today': Alert.objects.filter(
+            workflow_state='PENDING_L2_ACCEPTANCE', escalated_at__gte=today,
+        ).count(),
         'avg_response_today': _avg_response_time(today),
         'weekly_total': Alert.objects.filter(alert_time__gte=week_ago).count(),
     }
 
     context = {
-        'new_unassigned': new_unassigned,
-        'my_alerts': my_alerts,
+        'new_l1_queue': new_l1_queue,
+        'my_investigations': my_investigations,
+        'returned_from_l2': returned_from_l2,
         'critical_high': critical_high,
         'sla_near_breach': sla_near_breach,
         'sla_breached': sla_breached,
-        'triage_queue': triage_queue,
+        'recently_escalated_l2': recently_escalated_l2,
         'needs_escalation': needs_escalation,
         'shift_stats': shift_stats,
         'dashboard_title': 'SOC L1 Dashboard',
@@ -88,55 +114,66 @@ def dashboard_l1(request):
 def dashboard_l2(request):
     user = request.user
 
-    escalated_from_l1 = Alert.objects.filter(
-        status='Escalated to L2', escalation_status='pending_acceptance'
+    pending_l2_acceptance = Alert.objects.filter(
+        workflow_state='PENDING_L2_ACCEPTANCE',
     ).select_related('assignee', 'accepted_by', 'source').order_by('-escalated_at')[:20]
 
     my_investigations = Alert.objects.filter(
-        assignee=user, escalation_status='accepted',
-        status__in=['In Progress', 'Pending']
+        assignee=user,
+        workflow_state='IN_PROGRESS_L2',
     ).select_related('source').order_by('-accepted_at')[:20]
 
     active_investigations = Alert.objects.filter(
-        status__in=['In Progress', 'Pending'],
-        escalated_to_tier='L2', escalation_status='accepted'
+        workflow_state='IN_PROGRESS_L2',
     ).select_related('assignee').order_by('-accepted_at')[:20]
 
-    returned_cases = Alert.objects.filter(
-        escalation_status='returned', escalated_to_tier='L2'
+    returned_to_l1 = Alert.objects.filter(
+        workflow_state='RETURNED_TO_L1',
+        escalated_from_tier='L2',
     ).select_related('returned_by').order_by('-returned_at')[:10]
 
+    pending_escalation_l3 = Alert.objects.filter(
+        workflow_state='PENDING_L3_ACCEPTANCE',
+    ).select_related('assignee').order_by('-escalated_at')[:10]
+
     incident_candidates = Alert.objects.filter(
-        is_incident_candidate=True, status__in=['In Progress', 'Pending']
+        is_incident_candidate=True,
+        workflow_state__in=['IN_PROGRESS_L2', 'PENDING_L3_ACCEPTANCE'],
     ).select_related('assignee').order_by('-alert_time')[:10]
 
-    containment_tasks = Alert.objects.filter(
-        status='Remediation', escalated_to_tier='L2'
-    ).select_related('assignee').order_by('-alert_time')[:10]
+    sla_near_breach = Alert.objects.filter(
+        sla_status='Near SLA breach',
+        workflow_state__in=['PENDING_L2_ACCEPTANCE', 'IN_PROGRESS_L2'],
+    ).select_related('assignee').order_by('sla_due_at')[:10]
 
-    needs_l3_escalation = Alert.objects.filter(
-        severity='Critical', status__in=['In Progress', 'Pending'],
-        is_escalated=False
-    ).select_related('assignee').order_by('-sla_due_at')[:10]
+    sla_breached = Alert.objects.filter(
+        sla_status='Breached',
+        workflow_state__in=['PENDING_L2_ACCEPTANCE', 'IN_PROGRESS_L2'],
+    ).select_related('assignee').order_by('sla_due_at')[:10]
 
     today = TODAY()
     week_ago = WEEK_AGO()
     l2_stats = {
-        'pending_acceptance': Alert.objects.filter(escalation_status='pending_acceptance', escalated_to_tier='L2').count(),
-        'accepted_today': Alert.objects.filter(escalation_status='accepted', accepted_at__gte=today).count(),
-        'returned_this_week': Alert.objects.filter(escalation_status='returned', returned_at__gte=week_ago).count(),
+        'pending_acceptance': Alert.objects.filter(workflow_state='PENDING_L2_ACCEPTANCE').count(),
+        'accepted_today': Alert.objects.filter(
+            workflow_state='IN_PROGRESS_L2', accepted_at__gte=today,
+        ).count(),
+        'returned_this_week': Alert.objects.filter(
+            workflow_state='RETURNED_TO_L1', escalated_from_tier='L2', returned_at__gte=week_ago,
+        ).count(),
         'avg_investigation_time': _avg_investigation_time('L2'),
-        'active_count': Alert.objects.filter(escalated_to_tier='L2', escalation_status='accepted', status__in=OPEN_STATUSES).count(),
+        'active_count': Alert.objects.filter(workflow_state='IN_PROGRESS_L2').count(),
     }
 
     context = {
-        'escalated_from_l1': escalated_from_l1,
+        'pending_l2_acceptance': pending_l2_acceptance,
         'my_investigations': my_investigations,
         'active_investigations': active_investigations,
-        'returned_cases': returned_cases,
+        'returned_to_l1': returned_to_l1,
+        'pending_escalation_l3': pending_escalation_l3,
         'incident_candidates': incident_candidates,
-        'containment_tasks': containment_tasks,
-        'needs_l3_escalation': needs_l3_escalation,
+        'sla_near_breach': sla_near_breach,
+        'sla_breached': sla_breached,
         'l2_stats': l2_stats,
         'dashboard_title': 'SOC L2 Dashboard',
         'dashboard_level': 'L2',
@@ -149,54 +186,69 @@ def dashboard_l2(request):
 def dashboard_l3(request):
     user = request.user
 
-    escalated_from_l2 = Alert.objects.filter(
-        status='Escalated to L3', escalation_status='pending_acceptance'
+    pending_l3_acceptance = Alert.objects.filter(
+        workflow_state='PENDING_L3_ACCEPTANCE',
     ).select_related('assignee', 'accepted_by', 'source').order_by('-escalated_at')[:20]
 
-    advanced_investigation = Alert.objects.filter(
-        assignee=user, escalation_status='accepted',
-        status__in=['In Progress', 'Pending']
+    my_investigations = Alert.objects.filter(
+        assignee=user,
+        workflow_state='IN_PROGRESS_L3',
     ).select_related('source').order_by('-accepted_at')[:20]
 
-    forensics_queue = Alert.objects.filter(
-        Q(mitre_tactic__icontains='forensic') | Q(mitre_tactic__icontains='analysis') | Q(is_incident_candidate=True),
-        status__in=['In Progress', 'Pending'], escalation_status='accepted'
+    returned_to_l2 = Alert.objects.filter(
+        workflow_state='RETURNED_TO_L2',
+        escalated_from_tier='L3',
+    ).select_related('returned_by').order_by('-returned_at')[:10]
+
+    incident_candidates = Alert.objects.filter(
+        workflow_state='INCIDENT',
     ).select_related('assignee').order_by('-alert_time')[:10]
 
-    active_incidents = Alert.objects.filter(
-        severity='Critical', is_incident_candidate=True,
-        status__in=['In Progress', 'Pending', 'Escalated to L3']
-    ).select_related('assignee').order_by('-alert_time')[:10]
+    active_investigations = Alert.objects.filter(
+        workflow_state='IN_PROGRESS_L3',
+    ).select_related('assignee').order_by('-accepted_at')[:20]
+
+    advanced_backlog = Alert.objects.filter(
+        workflow_state='IN_PROGRESS_L3',
+    ).select_related('assignee').order_by('-alert_time')[:20]
 
     rca_items = Alert.objects.filter(
         severity__in=['Critical', 'High'], verdict='True Positive',
-        root_cause_summary=''
+        root_cause_summary='',
     ).select_related('assignee').order_by('-closed_at')[:10]
 
     detection_gaps = Alert.objects.filter(
-        verdict='False Positive', status='Closed'
+        verdict='False Positive', status='Closed',
     ).values('alert_name').annotate(fp_count=Count('id')).filter(fp_count__gte=3).order_by('-fp_count')[:10]
 
     rule_tuning_backlog = Alert.objects.filter(
-        verdict='False Positive', status='Closed'
+        verdict='False Positive', status='Closed',
     ).values('rule_id', 'alert_name').annotate(fp_count=Count('id')).filter(fp_count__gte=2).order_by('-fp_count')[:10]
 
     today = TODAY()
     week_ago = WEEK_AGO()
     month_ago = MONTH_AGO()
     l3_stats = {
-        'pending_acceptance': Alert.objects.filter(escalation_status='pending_acceptance', escalated_to_tier='L3').count(),
-        'active_incidents': Alert.objects.filter(is_incident_candidate=True, status__in=OPEN_STATUSES).count(),
-        'detection_gaps': Alert.objects.filter(verdict='False Positive', status='Closed', status_updated_at__gte=week_ago).count(),
-        'root_causes_done': Alert.objects.filter(root_cause_summary__gt='', status_updated_at__gte=week_ago).count(),
-        'lessons_learned_week': Alert.objects.filter(root_cause_summary__gt='', status_updated_at__gte=week_ago).count(),
+        'pending_acceptance': Alert.objects.filter(workflow_state='PENDING_L3_ACCEPTANCE').count(),
+        'active_incidents': Alert.objects.filter(workflow_state='INCIDENT').count(),
+        'detection_gaps': Alert.objects.filter(
+            verdict='False Positive', status='Closed', status_updated_at__gte=week_ago,
+        ).count(),
+        'root_causes_done': Alert.objects.filter(
+            root_cause_summary__gt='', status_updated_at__gte=week_ago,
+        ).count(),
+        'lessons_learned_week': Alert.objects.filter(
+            root_cause_summary__gt='', status_updated_at__gte=week_ago,
+        ).count(),
     }
 
     context = {
-        'escalated_from_l2': escalated_from_l2,
-        'advanced_investigation': advanced_investigation,
-        'forensics_queue': forensics_queue,
-        'active_incidents': active_incidents,
+        'pending_l3_acceptance': pending_l3_acceptance,
+        'my_investigations': my_investigations,
+        'returned_to_l2': returned_to_l2,
+        'incident_candidates': incident_candidates,
+        'active_investigations': active_investigations,
+        'advanced_backlog': advanced_backlog,
         'rca_items': rca_items,
         'detection_gaps': detection_gaps,
         'rule_tuning_backlog': rule_tuning_backlog,
@@ -212,16 +264,22 @@ def dashboard_l3(request):
 def dashboard_manager(request):
     user = request.user
 
-    critical_open = Alert.objects.filter(severity='Critical', status__in=OPEN_STATUSES).select_related('assignee').order_by('-alert_time')[:20]
-    high_open = Alert.objects.filter(severity='High', status__in=OPEN_STATUSES).select_related('assignee').order_by('-alert_time')[:20]
-    sla_breached = Alert.objects.filter(sla_status='Breached', status__in=OPEN_STATUSES).select_related('assignee').order_by('sla_due_at')[:20]
+    critical_open = Alert.objects.filter(
+        severity='Critical', workflow_state__in=OPEN_WORKFLOW_STATES,
+    ).select_related('assignee').order_by('-alert_time')[:20]
+    high_open = Alert.objects.filter(
+        severity='High', workflow_state__in=OPEN_WORKFLOW_STATES,
+    ).select_related('assignee').order_by('-alert_time')[:20]
+    sla_breached = Alert.objects.filter(
+        sla_status='Breached', workflow_state__in=OPEN_WORKFLOW_STATES,
+    ).select_related('assignee').order_by('sla_due_at')[:20]
 
     today = TODAY()
     week_ago = WEEK_AGO()
     month_ago = MONTH_AGO()
 
     risk_backlog = Alert.objects.filter(
-        severity__in=['Critical', 'High'], status__in=OPEN_STATUSES
+        severity__in=['Critical', 'High'], workflow_state__in=OPEN_WORKFLOW_STATES,
     ).aggregate(
         total=Count('id'),
         critical_count=Count('id', filter=Q(severity='Critical')),
@@ -229,15 +287,15 @@ def dashboard_manager(request):
     )
 
     incident_status = Alert.objects.filter(
-        is_incident_candidate=True, status__in=OPEN_STATUSES
-    ).values('status').annotate(count=Count('id')).order_by('-count')
+        workflow_state__in=OPEN_WORKFLOW_STATES + ['INCIDENT'],
+    ).values('workflow_state').annotate(count=Count('id')).order_by('-count')
 
-    queue_age = Alert.objects.filter(status__in=OPEN_STATUSES).values('current_tier').annotate(
-        count=Count('id')
-    )
+    queue_age = Alert.objects.filter(
+        workflow_state__in=OPEN_WORKFLOW_STATES,
+    ).values('current_tier').annotate(count=Count('id'))
 
     analyst_workload = Alert.objects.filter(
-        assignee__isnull=False, status__in=OPEN_STATUSES
+        assignee__isnull=False, workflow_state__in=OPEN_WORKFLOW_STATES,
     ).values('assignee__username', 'assignee__analyst_profile__role').annotate(
         count=Count('id')
     ).order_by('-count')[:15]
@@ -246,7 +304,7 @@ def dashboard_manager(request):
     avg_resolve = _avg_resolve_time(week_ago)
 
     escalation_stats = Alert.objects.filter(
-        escalated_at__gte=week_ago
+        escalated_at__gte=week_ago,
     ).aggregate(
         total_escalated=Count('id'),
         accepted=Count('id', filter=Q(escalation_status='accepted')),
@@ -254,18 +312,18 @@ def dashboard_manager(request):
     )
 
     fp_rate = Alert.objects.filter(
-        status='Closed', status_updated_at__gte=month_ago
+        status='Closed', status_updated_at__gte=month_ago,
     ).aggregate(
         total=Count('id'),
         fp=Count('id', filter=Q(verdict='False Positive')),
     )
 
     reopen_count = Alert.objects.filter(
-        status='New', status_updated_at__gte=week_ago
+        workflow_state='REOPENED', status_updated_at__gte=week_ago,
     ).exclude(created_at__gte=week_ago).count()
 
     source_health = Alert.objects.filter(
-        alert_time__gte=week_ago
+        alert_time__gte=week_ago,
     ).values('source_name').annotate(
         count=Count('id'),
         latest=Count('id'),

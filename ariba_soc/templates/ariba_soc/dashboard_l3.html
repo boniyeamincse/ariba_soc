@@ -39,20 +39,22 @@
 {% block dashboard_panels %}
 <div class="col-lg-6">
     <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-arrow-up-circle"></i> Escalated from L2 (Pending Acceptance)</h6>
-        {% if escalated_from_l2 %}
+        <h6 class="text-secondary mb-3"><i class="bi bi-arrow-up-circle"></i> Pending L3 Acceptance</h6>
+        {% if pending_l3_acceptance %}
         <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
             <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>Alert</th><th>Severity</th><th>Escalated</th><th>Action</th></tr></thead>
+                <thead><tr><th>Alert</th><th>Severity</th><th>Escalated</th><th>Workflow</th><th>Action</th></tr></thead>
                 <tbody>
-                {% for a in escalated_from_l2 %}
+                {% for a in pending_l3_acceptance %}
                 <tr>
-                    <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:35 }}</a></td>
+                    <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:30 }}</a></td>
                     <td><span class="badge bg-danger">{{ a.severity }}</span></td>
                     <td><small class="text-muted">{{ a.escalated_at|timesince }} ago</small></td>
+                    <td><small class="text-muted">v{{ a.workflow_version }}</small></td>
                     <td>
                         <form method="post" action="{% url 'alerts:escalation_accept' a.id %}" class="d-inline">
                             {% csrf_token %}
+                            <input type="hidden" name="workflow_version" value="{{ a.workflow_version }}">
                             <button type="submit" class="btn btn-sm btn-success py-0"><i class="bi bi-check"></i> Accept</button>
                         </form>
                     </td>
@@ -68,26 +70,41 @@
 </div>
 <div class="col-lg-6">
     <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-exclamation-diamond"></i> Active Incidents</h6>
-        {% if active_incidents %}
-        {% for a in active_incidents %}
+        <h6 class="text-secondary mb-3"><i class="bi bi-exclamation-diamond"></i> Incident Candidates</h6>
+        {% if incident_candidates %}
+        {% for a in incident_candidates %}
         <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
             <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:35 }}</a>
             <div>
                 <span class="badge bg-danger">{{ a.severity }}</span>
-                <small class="text-muted ms-1">{{ a.status }}</small>
+                <small class="text-muted ms-1">{{ a.get_workflow_state_display }}</small>
             </div>
         </div>
         {% endfor %}
         {% else %}
-        <div class="text-center text-muted py-3"><i class="bi bi-shield-check"></i> No active incidents</div>
+        <div class="text-center text-muted py-3"><i class="bi bi-shield-check"></i> No incidents</div>
         {% endif %}
     </div>
 </div>
 {% endblock %}
 
 {% block dashboard_bottom %}
-<div class="col-lg-6">
+<div class="col-lg-4">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-arrow-return-left"></i> Returned to L2</h6>
+        {% if returned_to_l2 %}
+        {% for a in returned_to_l2 %}
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:35 }}</a>
+            <small class="text-muted">{{ a.returned_at|timesince }} ago</small>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No returned cases</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-4">
     <div class="ariba-card p-3">
         <h6 class="text-secondary mb-3"><i class="bi bi-search"></i> Root Cause Analysis Items</h6>
         {% if rca_items %}
@@ -102,9 +119,9 @@
         {% endif %}
     </div>
 </div>
-<div class="col-lg-6">
+<div class="col-lg-4">
     <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-bug"></i> Detection Gaps (Repeated False Positives)</h6>
+        <h6 class="text-secondary mb-3"><i class="bi bi-bug"></i> Detection Gaps (Repeated FPs)</h6>
         {% if detection_gaps %}
         {% for d in detection_gaps %}
         <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
@@ -114,6 +131,30 @@
         {% endfor %}
         {% else %}
         <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No detection gaps identified</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-6">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-braces"></i> Advanced Investigation Backlog</h6>
+        {% if advanced_backlog %}
+        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>Alert</th><th>Severity</th><th>State</th><th>SLA</th></tr></thead>
+                <tbody>
+                {% for a in advanced_backlog %}
+                <tr>
+                    <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:35 }}</a></td>
+                    <td><span class="badge bg-{% if a.severity == 'Critical' %}danger{% elif a.severity == 'High' %}warning{% else %}info{% endif %}">{{ a.severity }}</span></td>
+                    <td><small>{{ a.get_workflow_state_display }}</small></td>
+                    <td><small class="{% if a.sla_status == 'Breached' %}text-danger{% elif a.sla_status == 'Near SLA breach' %}text-warning{% else %}text-success{% endif %}">{{ a.sla_status }}</small></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-inbox"></i> No advanced investigations</div>
         {% endif %}
     </div>
 </div>
@@ -129,29 +170,6 @@
         {% endfor %}
         {% else %}
         <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No tuning backlog</div>
-        {% endif %}
-    </div>
-</div>
-<div class="col-lg-6">
-    <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-braces"></i> Advanced Investigation Queue</h6>
-        {% if advanced_investigation %}
-        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
-            <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>Alert</th><th>Status</th><th>Accepted</th></tr></thead>
-                <tbody>
-                {% for a in advanced_investigation %}
-                <tr>
-                    <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:35 }}</a></td>
-                    <td><small>{{ a.status }}</small></td>
-                    <td><small class="text-muted">{{ a.accepted_at|timesince }} ago</small></td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <div class="text-center text-muted py-3"><i class="bi bi-inbox"></i> No advanced investigations</div>
         {% endif %}
     </div>
 </div>

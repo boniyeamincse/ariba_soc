@@ -5,14 +5,14 @@
 <div class="row g-3 mb-4">
     <div class="col-md-2">
         <div class="kpi-card text-center">
-            <div class="kpi-label">New/Unassigned</div>
-            <div class="kpi-value" style="color: var(--status-new);">{{ new_unassigned|length }}</div>
+            <div class="kpi-label">L1 Queue</div>
+            <div class="kpi-value" style="color: var(--status-new);">{{ new_l1_queue|length }}</div>
         </div>
     </div>
     <div class="col-md-2">
         <div class="kpi-card text-center">
-            <div class="kpi-label">My Assigned</div>
-            <div class="kpi-value" style="color: var(--status-progress);">{{ my_alerts|length }}</div>
+            <div class="kpi-label">My Investigations</div>
+            <div class="kpi-value" style="color: var(--status-progress);">{{ my_investigations|length }}</div>
         </div>
     </div>
     <div class="col-md-2">
@@ -23,20 +23,20 @@
     </div>
     <div class="col-md-2">
         <div class="kpi-card text-center">
-            <div class="kpi-label">SLA Near Breach</div>
+            <div class="kpi-label">Returned from L2</div>
+            <div class="kpi-value" style="color: var(--status-return);">{{ returned_from_l2|length }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">SLA Near/Breached</div>
             <div class="kpi-value" style="color: var(--severity-high);">{{ sla_near_breach|length }}</div>
         </div>
     </div>
     <div class="col-md-2">
         <div class="kpi-card text-center">
-            <div class="kpi-label">SLA Breached</div>
-            <div class="kpi-value" style="color: var(--severity-critical);">{{ sla_breached|length }}</div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="kpi-card text-center">
-            <div class="kpi-label">Need Escalation</div>
-            <div class="kpi-value" style="color: var(--status-escalated);">{{ needs_escalation|length }}</div>
+            <div class="kpi-label">Escalated to L2</div>
+            <div class="kpi-value" style="color: var(--status-escalated);">{{ recently_escalated_l2|length }}</div>
         </div>
     </div>
 </div>
@@ -45,39 +45,47 @@
 {% block dashboard_panels %}
 <div class="col-lg-6">
     <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-inbox"></i> Triage Queue (Unassigned)</h6>
-        {% if triage_queue %}
+        <h6 class="text-secondary mb-3"><i class="bi bi-inbox"></i> L1 Queue (New / Unclaimed)</h6>
+        {% if new_l1_queue %}
         <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
             <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>Alert</th><th>Severity</th><th>Time</th></tr></thead>
+                <thead><tr><th>Alert</th><th>Severity</th><th>State</th><th>SLA</th><th>Action</th></tr></thead>
                 <tbody>
-                {% for a in triage_queue %}
+                {% for a in new_l1_queue %}
                 <tr>
-                    <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:40 }}</a></td>
+                    <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:35 }}</a></td>
                     <td><span class="badge bg-{% if a.severity == 'Critical' %}danger{% elif a.severity == 'High' %}warning{% elif a.severity == 'Medium' %}info{% else %}secondary{% endif %}">{{ a.severity }}</span></td>
-                    <td><small class="text-muted">{{ a.alert_time|timesince }} ago</small></td>
+                    <td><small class="text-muted">{{ a.get_workflow_state_display }}</small></td>
+                    <td><small class="{% if a.sla_status == 'Breached' %}text-danger{% elif a.sla_status == 'Near SLA breach' %}text-warning{% else %}text-success{% endif %}">{{ a.sla_status }}</small></td>
+                    <td>
+                        <form method="post" action="{% url 'alerts:claim' a.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="workflow_version" value="{{ a.workflow_version }}">
+                            <button type="submit" class="btn btn-sm btn-success py-0"><i class="bi bi-hand-index"></i> Claim</button>
+                        </form>
+                    </td>
                 </tr>
                 {% endfor %}
                 </tbody>
             </table>
         </div>
         {% else %}
-        <div class="text-center text-muted py-4"><i class="bi bi-check-circle"></i> No unassigned alerts</div>
+        <div class="text-center text-muted py-4"><i class="bi bi-check-circle"></i> No unclaimed alerts in L1 queue</div>
         {% endif %}
     </div>
 </div>
 <div class="col-lg-6">
     <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-person-check"></i> My Active Alerts</h6>
-        {% if my_alerts %}
+        <h6 class="text-secondary mb-3"><i class="bi bi-person-check"></i> My L1 Investigations</h6>
+        {% if my_investigations %}
         <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
             <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>Alert</th><th>Status</th><th>SLA</th></tr></thead>
+                <thead><tr><th>Alert</th><th>State</th><th>SLA</th></tr></thead>
                 <tbody>
-                {% for a in my_alerts %}
+                {% for a in my_investigations %}
                 <tr>
                     <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:40 }}</a></td>
-                    <td><small>{{ a.status }}</small></td>
+                    <td><small>{{ a.get_workflow_state_display }}</small></td>
                     <td><small class="{% if a.sla_status == 'Breached' %}text-danger{% elif a.sla_status == 'Near SLA breach' %}text-warning{% else %}text-success{% endif %}">{{ a.sla_status }}</small></td>
                 </tr>
                 {% endfor %}
@@ -92,7 +100,22 @@
 {% endblock %}
 
 {% block dashboard_bottom %}
-<div class="col-lg-6">
+<div class="col-lg-4">
+    <div class="ariba-card p-3">
+        <h6 class="text-secondary mb-3"><i class="bi bi-arrow-return-left"></i> Returned from L2</h6>
+        {% if returned_from_l2 %}
+        {% for a in returned_from_l2 %}
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:35 }}</a>
+            <small class="text-muted">{{ a.returned_at|timesince }} ago</small>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No returned cases</div>
+        {% endif %}
+    </div>
+</div>
+<div class="col-lg-4">
     <div class="ariba-card p-3">
         <h6 class="text-secondary mb-3"><i class="bi bi-exclamation-triangle"></i> SLA Near Breach</h6>
         {% if sla_near_breach %}
@@ -107,18 +130,18 @@
         {% endif %}
     </div>
 </div>
-<div class="col-lg-6">
+<div class="col-lg-4">
     <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-arrow-up-circle"></i> Alerts Requiring Escalation to L2</h6>
-        {% if needs_escalation %}
-        {% for a in needs_escalation %}
+        <h6 class="text-secondary mb-3"><i class="bi bi-arrow-up-circle"></i> Recently Escalated to L2</h6>
+        {% if recently_escalated_l2 %}
+        {% for a in recently_escalated_l2 %}
         <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
             <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:35 }}</a>
-            <span class="badge bg-{% if a.severity == 'Critical' %}danger{% else %}warning{% endif %}">{{ a.severity }}</span>
+            <small class="text-muted">{{ a.escalated_at|timesince }} ago</small>
         </div>
         {% endfor %}
         {% else %}
-        <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No alerts need escalation</div>
+        <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No recent escalations</div>
         {% endif %}
     </div>
 </div>

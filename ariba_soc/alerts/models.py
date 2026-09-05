@@ -42,6 +42,47 @@ PRIORITY_CHOICES = [
     ('Critical', 'Critical'),
 ]
 
+WORKFLOW_STATE_CHOICES = [
+    ('NEW', 'New'),
+    ('QUEUED_L1', 'Queued L1'),
+    ('IN_PROGRESS_L1', 'In Progress L1'),
+    ('PENDING_L2_ACCEPTANCE', 'Pending L2 Acceptance'),
+    ('IN_PROGRESS_L2', 'In Progress L2'),
+    ('RETURNED_TO_L1', 'Returned to L1'),
+    ('PENDING_L3_ACCEPTANCE', 'Pending L3 Acceptance'),
+    ('IN_PROGRESS_L3', 'In Progress L3'),
+    ('RETURNED_TO_L2', 'Returned to L2'),
+    ('INCIDENT', 'Incident'),
+    ('RESOLVED', 'Resolved'),
+    ('CLOSED', 'Closed'),
+    ('REOPENED', 'Reopened'),
+    ('ARCHIVED', 'Archived'),
+]
+
+ESCALATION_STATUS_CHOICES = [
+    ('PENDING', 'Pending'),
+    ('ACCEPTED', 'Accepted'),
+    ('RETURNED', 'Returned'),
+    ('CANCELLED', 'Cancelled'),
+    ('COMPLETED', 'Completed'),
+]
+
+CURRENT_TIER_CHOICES = [
+    ('', 'Unassigned'),
+    ('L1', 'L1'),
+    ('L2', 'L2'),
+    ('L3', 'L3'),
+]
+
+CURRENT_OWNER_TEAM_CHOICES = [
+    ('', 'Unassigned'),
+    ('L1', 'L1 Team'),
+    ('L2', 'L2 Team'),
+    ('L3', 'L3 Team'),
+    ('ENG', 'Engineering'),
+    ('MANAGEMENT', 'Management'),
+]
+
 
 class AlertSource(models.Model):
     name = models.CharField(max_length=100)
@@ -136,6 +177,20 @@ class Alert(models.Model):
     returned_at = models.DateTimeField(null=True, blank=True)
     return_reason = models.TextField(blank=True)
 
+    workflow_state = models.CharField(
+        max_length=30, choices=WORKFLOW_STATE_CHOICES, default='NEW',
+        help_text='Normalized workflow state for the L1/L2/L3 escalation engine',
+    )
+    workflow_version = models.PositiveIntegerField(
+        default=1,
+        help_text='Optimistic-concurrency counter; incremented on every state change',
+    )
+    current_owner_team = models.CharField(
+        max_length=20, choices=CURRENT_OWNER_TEAM_CHOICES, blank=True, default='',
+        help_text='Team that currently owns this alert',
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -153,6 +208,8 @@ class Alert(models.Model):
             models.Index(fields=['hostname']),
             models.Index(fields=['source_ip']),
             models.Index(fields=['wazuh_alert_id']),
+            models.Index(fields=['workflow_state']),
+            models.Index(fields=['current_tier']),
         ]
 
     def __str__(self):
@@ -198,6 +255,56 @@ class Alert(models.Model):
         elif self.severity == 'Medium' or level >= 4:
             return 'Medium'
         return 'Low'
+
+
+class AlertEscalation(models.Model):
+    alert = models.ForeignKey(Alert, on_delete=models.CASCADE, related_name='escalation_records')
+    source_tier = models.CharField(max_length=20)
+    target_tier = models.CharField(max_length=20)
+    escalated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='escalated_by_records')
+    escalation_reason = models.TextField()
+    escalation_status = models.CharField(max_length=20, choices=ESCALATION_STATUS_CHOICES, default='PENDING')
+    escalated_at = models.DateTimeField(default=timezone.now)
+    accepted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='escalation_accepted_by')
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    returned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='escalation_returned_by')
+    returned_at = models.DateTimeField(null=True, blank=True)
+    return_reason = models.TextField(blank=True)
+    sla_due_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-escalated_at']
+        indexes = [
+            models.Index(fields=['alert', 'escalation_status']),
+            models.Index(fields=['escalation_status']),
+            models.Index(fields=['target_tier']),
+        ]
+
+    def __str__(self):
+        return f"Escalation {self.id}: {self.source_tier}→{self.target_tier} [{self.escalation_status}]"
+
+
+class AlertTransition(models.Model):
+    alert = models.ForeignKey(Alert, on_delete=models.CASCADE, related_name='transitions')
+    from_state = models.CharField(max_length=30)
+    to_state = models.CharField(max_length=30)
+    action = models.CharField(max_length=50)
+    actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    actor_role = models.CharField(max_length=20)
+    reason = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    request_id = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['alert', '-created_at']),
+            models.Index(fields=['action']),
+        ]
+
+    def __str__(self):
+        return f"{self.alert_id}: {self.from_state}→{self.to_state} [{self.action}]"
 
 
 class AlertComment(models.Model):

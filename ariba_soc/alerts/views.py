@@ -12,9 +12,13 @@ from django.utils import timezone
 from django.contrib.auth.models import User
 from settings_manager.models import SeveritySettings, StatusSettings, VerdictSettings
 from accounts.decorators import role_required, permission_required, TIER_ORDER
-from .models import Alert, AlertComment, AlertAuditLog, Notification
+from .models import (
+    Alert, AlertComment, AlertAuditLog, Notification,
+    AlertEscalation, AlertTransition,
+)
 from .forms import AlertEditForm, AlertCommentForm
 from .services import update_alert, assign_alert, create_audit_log, _notify_escalation
+from . import workflow
 
 
 def check_perm(user, perm):
@@ -23,6 +27,18 @@ def check_perm(user, perm):
         raise PermissionDenied('Your account is inactive.')
     if not profile.has_permission(perm):
         raise PermissionDenied(f"You don't have permission: {perm}")
+
+
+def _handle_workflow_error(request, exc, alert_id=None):
+    if exc.status_code == 409:
+        messages.error(request, str(exc))
+    elif exc.status_code == 403:
+        messages.error(request, str(exc))
+    else:
+        messages.error(request, str(exc))
+    if alert_id:
+        return redirect('alerts:detail', alert_id=alert_id)
+    return redirect('alerts:table')
 
 
 @login_required
@@ -149,13 +165,18 @@ def alert_board(request):
 @login_required
 @permission_required('can_view_alerts')
 def alert_detail(request, alert_id):
-    alert = get_object_or_404(Alert.objects.select_related('assignee', 'source', 'assigned_by'), id=alert_id)
+    alert = get_object_or_404(
+        Alert.objects.select_related('assignee', 'source', 'assigned_by'), id=alert_id,
+    )
     comments = alert.comments.select_related('user').all()
     audit_logs = alert.audit_logs.select_related('user').all()[:50]
+    transitions = alert.transitions.select_related('actor').all()[:50]
+    escalation_records = alert.escalation_records.all()[:10]
     form = AlertEditForm(instance=alert, user=request.user)
     return render(request, 'ariba_soc/alert_detail.html', {
-        'alert': alert, 'comments': comments, 'audit_logs': audit_logs, 'form': form,
-        'users': User.objects.filter(is_active=True),
+        'alert': alert, 'comments': comments, 'audit_logs': audit_logs,
+        'transitions': transitions, 'escalation_records': escalation_records,
+        'form': form, 'users': User.objects.filter(is_active=True),
     })
 
 
@@ -212,150 +233,126 @@ def alert_add_comment(request, alert_id):
     return redirect('alerts:detail', alert_id=alert_id)
 
 
-ESCALATION_TIERS = {
-    'l2': 'Escalated to L2',
-    'l3': 'Escalated to L3',
-    'irit': 'Escalated to IR/IT',
-    'management': 'Escalated to Management',
-}
+# ---------------------------------------------------------------------------
+# Workflow endpoints
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_POST
+def alert_claim(request, alert_id):
+    version = int(request.POST.get('workflow_version', 1))
+    try:
+        alert = workflow.claim_alert(alert_id, request.user, version, request=request)
+        messages.success(request, 'Alert claimed and investigation started.')
+    except workflow.WorkflowError as exc:
+        return _handle_workflow_error(request, exc, alert_id)
+    return redirect('alerts:detail', alert_id=alert.id)
 
 
 @login_required
-@permission_required('can_escalate_alert')
+@require_POST
 def alert_escalate(request, alert_id):
-    alert = get_object_or_404(Alert, id=alert_id)
-    if request.method == 'POST':
-        with transaction.atomic():
-            reason = request.POST.get('escalation_reason', '')
-            tier = request.POST.get('tier', 'l2')
-            if not reason:
-                messages.error(request, 'Escalation reason is required.')
-                return redirect('alerts:detail', alert_id=alert_id)
-
-            target_status = ESCALATION_TIERS.get(tier, 'Escalated to L2')
-            source_tier = getattr(request.user.analyst_profile, 'role', '')
-            target_tier_map = {'l2': 'L2', 'l3': 'L3', 'irit': 'IR/IT', 'management': 'Management'}
-            target_tier = target_tier_map.get(tier, tier.upper())
-
-            alert.status = target_status
-            alert.is_escalated = True
-            alert.escalated_at = alert.escalated_at or timezone.now()
-            alert.escalation_reason = reason
-            alert.escalated_from_tier = source_tier
-            alert.escalated_to_tier = target_tier
-            alert.escalation_status = 'pending_acceptance'
-            alert.current_tier = target_tier
-            alert.save()
-
-            AlertComment.objects.create(
-                alert=alert, user=request.user,
-                comment=f"{target_status}: {reason}", comment_type='Escalation Note'
-            )
-            create_audit_log(alert, request.user, 'Escalated', '', f'{target_status}: {reason}', request)
-            _notify_escalation(alert, f'{target_status} — {reason}')
-            messages.success(request, f'Alert escalated: {target_status}.')
-    return redirect('alerts:detail', alert_id=alert_id)
+    version = int(request.POST.get('workflow_version', 1))
+    reason = request.POST.get('escalation_reason', '').strip()
+    tier = request.POST.get('tier', 'L2').upper()
+    try:
+        alert = workflow.escalate_alert(alert_id, request.user, tier, reason, version, request=request)
+        messages.success(request, f'Alert escalated to {tier}.')
+    except workflow.WorkflowError as exc:
+        return _handle_workflow_error(request, exc, alert_id)
+    return redirect('alerts:detail', alert_id=alert.id)
 
 
 @login_required
+@require_POST
 def alert_escalation_accept(request, alert_id):
-    alert = get_object_or_404(Alert, id=alert_id)
-    if request.method != 'POST':
-        return redirect('alerts:detail', alert_id=alert_id)
-
-    profile = getattr(request.user, 'analyst_profile', None)
-    if not profile:
-        raise PermissionDenied('No profile.')
-
-    target_tier = alert.escalated_to_tier
-    user_role = profile.role
-    tier_level = TIER_ORDER.get(user_role, 0)
-    required_level = TIER_ORDER.get(target_tier, 0)
-    if tier_level < required_level and user_role not in ('SOC_MGR', 'ADMIN'):
-        raise PermissionDenied(f'You cannot accept alerts escalated to {target_tier}.')
-
-    with transaction.atomic():
-        alert = Alert.objects.select_for_update().get(id=alert_id)
-        if alert.escalation_status != 'pending_acceptance':
-            messages.error(request, 'This escalation is no longer pending.')
-            return redirect('alerts:detail', alert_id=alert_id)
-
-        alert.escalation_status = 'accepted'
-        alert.accepted_by = request.user
-        alert.accepted_at = timezone.now()
-        alert.assignee = request.user
-        alert.save()
-
-        AlertComment.objects.create(
-            alert=alert, user=request.user,
-            comment=f'Accepted by {request.user.username}', comment_type='Analyst Note'
-        )
-        create_audit_log(alert, request.user, 'Status Changed', 'pending_acceptance', 'accepted', request)
+    version = int(request.POST.get('workflow_version', 1))
+    try:
+        alert = workflow.accept_escalation(alert_id, request.user, version, request=request)
         messages.success(request, 'Escalation accepted.')
-    return redirect('alerts:detail', alert_id=alert_id)
+    except workflow.WorkflowError as exc:
+        return _handle_workflow_error(request, exc, alert_id)
+    return redirect('alerts:detail', alert_id=alert.id)
 
 
 @login_required
+@require_POST
 def alert_escalation_return(request, alert_id):
-    alert = get_object_or_404(Alert, id=alert_id)
-    if request.method != 'POST':
-        return redirect('alerts:detail', alert_id=alert_id)
-
-    profile = getattr(request.user, 'analyst_profile', None)
-    if not profile:
-        raise PermissionDenied('No profile.')
-
-    with transaction.atomic():
-        alert = Alert.objects.select_for_update().get(id=alert_id)
-        if alert.escalation_status != 'accepted':
-            messages.error(request, 'This alert is not in accepted state.')
-            return redirect('alerts:detail', alert_id=alert_id)
-
-        return_reason = request.POST.get('return_reason', '')
-        alert.escalation_status = 'returned'
-        alert.returned_by = request.user
-        alert.returned_at = timezone.now()
-        alert.return_reason = return_reason
-
-        source_tier = alert.escalated_from_tier or 'L1'
-        alert.status = f'Escalated to {source_tier}'
-        alert.current_tier = source_tier
-        alert.save()
-
-        AlertComment.objects.create(
-            alert=alert, user=request.user,
-            comment=f'Returned to {source_tier}: {return_reason}', comment_type='Escalation Note'
-        )
-        create_audit_log(alert, request.user, 'Status Changed', 'accepted', f'returned to {source_tier}', request)
-        messages.success(request, f'Alert returned to {source_tier}.')
-    return redirect('alerts:detail', alert_id=alert_id)
+    version = int(request.POST.get('workflow_version', 1))
+    reason = request.POST.get('return_reason', '').strip()
+    try:
+        alert = workflow.return_escalation(alert_id, request.user, reason, version, request=request)
+        messages.success(request, f'Alert returned to {alert.escalated_from_tier or "L1"}.')
+    except workflow.WorkflowError as exc:
+        return _handle_workflow_error(request, exc, alert_id)
+    return redirect('alerts:detail', alert_id=alert.id)
 
 
 @login_required
+@require_POST
+def alert_resolve(request, alert_id):
+    version = int(request.POST.get('workflow_version', 1))
+    resolution = request.POST.get('resolution', '').strip()
+    try:
+        alert = workflow.resolve_alert(alert_id, request.user, resolution, version, request=request)
+        messages.success(request, 'Alert resolved.')
+    except workflow.WorkflowError as exc:
+        return _handle_workflow_error(request, exc, alert_id)
+    return redirect('alerts:detail', alert_id=alert.id)
+
+
+@login_required
+@require_POST
 def alert_close(request, alert_id):
-    check_perm(request.user, 'can_close_alert')
-    alert = get_object_or_404(Alert, id=alert_id)
-    if request.method == 'POST':
-        verdict = request.POST.get('verdict', '')
-        comment = request.POST.get('closure_comment', '')
-        if not verdict or verdict == 'None':
-            messages.error(request, 'Verdict must be set before closing.')
-            return redirect('alerts:detail', alert_id=alert_id)
-        if not comment:
-            messages.error(request, 'Closure comment is required.')
-            return redirect('alerts:detail', alert_id=alert_id)
-        old_status = alert.status
-        alert.status = 'Closed'
-        alert.verdict = verdict
-        alert.closure_reason = comment
-        alert.save()
-        AlertComment.objects.create(
-            alert=alert, user=request.user, comment=comment, comment_type='Closure Note'
-        )
-        create_audit_log(alert, request.user, 'Closed', old_status, verdict, request)
+    version = int(request.POST.get('workflow_version', 1))
+    verdict = request.POST.get('verdict', '').strip()
+    closure_reason = request.POST.get('closure_comment', '').strip()
+    if not verdict or verdict == 'None':
+        messages.error(request, 'Verdict must be set before closing.')
+        return redirect('alerts:detail', alert_id=alert_id)
+    if not closure_reason:
+        messages.error(request, 'Closure comment is required.')
+        return redirect('alerts:detail', alert_id=alert_id)
+    try:
+        alert = workflow.close_alert(alert_id, request.user, verdict, closure_reason, version, request=request)
         messages.success(request, 'Alert closed.')
+    except workflow.WorkflowError as exc:
+        return _handle_workflow_error(request, exc, alert_id)
+    return redirect('alerts:detail', alert_id=alert.id)
+
+
+@login_required
+@require_POST
+def alert_reopen(request, alert_id):
+    version = int(request.POST.get('workflow_version', 1))
+    reason = request.POST.get('reopen_reason', 'Reopened by analyst').strip()
+    try:
+        alert = workflow.reopen_alert(alert_id, request.user, reason, version, request=request)
+        messages.success(request, 'Alert reopened.')
+    except workflow.WorkflowError as exc:
+        return _handle_workflow_error(request, exc, alert_id)
+    return redirect('alerts:detail', alert_id=alert.id)
+
+
+@login_required
+@require_POST
+def alert_create_incident(request, alert_id):
+    version = int(request.POST.get('workflow_version', 1))
+    reason = request.POST.get('incident_reason', '').strip()
+    if not reason:
+        messages.error(request, 'Incident reason is required.')
+        return redirect('alerts:detail', alert_id=alert_id)
+    try:
+        alert = workflow.create_incident(alert_id, request.user, reason, version, request=request)
+        messages.success(request, 'Incident created.')
+    except workflow.WorkflowError as exc:
+        return _handle_workflow_error(request, exc, alert_id)
     return redirect('alerts:detail', alert_id=alert_id)
 
+
+# ---------------------------------------------------------------------------
+# Legacy / compatibility endpoints (kept for backward compat)
+# ---------------------------------------------------------------------------
 
 @login_required
 @require_POST
@@ -367,24 +364,6 @@ def alert_archive(request, alert_id):
     create_audit_log(alert, request.user, 'Archived', '', 'Archived', request)
     messages.success(request, 'Alert archived.')
     return redirect('alerts:table')
-
-
-@login_required
-@permission_required('can_close_alert')
-def alert_reopen(request, alert_id):
-    alert = get_object_or_404(Alert, id=alert_id)
-    if alert.status not in ('Closed', 'Archived'):
-        messages.error(request, 'Only closed or archived alerts can be reopened.')
-        return redirect('alerts:detail', alert_id=alert_id)
-    old_status = alert.status
-    alert.status = 'New'
-    alert.closed_at = None
-    alert.archived_at = None
-    alert.closure_reason = ''
-    alert.save()
-    create_audit_log(alert, request.user, 'Reopened', old_status, 'New', request)
-    messages.success(request, 'Alert reopened.')
-    return redirect('alerts:detail', alert_id=alert_id)
 
 
 @login_required
@@ -404,10 +383,12 @@ def my_alerts(request):
 def alerts_api(request):
     data = list(Alert.objects.select_related('assignee').only(
         'id', 'alert_name', 'severity', 'status', 'verdict', 'priority',
-        'assignee_id', 'source_name', 'hostname', 'alert_time', 'rule_id', 'sla_status'
+        'assignee_id', 'source_name', 'hostname', 'alert_time', 'rule_id', 'sla_status',
+        'workflow_state', 'current_tier', 'workflow_version',
     ).order_by('-alert_time')[:100].values(
         'id', 'alert_name', 'severity', 'status', 'verdict', 'priority',
-        'assignee__username', 'source_name', 'hostname', 'alert_time', 'rule_id', 'sla_status'
+        'assignee__username', 'source_name', 'hostname', 'alert_time', 'rule_id', 'sla_status',
+        'workflow_state', 'current_tier', 'workflow_version',
     ))
     return JsonResponse({'alerts': data})
 

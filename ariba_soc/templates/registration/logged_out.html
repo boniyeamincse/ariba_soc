@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-4 text-center">
+            <div class="ariba-card p-5">
+                <i class="bi bi-box-arrow-right text-warning" style="font-size: 3rem;"></i>
+                <h4 class="mt-3">Confirm Logout</h4>
+                <p class="text-secondary mt-2">Are you sure you want to log out?</p>
+                <form method="post" action="{% url 'accounts:logout' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-ariba-primary mt-2">
+                        <i class="bi bi-box-arrow-right"></i> Logout
+                    </button>
+                    <a href="{% url 'accounts:role_redirect' %}" class="btn btn-ariba-outline mt-2 ms-2">
+                        <i class="bi bi-arrow-left"></i> Cancel
+                    </a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
