@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.core.exceptions import PermissionDenied
 from django.views.decorators.http import require_POST
+from django.db import transaction
 from django.db.models import Q
 from django.core.paginator import Paginator
 from django.utils import timezone
@@ -335,46 +336,48 @@ def alert_bulk_action(request):
         return redirect('alerts:table')
     alerts = Alert.objects.filter(id__in=alert_ids)
     count = alerts.count()
-    if action == 'assign':
-        check_perm(request.user, 'can_assign_others')
-        user_id = value
-        if user_id:
-            assignee = get_object_or_404(User, id=user_id)
+    
+    with transaction.atomic():
+        if action == 'assign':
+            check_perm(request.user, 'can_assign_others')
+            user_id = value
+            if user_id:
+                assignee = get_object_or_404(User, id=user_id)
+                for alert in alerts:
+                    assign_alert(alert, request.user, assignee, request)
+            messages.success(request, f'{count} alerts assigned.')
+        elif action == 'status':
+            check_perm(request.user, 'can_change_status')
+            old_val = ', '.join(alerts.values_list('status', flat=True).distinct())
+            alerts.update(status=value)
             for alert in alerts:
-                assign_alert(alert, request.user, assignee, request)
-        messages.success(request, f'{count} alerts assigned.')
-    elif action == 'status':
-        check_perm(request.user, 'can_change_status')
-        old_val = ', '.join(alerts.values_list('status', flat=True).distinct())
-        alerts.update(status=value)
-        for alert in alerts:
-            create_audit_log(alert, request.user, 'Status Changed', old_val, value, request)
-        messages.success(request, f'{count} alerts status changed to {value}.')
-    elif action == 'verdict':
-        check_perm(request.user, 'can_change_verdict')
-        old_val = ', '.join(alerts.values_list('verdict', flat=True).distinct())
-        alerts.update(verdict=value)
-        for alert in alerts:
-            create_audit_log(alert, request.user, 'Verdict Changed', old_val, value, request)
-        messages.success(request, f'{count} alerts verdict changed to {value}.')
-    elif action == 'close':
-        check_perm(request.user, 'can_close_alert')
-        old_val = ', '.join(alerts.values_list('status', flat=True).distinct())
-        for alert in alerts:
-            alert.status = 'Closed'
-            alert.verdict = value or 'None'
-            alert.closed_at = timezone.now()
-            alert.save()
-            create_audit_log(alert, request.user, 'Closed', old_val, value, request)
-        messages.success(request, f'{count} alerts closed.')
-    elif action == 'archive':
-        check_perm(request.user, 'can_archive')
-        alerts.update(status='Archived')
-        for alert in alerts:
-            create_audit_log(alert, request.user, 'Archived', '', 'Archived', request)
-        messages.success(request, f'{count} alerts archived.')
-    else:
-        messages.error(request, f'Unknown action: {action}')
+                create_audit_log(alert, request.user, 'Status Changed', old_val, value, request)
+            messages.success(request, f'{count} alerts status changed to {value}.')
+        elif action == 'verdict':
+            check_perm(request.user, 'can_change_verdict')
+            old_val = ', '.join(alerts.values_list('verdict', flat=True).distinct())
+            alerts.update(verdict=value)
+            for alert in alerts:
+                create_audit_log(alert, request.user, 'Verdict Changed', old_val, value, request)
+            messages.success(request, f'{count} alerts verdict changed to {value}.')
+        elif action == 'close':
+            check_perm(request.user, 'can_close_alert')
+            old_val = ', '.join(alerts.values_list('status', flat=True).distinct())
+            for alert in alerts:
+                alert.status = 'Closed'
+                alert.verdict = value or 'None'
+                alert.closed_at = timezone.now()
+                alert.save()
+                create_audit_log(alert, request.user, 'Closed', old_val, value, request)
+            messages.success(request, f'{count} alerts closed.')
+        elif action == 'archive':
+            check_perm(request.user, 'can_archive')
+            alerts.update(status='Archived')
+            for alert in alerts:
+                create_audit_log(alert, request.user, 'Archived', '', 'Archived', request)
+            messages.success(request, f'{count} alerts archived.')
+        else:
+            messages.error(request, f'Unknown action: {action}')
     return redirect('alerts:table')
 
 
