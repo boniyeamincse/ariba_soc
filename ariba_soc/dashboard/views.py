@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.db.models import Count, Q, Avg, F
 from django.http import JsonResponse
 from django.utils import timezone
+from django.views.decorators.cache import cache_page
 from datetime import timedelta
 from alerts.models import Alert
 
@@ -30,6 +31,7 @@ def dashboard_home(request):
     return render(request, 'ariba_soc/dashboard_home.html', context)
 
 
+@cache_page(60)
 @login_required
 def dashboard_stats_api(request):
     today = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
