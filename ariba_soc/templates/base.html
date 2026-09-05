@@ -47,6 +47,7 @@
                     {% if role != 'VIEWER' and role != 'MONITOR' %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'hunting:live_search' %}"><i class="bi bi-crosshair"></i> Threat Hunting</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'vulnerabilities:overview' %}"><i class="bi bi-shield-exclamation"></i> Vulnerabilities</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'incidents:list' %}"><i class="bi bi-exclamation-triangle"></i> Incidents</a></li>
                     {% endif %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'audit:list' %}"><i class="bi bi-journal-text"></i> Audit Logs</a></li>
                     {% endif %}

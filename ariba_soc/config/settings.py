@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'monitor',
     'hunting',
     'vulnerabilities',
+    'incidents',
 ]
 
 MIDDLEWARE = [

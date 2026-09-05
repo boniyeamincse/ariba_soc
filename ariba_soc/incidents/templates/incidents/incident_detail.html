@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ incident.incident_number }} - Incident{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'incidents/css/incidents.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">
+            <i class="fas fa-exclamation-triangle me-2 text-{% if incident.severity == 'CRITICAL' %}danger{% elif incident.severity == 'HIGH' %}warning{% else %}info{% endif %}"></i>
+            {{ incident.incident_number }} — {{ incident.title }}
+        </h4>
+        <a href="{% url 'incidents:list' %}" class="btn btn-outline-secondary btn-sm">Back</a>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-8">
+            <div class="card mb-3">
+                <div class="card-header"><h6 class="mb-0">Incident Details</h6></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Status:</strong> <span class="badge bg-info">{{ incident.get_status_display }}</span></p>
+                            <p><strong>Severity:</strong> <span class="badge bg-{% if incident.severity == 'CRITICAL' %}danger{% elif incident.severity == 'HIGH' %}warning text-dark{% else %}secondary{% endif %}">{{ incident.severity }}</span></p>
+                            <p><strong>Priority:</strong> {{ incident.priority }}</p>
+                            <p><strong>Owner:</strong> {{ incident.owner.username|default:"Unassigned" }}</p>
+                            <p><strong>Team:</strong> {{ incident.response_team|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Created by:</strong> {{ incident.created_by.username|default:"-" }}</p>
+                            <p><strong>Business Unit:</strong> {{ incident.business_unit|default:"-" }}</p>
+                            <p><strong>Service:</strong> {{ incident.affected_service|default:"-" }}</p>
+                            <p><strong>Detection:</strong> {{ incident.detection_source|default:"-" }}</p>
+                            <p><strong>Version:</strong> {{ incident.version }}</p>
+                        </div>
+                    </div>
+                    <p><strong>Description:</strong> {{ incident.description }}</p>
+                    {% if incident.business_impact %}
+                    <p><strong>Business Impact:</strong> {{ incident.business_impact }}</p>
+                    {% endif %}
+                    {% if incident.declaration_reason %}
+                    <p><strong>Declaration Reason:</strong> {{ incident.declaration_reason }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header"><h6 class="mb-0">Linked Alerts ({{ linked_alerts|length }})</h6></div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-secondary">
+                            <tr><th>#</th><th>Alert</th><th>Severity</th><th>Status</th><th>Primary</th><th>Linked by</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for la in linked_alerts %}
+                            <tr>
+                                <td>{{ la.alert.id }}</td>
+                                <td>{{ la.alert.alert_name|truncatechars:40 }}</td>
+                                <td>{{ la.alert.severity }}</td>
+                                <td>{{ la.alert.workflow_state|default:la.alert.status }}</td>
+                                <td>{% if la.is_primary %}<span class="badge bg-warning text-dark">Primary</span>{% endif %}</td>
+                                <td>{{ la.linked_by.username|default:"-" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="6" class="text-center text-muted py-2">No linked alerts</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header"><h6 class="mb-0">Notes</h6></div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'incidents:notes' incident_number=incident.incident_number %}" class="mb-3">
+                        {% csrf_token %}
+                        <div class="row g-2">
+                            <div class="col-md-3">{{ note_form.note_type }}</div>
+                            <div class="col-md-7">{{ note_form.note }}</div>
+                            <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">Add Note</button></div>
+                        </div>
+                    </form>
+                    {% for n in notes %}
+                    <div class="border-bottom pb-2 mb-2">
+                        <small class="text-muted">{{ n.created_at|date:"d M Y H:i" }} — {{ n.get_note_type_display }} by {{ n.created_by.username }}</small>
+                        <p class="mb-0 mt-1">{{ n.note }}</p>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted">No notes yet</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card mb-3">
+                <div class="card-header"><h6 class="mb-0">Actions</h6></div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'incidents:assign' incident_number=incident.incident_number %}" class="mb-2">
+                        {% csrf_token %}
+                        <select name="owner" class="form-select form-select-sm mb-1">
+                            <option value="">Assign owner...</option>
+                            {% for u in users %}<option value="{{ u.id }}">{{ u.username }}</option>{% endfor %}
+                        </select>
+                        <input type="text" name="response_team" class="form-control form-control-sm mb-1" placeholder="Response team" value="{{ incident.response_team }}">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">Assign</button>
+                    </form>
+
+                    {% for t in allowed_transitions %}
+                    <form method="post" action="{% url 'incidents:transition' incident_number=incident.incident_number %}" class="mb-2">
+                        {% csrf_token %}
+                        {{ transition_form.version }}
+                        <input type="hidden" name="action" value="{{ t|lower }}">
+                        {% if t == 'CONTAIN' or t == 'ERADICATE' or t == 'RECOVER' or t == 'RESOLVE' or t == 'CLOSE' or t == 'REOPEN' %}
+                        <textarea name="evidence" class="form-control form-control-sm mb-1" rows="2" placeholder="Evidence/reason..."></textarea>
+                        {% endif %}
+                        <button type="submit" class="btn btn-{% if t == 'CLOSE' %}danger{% elif t == 'REOPEN' %}warning{% elif t == 'RESOLVE' %}success{% else %}info{% endif %} btn-sm w-100">{{ t|title }}</button>
+                    </form>
+                    {% empty %}
+                    <p class="text-muted">No transitions available</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h6 class="mb-0">Timeline</h6></div>
+                <div class="card-body" style="max-height:500px;overflow-y:auto;">
+                    {% for event in timeline %}
+                    <div class="border-bottom pb-2 mb-2">
+                        <small class="text-muted">{{ event.created_at|date:"d M Y H:i" }}</small>
+                        <br><strong>{{ event.title }}</strong>
+                        <br><small>by {{ event.actor.username|default:"system" }} ({{ event.event_type }})</small>
+                        {% if event.description %}<br><small class="text-muted">{{ event.description|truncatechars:150 }}</small>{% endif %}
+                    </div>
+                    {% empty %}
+                    <p class="text-muted">No timeline events</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

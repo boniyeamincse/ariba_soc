@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Create Incident{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <h4 class="mb-3"><i class="fas fa-plus me-2"></i>Create Incident</h4>
+
+    {% if alerts %}
+    <div class="alert alert-info">
+        <strong>Creating from {{ alerts|length }} alert(s):</strong>
+        {% for a in alerts %}{{ a.alert_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+                {% for aid in alert_ids %}
+                <input type="hidden" name="alerts" value="{{ aid }}">
+                {% endfor %}
+
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <label class="form-label">Title *</label>
+                        {{ form.title }}
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">Description *</label>
+                        {{ form.description }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Severity *</label>
+                        {{ form.severity }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Priority *</label>
+                        {{ form.priority }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Business Unit</label>
+                        {{ form.business_unit }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Affected Service</label>
+                        {{ form.affected_service }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Business Impact</label>
+                        {{ form.business_impact }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Response Team</label>
+                        {{ form.response_team }}
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">Declaration Reason *</label>
+                        {{ form.declaration_reason }}
+                    </div>
+                    <div class="col-md-12">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Create Incident</button>
+                        <a href="{% url 'alerts:table' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,6 @@
+.incident-timeline-item { border-left: 3px solid #dee2e6; padding-left: 1rem; margin-bottom: 0.5rem; }
+.incident-timeline-item.event-CREATED { border-color: #0d6efd; }
+.incident-timeline-item.event-CONTAINED { border-color: #ffc107; }
+.incident-timeline-item.event-ERADICATED { border-color: #dc3545; }
+.incident-timeline-item.event-RECOVERED { border-color: #198754; }
+.incident-timeline-item.event-CLOSED { border-color: #6c757d; }

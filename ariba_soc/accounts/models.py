@@ -67,6 +67,13 @@ class RolePermission(models.Model):
     can_export_reports = models.BooleanField(default=False)
     can_use_basic_hunting = models.BooleanField(default=True)
     can_use_advanced_hunting = models.BooleanField(default=False)
+    can_view_incidents = models.BooleanField(default=True)
+    can_create_incident = models.BooleanField(default=False)
+    can_assign_incident = models.BooleanField(default=False)
+    can_manage_incident = models.BooleanField(default=False)
+    can_close_incident = models.BooleanField(default=False)
+    can_reopen_incident = models.BooleanField(default=False)
+    can_link_incident_alerts = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = 'Role Permission'
