@@ -3,47 +3,112 @@
 
 {% block settings_content %}
 <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <h4 class="m-0"><i class="bi bi-shield-lock"></i> Role & Permission Matrix</h4>
-    </div>
-    <p class="settings-page-desc">Configure permissions for each SOC role. Checked = allowed.</p>
 
-    <div class="ariba-card p-3">
-        <form method="post">
-            {% csrf_token %}
-            <div class="table-responsive">
-                <table class="table ariba-table">
-                    <thead>
-                        <tr>
-                            <th style="min-width:160px">Permission</th>
-                            {% for rc in role_choices %}
-                            <th class="text-center">{{ rc.1 }}</th>
-                            {% endfor %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for perm_display, perm_field in permissions %}
-                        <tr>
-                            <td><small>{{ perm_display }}</small></td>
-                            {% for rc in role_choices %}
-                            <td class="text-center">
-                                {% for r in roles %}
-                                {% if r.role == rc.0 %}
-                                <input type="checkbox" class="form-check-input" name="{{ r.role }}_{{ perm_field }}"
-                                       {% if r|attr:perm_field %}checked{% endif %}>
-                                {% endif %}
-                                {% endfor %}
-                            </td>
-                            {% endfor %}
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <div class="mt-3">
-                <button type="submit" class="btn btn-ariba-primary"><i class="bi bi-check-lg"></i> Save Permissions</button>
-            </div>
-        </form>
+  {# ── Header ── #}
+  <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
+    <div>
+      <h4 class="m-0"><i class="bi bi-shield-lock"></i> Role &amp; Permission Matrix</h4>
+      <p class="settings-page-desc mb-0">
+        All {{ all_ui_fields|length }} permissions across {{ role_choices|length }} roles.
+        <span class="text-warning small ms-1"><i class="bi bi-exclamation-triangle"></i> Save applies immediately to all active sessions.</span>
+      </p>
     </div>
+  </div>
+
+  {# ── Legend ── #}
+  <div class="d-flex flex-wrap gap-3 mb-3 mt-2">
+    {% for rc, label in role_choices %}
+    <div class="d-flex align-items-center gap-1">
+      <span class="severity-badge role-badge-{{ rc|lower }}" style="font-size:0.7rem;">{{ rc }}</span>
+      <span class="text-muted small">{{ label }}</span>
+      <span class="badge bg-secondary" style="font-size:0.65rem;" title="{{ role_user_counts|dictvalue:rc }} users with this role">
+        {{ role_user_counts|dictvalue:rc }}u
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="d-flex gap-2 mb-3">
+      <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-check-lg"></i> Save Permissions</button>
+      <button type="button" class="btn btn-ariba-outline btn-sm" onclick="setAll(true)"><i class="bi bi-check2-all"></i> Check All</button>
+      <button type="button" class="btn btn-ariba-outline btn-sm" onclick="setAll(false)"><i class="bi bi-x-lg"></i> Uncheck All</button>
+    </div>
+
+    <div class="ariba-card p-0">
+      <div class="table-responsive">
+        <table class="table ariba-table mb-0" id="permMatrix">
+          <thead class="sticky-top" style="z-index:2;">
+            <tr>
+              <th style="min-width:185px; background:var(--ariba-card-bg);">Permission</th>
+              {% for rc, label in role_choices %}
+              <th class="text-center" style="min-width:80px; background:var(--ariba-card-bg);">
+                <span class="severity-badge role-badge-{{ rc|lower }}" style="font-size:0.68rem;">{{ rc }}</span>
+                <div class="text-muted" style="font-size:0.62rem; margin-top:2px;">{{ role_user_counts|dictvalue:rc }} user{{ role_user_counts|dictvalue:rc|pluralize }}</div>
+              </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for group_name, perms in permission_groups %}
+            {# ── Category separator row ── #}
+            <tr class="perm-group-header">
+              <td colspan="{{ role_choices|length|add:1 }}"
+                  style="background:rgba(var(--ariba-accent-rgb,59,130,246),0.07); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--ariba-accent,#60a5fa); padding:0.35rem 0.75rem; border-bottom:1px solid var(--ariba-border);">
+                <i class="bi {% if group_name == 'Alert Triage' %}bi-bell
+                              {% elif group_name == 'Incidents' %}bi-journal-text
+                              {% elif group_name == 'Remediation' %}bi-bandaid
+                              {% elif group_name == 'Threat Hunting' %}bi-crosshair
+                              {% elif group_name == 'Reports' %}bi-bar-chart-line
+                              {% elif group_name == 'Administration' %}bi-gear
+                              {% else %}bi-dot{% endif %} me-1"></i>
+                {{ group_name }}
+              </td>
+            </tr>
+            {# ── Permission rows ── #}
+            {% for perm_display, perm_field in perms %}
+            <tr class="perm-row">
+              <td class="text-muted small ps-3" style="font-size:0.8rem;">{{ perm_display }}</td>
+              {% for rc, label in role_choices %}
+              <td class="text-center">
+                {% for rp in roles %}
+                {% if rp.role == rc %}
+                <input type="checkbox"
+                       class="form-check-input perm-cb"
+                       name="{{ rp.role }}_{{ perm_field }}"
+                       data-role="{{ rp.role }}"
+                       data-field="{{ perm_field }}"
+                       {% if rp|attr:perm_field %}checked{% endif %}
+                       title="{{ label }}: {{ perm_display }}">
+                {% endif %}
+                {% endfor %}
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="mt-3 d-flex gap-2">
+      <button type="submit" class="btn btn-ariba-primary"><i class="bi bi-check-lg"></i> Save Permissions</button>
+    </div>
+  </form>
 </div>
+
+<style>
+  .perm-row:hover td { background: rgba(255,255,255,0.03); }
+  .perm-row td { padding-top: 0.3rem; padding-bottom: 0.3rem; }
+  .perm-cb { cursor: pointer; width: 1rem; height: 1rem; }
+  .perm-cb:checked { background-color: var(--ariba-accent, #3b82f6); border-color: var(--ariba-accent, #3b82f6); }
+</style>
+
+<script>
+function setAll(state) {
+  document.querySelectorAll('.perm-cb').forEach(cb => cb.checked = state);
+}
+</script>
 {% endblock %}

@@ -296,37 +296,82 @@ def role_permission(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
         return redirect('alerts:table')
+
+    # All permissions shown in the matrix, grouped by category
+    PERMISSION_GROUPS = [
+        ('Alert Triage', [
+            ('View Alerts', 'can_view_alerts'),
+            ('Assign to Self', 'can_assign_self'),
+            ('Assign to Others', 'can_assign_others'),
+            ('Reassign', 'can_reassign'),
+            ('Change Status', 'can_change_status'),
+            ('Change Severity', 'can_change_severity'),
+            ('Change Verdict', 'can_change_verdict'),
+            ('Close Alert', 'can_close_alert'),
+            ('Escalate Alert', 'can_escalate_alert'),
+            ('Archive', 'can_archive'),
+        ]),
+        ('Incidents', [
+            ('View Incidents', 'can_view_incidents'),
+            ('Create Incident', 'can_create_incident'),
+            ('Mark Alert as Incident', 'can_mark_incident'),
+            ('Assign Incident', 'can_assign_incident'),
+            ('Manage Incident', 'can_manage_incident'),
+            ('Close Incident', 'can_close_incident'),
+            ('Reopen Incident', 'can_reopen_incident'),
+            ('Link Alerts to Incident', 'can_link_incident_alerts'),
+        ]),
+        ('Remediation', [
+            ('Add Remediation', 'can_add_remediation'),
+        ]),
+        ('Threat Hunting', [
+            ('Basic Hunting', 'can_use_basic_hunting'),
+            ('Advanced Hunting', 'can_use_advanced_hunting'),
+        ]),
+        ('Reports', [
+            ('View Reports', 'can_view_reports'),
+            ('Export Reports', 'can_export_reports'),
+        ]),
+        ('Administration', [
+            ('Manage Users', 'can_manage_users'),
+            ('Manage Wazuh', 'can_manage_wazuh'),
+            ('View Audit Logs', 'can_view_audit_logs'),
+        ]),
+    ]
+
+    # Flat list of all permission field names shown in the UI
+    ALL_UI_FIELDS = [pf for _, perms in PERMISSION_GROUPS for _, pf in perms]
+
     roles = RolePermission.objects.all()
+    role_map = {rp.role: rp for rp in roles}
+
     if request.method == 'POST':
         for role_choice, _ in ROLE_CHOICES:
-            rp, _ = RolePermission.objects.get_or_create(role=role_choice[0] if isinstance(role_choice, tuple) else role_choice)
-            for field in [f.name for f in RolePermission._meta.get_fields() if f.name.startswith('can_')]:
+            rc = role_choice if not isinstance(role_choice, tuple) else role_choice[0]
+            rp, _ = RolePermission.objects.get_or_create(role=rc)
+            # Only update the fields that are rendered in the UI — never touch hidden fields
+            for field in ALL_UI_FIELDS:
                 val = request.POST.get(f'{rp.role}_{field}') == 'on'
                 setattr(rp, field, val)
             rp.save()
         _log_setting_change(request.user, 'Updated role permissions', 'RolePermission', 0, '', 'Updated', request)
-        messages.success(request, 'Permissions updated.')
+        messages.success(request, 'Permissions saved.')
         return redirect('settings:role_permission')
-    PERMISSION_FIELDS = [
-        ('View Alerts', 'can_view_alerts'),
-        ('Assign to Self', 'can_assign_self'),
-        ('Assign to Others', 'can_assign_others'),
-        ('Change Status', 'can_change_status'),
-        ('Change Severity', 'can_change_severity'),
-        ('Change Verdict', 'can_change_verdict'),
-        ('Close Alert', 'can_close_alert'),
-        ('Escalate Alert', 'can_escalate_alert'),
-        ('View Reports', 'can_view_reports'),
-        ('Manage Users', 'can_manage_users'),
-        ('Manage Wazuh', 'can_manage_wazuh'),
-        ('View Audit Logs', 'can_view_audit_logs'),
-        ('Archive', 'can_archive'),
-        ('Reassign', 'can_reassign'),
-        ('Add Remediation', 'can_add_remediation'),
-        ('Mark as Incident', 'can_mark_incident'),
-        ('Export Reports', 'can_export_reports'),
-    ]
-    ctx = {'section': 'roles', 'roles': roles, 'role_choices': ROLE_CHOICES, 'permissions': PERMISSION_FIELDS}
+
+    # Count users per role for column header
+    role_user_counts = {}
+    for rc, label in ROLE_CHOICES:
+        role_user_counts[rc] = User.objects.filter(analyst_profile__role=rc).count()
+
+    ctx = {
+        'section': 'roles',
+        'roles': roles,
+        'role_map': role_map,
+        'role_choices': ROLE_CHOICES,
+        'permission_groups': PERMISSION_GROUPS,
+        'all_ui_fields': ALL_UI_FIELDS,
+        'role_user_counts': role_user_counts,
+    }
     return render(request, 'settings_manager/role_permission.html', ctx)
 
 def analyst_profile_list(request):
