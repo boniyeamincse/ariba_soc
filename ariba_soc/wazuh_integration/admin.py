@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import WazuhSyncLog, WazuhConfiguration
+from .models import WazuhSyncLog, WazuhConfiguration, WazuhManagerConfig, ActiveResponseExecution
 
 @admin.register(WazuhSyncLog)
 class WazuhSyncLogAdmin(admin.ModelAdmin):
@@ -9,3 +9,14 @@ class WazuhSyncLogAdmin(admin.ModelAdmin):
 @admin.register(WazuhConfiguration)
 class WazuhConfigurationAdmin(admin.ModelAdmin):
     list_display = ['api_url', 'is_active', 'last_sync_at']
+
+@admin.register(WazuhManagerConfig)
+class WazuhManagerConfigAdmin(admin.ModelAdmin):
+    list_display = ['api_url', 'timeout']
+
+@admin.register(ActiveResponseExecution)
+class ActiveResponseExecutionAdmin(admin.ModelAdmin):
+    list_display = ['command', 'target_agent_id', 'target_ip', 'status', 'executed_at', 'user', 'alert']
+    list_filter = ['command', 'status']
+    search_fields = ['target_agent_id', 'target_ip', 'target_user', 'response_message']
+

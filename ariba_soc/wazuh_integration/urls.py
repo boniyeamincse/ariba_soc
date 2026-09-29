@@ -13,4 +13,7 @@ urlpatterns = [
     path('test-manager/', views.test_manager_connection, name='test_manager'),
     path('test-indexer/', views.test_indexer_connection, name='test_indexer'),
     path('health/', views.wazuh_health, name='health'),
+    path('active-response/execute/', views.active_response_execute, name='active_response_execute'),
+    path('active-response/history/', views.active_response_history, name='active_response_history'),
 ]
+

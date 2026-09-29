@@ -1,5 +1,7 @@
 from django.db import models
+from django.contrib.auth.models import User
 from config.fields import EncryptedCharField
+from alerts.models import Alert
 
 
 class WazuhSyncLog(models.Model):
@@ -48,3 +50,40 @@ class WazuhManagerConfig(models.Model):
 
     def __str__(self):
         return f'Manager Config - {self.api_url}'
+
+
+class ActiveResponseExecution(models.Model):
+    STATUS_CHOICES = [
+        ('SUCCESS', 'Success'),
+        ('FAILED', 'Failed'),
+        ('PENDING', 'Pending'),
+    ]
+
+    COMMAND_CHOICES = [
+        ('firewall-drop', 'Block IP (Firewall Drop)'),
+        ('host-deny', 'Deny Host (TCP Wrappers)'),
+        ('disable-account', 'Disable User Account'),
+        ('restart-wazuh', 'Restart Wazuh Agent'),
+        ('custom', 'Custom Active Response'),
+    ]
+
+    alert = models.ForeignKey(Alert, on_delete=models.SET_NULL, null=True, blank=True, related_name='active_responses')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    command = models.CharField(max_length=100, choices=COMMAND_CHOICES)
+    target_agent_id = models.CharField(max_length=50)
+    target_agent_name = models.CharField(max_length=255, blank=True)
+    target_ip = models.CharField(max_length=100, blank=True)
+    target_user = models.CharField(max_length=150, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    response_message = models.TextField(blank=True)
+    response_json = models.JSONField(default=dict, blank=True)
+    executed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-executed_at']
+        verbose_name = 'Active Response Execution'
+        verbose_name_plural = 'Active Response Executions'
+
+    def __str__(self):
+        return f"{self.command} on agent {self.target_agent_id} ({self.status})"
+

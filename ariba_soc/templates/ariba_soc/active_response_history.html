@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0"><i class="bi bi-shield-fill-exclamation text-danger"></i> SOAR Active Response Audit Log</h4>
+            <p class="text-muted small mb-0">Record of automated and analyst-initiated host containment, IP blocks, and active responses executed via Wazuh.</p>
+        </div>
+        <div>
+            <a href="{% url 'wazuh_integration:status' %}" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-hdd-rack"></i> Wazuh Dashboard
+            </a>
+            <a href="{% url 'alerts:table' %}" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-table"></i> Alert Table
+            </a>
+        </div>
+    </div>
+
+    <div class="ariba-card p-3 mb-4">
+        <div class="table-responsive">
+            <table class="table ariba-table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Command</th>
+                        <th>Target Agent</th>
+                        <th>Target Entity</th>
+                        <th>Triggered By</th>
+                        <th>Alert Context</th>
+                        <th>Execution Status</th>
+                        <th>Response Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in executions %}
+                    <tr>
+                        <td class="text-nowrap small text-muted">{{ item.executed_at|date:"M d, H:i:s" }}</td>
+                        <td>
+                            {% if item.command == 'firewall-drop' %}
+                            <span class="badge bg-danger bg-opacity-25 text-danger border border-danger"><i class="bi bi-slash-circle"></i> Firewall Drop</span>
+                            {% elif item.command == 'host-deny' %}
+                            <span class="badge bg-warning bg-opacity-25 text-warning border border-warning"><i class="bi bi-shield-x"></i> Host Deny</span>
+                            {% elif item.command == 'disable-account' %}
+                            <span class="badge bg-info bg-opacity-25 text-info border border-info"><i class="bi bi-person-x"></i> Disable Account</span>
+                            {% elif item.command == 'restart-wazuh' %}
+                            <span class="badge bg-secondary border"><i class="bi bi-arrow-repeat"></i> Restart Agent</span>
+                            {% else %}
+                            <span class="badge bg-dark border">{{ item.command }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <code class="text-info">{{ item.target_agent_id }}</code>
+                            {% if item.target_agent_name %}
+                            <small class="text-muted ms-1">({{ item.target_agent_name }})</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.target_ip %}
+                            <span class="badge bg-secondary"><i class="bi bi-globe"></i> {{ item.target_ip }}</span>
+                            {% elif item.target_user %}
+                            <span class="badge bg-secondary"><i class="bi bi-person"></i> {{ item.target_user }}</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="text-light small">{{ item.user.username|default:'System (Auto)' }}</span>
+                        </td>
+                        <td>
+                            {% if item.alert %}
+                            <a href="{% url 'alerts:detail' item.alert.id %}" class="text-info text-decoration-none small text-truncate d-inline-block" style="max-width: 200px;">
+                                #{{ item.alert.wazuh_alert_id|default:item.alert.id }}: {{ item.alert.alert_name }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted small">Ad-hoc Execution</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.status == 'SUCCESS' %}
+                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> SUCCESS</span>
+                            {% elif item.status == 'FAILED' %}
+                            <span class="badge bg-danger"><i class="bi bi-x-circle"></i> FAILED</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> {{ item.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small class="{% if item.status == 'FAILED' %}text-danger{% else %}text-light{% endif %}" title="{{ item.response_message }}">
+                                {{ item.response_message|truncatechars:70 }}
+                            </small>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-4 text-muted">
+                            <i class="bi bi-shield-check fs-2 d-block mb-2"></i>
+                            No active response containment actions executed yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -83,6 +83,73 @@ class ManagerClient:
             logger.error(f'Failed to get manager status: {e}')
             return {'error': str(e)}
 
+    def execute_active_response(self, command, agent_id, arguments=None, custom=False):
+        """
+        Executes an Active Response command on the specified agent via Wazuh API.
+        Args:
+            command (str): Command name (e.g. 'firewall-drop', 'host-deny', 'disable-account', 'restart-wazuh')
+            agent_id (str): Wazuh Agent ID (e.g. '001' or 'all')
+            arguments (list): List of command arguments, e.g. ['-', '192.168.1.50']
+            custom (bool): True if using a custom command
+        Returns:
+            dict: {'success': bool, 'message': str, 'raw': dict}
+        """
+        if arguments is None:
+            arguments = []
+
+        payload = {
+            'command': command,
+            'custom': custom,
+            'arguments': arguments,
+        }
+
+        params = {}
+        if agent_id and agent_id != 'all':
+            params['agents_list'] = str(agent_id)
+
+        try:
+            response = self.session.put(
+                f'{self.base_url}/active-response',
+                headers=self.get_headers(),
+                params=params,
+                json=payload,
+                timeout=self.timeout
+            )
+            data = response.json() if response.status_code in [200, 400] else {}
+
+            error_code = data.get('error', 0)
+            affected = data.get('data', {}).get('total_affected_items', 0)
+            failed_items = data.get('data', {}).get('failed_items', [])
+
+            if response.status_code == 200 and error_code == 0 and affected > 0:
+                return {
+                    'success': True,
+                    'message': data.get('message', f'Active Response {command} sent successfully to agent {agent_id}.'),
+                    'raw': data
+                }
+            elif response.status_code == 200 and failed_items:
+                err_detail = failed_items[0].get('error', {}).get('message', data.get('message', 'Failed to execute command on agent.'))
+                return {
+                    'success': False,
+                    'message': f"Wazuh Agent Error: {err_detail}",
+                    'raw': data
+                }
+            else:
+                err_detail = data.get('detail') or data.get('message') or response.text
+                return {
+                    'success': False,
+                    'message': f"Failed to execute Active Response: {err_detail}",
+                    'raw': data
+                }
+        except Exception as e:
+            logger.error(f"Active Response API call failed: {e}")
+            return {
+                'success': False,
+                'message': f"Active response execution error: {str(e)}",
+                'raw': {'error': str(e)}
+            }
+
+
 
 class IndexerClient:
     def __init__(self, config=None):
