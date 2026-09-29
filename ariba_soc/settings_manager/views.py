@@ -397,48 +397,10 @@ def analyst_profile_list(request):
     return render(request, 'settings_manager/analyst_profile.html', ctx)
 
 def wazuh_api_settings(request):
-    if not _check_settings_access(request.user):
-        messages.error(request, 'Access denied.')
-        return redirect('alerts:table')
-    config = None
-    try:
-        from wazuh_integration.models import WazuhConfiguration
-        config = WazuhConfiguration.objects.first()
-    except Exception:
-        pass
-    if request.method == 'POST':
-        from wazuh_integration.forms import WazuhConfigurationForm
-        form = WazuhConfigurationForm(request.POST, instance=config)
-        if form.is_valid():
-            form.save()
-            _log_setting_change(request.user, 'Updated Wazuh API settings', 'WazuhConfiguration', config.id if config else 0, '', 'Updated', request)
-            messages.success(request, 'Wazuh API settings saved.')
-            return redirect('settings:wazuh_api')
-    else:
-        from wazuh_integration.forms import WazuhConfigurationForm
-        form = WazuhConfigurationForm(instance=config)
-    ctx = {'section': 'wazuh_api', 'form': form, 'config': config}
-    return render(request, 'settings_manager/wazuh_api_settings.html', ctx)
+    return redirect('wazuh_integration:status')
 
 def alert_source_settings(request):
-    if not _check_settings_access(request.user):
-        messages.error(request, 'Access denied.')
-        return redirect('alerts:table')
-    search = request.GET.get('search', '')
-    sources = AlertSourceSettings.objects.all()
-    if search:
-        sources = sources.filter(name__icontains=search)
-    if request.method == 'POST':
-        form = AlertSourceSettingsForm(request.POST)
-        if form.is_valid():
-            form.save()
-            _log_setting_change(request.user, 'Created alert source', 'AlertSourceSettings', 0, '', form.cleaned_data['name'], request)
-            messages.success(request, 'Source created.')
-            return redirect('settings:alert_sources')
-    else:
-        form = AlertSourceSettingsForm()
-    ctx = {'section': 'sources', 'sources': sources, 'form': form, 'search': search}
-    return render(request, 'settings_manager/alert_source_settings.html', ctx)
+    return redirect('wazuh_integration:status')
 
 def alert_source_edit(request, pk):
     if not _check_settings_access(request.user):
