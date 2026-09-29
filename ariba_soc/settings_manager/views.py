@@ -1336,3 +1336,50 @@ def suppression_simulate(request):
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
     
     return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=405)
+
+from django.http import JsonResponse
+import requests
+
+def test_ioc_enrichment_api(request, pk):
+    if not _check_settings_access(request.user):
+        return JsonResponse({'status': 'error', 'message': 'Access denied'}, status=403)
+        
+    try:
+        setting = IOCEnrichmentSetting.objects.get(pk=pk)
+        if not setting.api_key:
+            return JsonResponse({'status': 'error', 'message': 'No API key configured.'})
+            
+        provider = setting.provider_name
+        
+        if provider == 'VirusTotal':
+            url = "https://www.virustotal.com/api/v3/files/44d88612fea8a8f36de82e1278abb02f" # test hash
+            headers = {"x-apikey": setting.api_key}
+            r = requests.get(url, headers=headers, timeout=5)
+            if r.status_code == 200:
+                return JsonResponse({'status': 'success', 'message': 'VirusTotal connection successful!'})
+                
+        elif provider == 'IPInfo':
+            url = f"https://ipinfo.io/8.8.8.8/json?token={setting.api_key}"
+            r = requests.get(url, timeout=5)
+            if r.status_code == 200:
+                return JsonResponse({'status': 'success', 'message': 'IPInfo connection successful!'})
+                
+        elif provider == 'AbuseIPDB':
+            url = "https://api.abuseipdb.com/api/v2/check"
+            headers = {'Accept': 'application/json', 'Key': setting.api_key}
+            params = {'ipAddress': '8.8.8.8'}
+            r = requests.get(url, headers=headers, params=params, timeout=5)
+            if r.status_code == 200:
+                return JsonResponse({'status': 'success', 'message': 'AbuseIPDB connection successful!'})
+                
+        elif provider == 'OTX':
+            url = "https://otx.alienvault.com/api/v1/indicators/IPv4/8.8.8.8/general"
+            headers = {'X-OTX-API-KEY': setting.api_key}
+            r = requests.get(url, headers=headers, timeout=5)
+            if r.status_code == 200:
+                return JsonResponse({'status': 'success', 'message': 'AlienVault OTX connection successful!'})
+                
+        return JsonResponse({'status': 'error', 'message': f'API returned status {r.status_code}: {r.text}'})
+        
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})

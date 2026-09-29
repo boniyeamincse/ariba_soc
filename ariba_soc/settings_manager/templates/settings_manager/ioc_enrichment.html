@@ -87,7 +87,10 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <a href="{% url 'settings:ioc_enrichment_update' s.pk %}" class="btn btn-sm btn-outline-info py-0 px-2"><i class="bi bi-pencil"></i></a>
+                                                                        <a href="{% url 'settings:ioc_enrichment_update' s.pk %}" class="btn btn-sm btn-outline-info py-0 px-2" title="Edit"><i class="bi bi-pencil"></i></a>
+                                    {% if s.api_key %}
+                                    <button class="btn btn-sm btn-outline-success py-0 px-2 ms-1" onclick="testAPI({{ s.pk }}, this)" title="Test API Connection"><i class="bi bi-play-circle"></i></button>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% empty %}
@@ -105,4 +108,28 @@
         {% endif %}
     </div>
 </div>
+{% block extra_js %}
+<script>
+function testAPI(pk, btn) {
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.disabled = true;
+    
+    fetch(`/settings/ioc-enrichment/${pk}/test/`)
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') {
+            alert("✅ " + data.message);
+        } else {
+            alert("❌ Connection Failed: " + data.message);
+        }
+    })
+    .catch(err => alert("Error: " + err))
+    .finally(() => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    });
+}
+</script>
+{% endblock %}
 {% endblock %}
