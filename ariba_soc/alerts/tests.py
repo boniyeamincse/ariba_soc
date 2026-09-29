@@ -325,4 +325,178 @@ class AlertAggregationTest(TestCase):
         self.assertEqual(close_rule.match_count, 1)
 
 
+class AssetDirectoryAndCriticalityTests(TestCase):
+    def setUp(self):
+        from .models import Asset, AlertSource
+        self.source = AlertSource.objects.create(name='Wazuh', source_type='Wazuh')
+        self.user = User.objects.create_superuser(username='soc_asset_admin', password='password123', email='asset_admin@test.com')
+        self.user.analyst_profile.role = 'ADMIN'
+        self.user.analyst_profile.save()
+        self.client.login(username='soc_asset_admin', password='password123')
+
+        self.dc_asset = Asset.objects.create(
+            name='Primary Domain Controller',
+            hostname='dc01.corp.local',
+            ip_address='10.0.1.10',
+            agent_id='001',
+            criticality='CRITICAL',
+            asset_type='DOMAIN_CONTROLLER',
+            environment='PROD',
+            business_unit='IT Infrastructure',
+        )
+
+        self.test_asset = Asset.objects.create(
+            name='Dev Test Machine',
+            hostname='test-vm-01',
+            ip_address='192.168.1.50',
+            criticality='LOW',
+            asset_type='WORKSTATION',
+            environment='TEST',
+        )
+
+    def test_asset_multiplier_defaults(self):
+        self.assertEqual(self.dc_asset.criticality_multiplier, 2.0)
+        self.assertEqual(self.test_asset.criticality_multiplier, 0.8)
+
+    def test_resolve_asset_for_alert(self):
+        from .services import resolve_asset_for_alert
+        # Resolve by agent_id
+        a1 = resolve_asset_for_alert(agent_id='001')
+        self.assertEqual(a1, self.dc_asset)
+
+        # Resolve by hostname
+        a2 = resolve_asset_for_alert(hostname='dc01.corp.local')
+        self.assertEqual(a2, self.dc_asset)
+
+        # Resolve by destination IP
+        a3 = resolve_asset_for_alert(destination_ip='10.0.1.10')
+        self.assertEqual(a3, self.dc_asset)
+
+        # Resolve low-criticality asset
+        a4 = resolve_asset_for_alert(hostname='test-vm-01')
+        self.assertEqual(a4, self.test_asset)
+
+        # Unmatched
+        a5 = resolve_asset_for_alert(hostname='unknown-host-xyz')
+        self.assertIsNone(a5)
+
+    def test_apply_asset_criticality_multiplier(self):
+        from .services import apply_asset_criticality
+        # Medium alert on Critical Domain Controller -> Escalates to Critical priority & High severity with 2.0x risk score
+        alert = Alert.objects.create(
+            alert_name='Suspicious Kerberos Ticket Request',
+            severity='Medium',
+            severity_score=50,
+            priority='Medium',
+            hostname='dc01.corp.local',
+            agent_id='001',
+            source=self.source,
+        )
+        apply_asset_criticality(alert)
+        alert.save()
+
+        self.assertEqual(alert.asset, self.dc_asset)
+        self.assertEqual(alert.asset_criticality, 'CRITICAL')
+        self.assertEqual(alert.priority, 'Critical')
+        self.assertEqual(alert.severity, 'High')
+        self.assertTrue(alert.is_incident_candidate)
+        # 50 * 2.0 = 100.0
+        self.assertEqual(alert.risk_score, 100.0)
+
+    def test_ingest_alert_auto_links_asset(self):
+        from .services import ingest_or_aggregate_alert
+        data = {
+            'alert_name': 'Brute Force Attempt',
+            'severity': 'Medium',
+            'agent_id': '001',
+            'hostname': 'dc01.corp.local',
+            'source': self.source,
+            'alert_time': timezone.now(),
+        }
+        alert, created = ingest_or_aggregate_alert(data)
+        self.assertTrue(created)
+        self.assertEqual(alert.asset, self.dc_asset)
+        self.assertEqual(alert.asset_criticality, 'CRITICAL')
+        self.assertEqual(alert.priority, 'Critical')
+        self.assertEqual(alert.severity, 'High')
+
+    def test_asset_directory_view(self):
+        from django.urls import reverse
+        resp = self.client.get(reverse('alerts:assets_list'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, 'ariba_soc/asset_directory.html')
+        self.assertContains(resp, 'SOC Asset Directory')
+        self.assertContains(resp, 'dc01.corp.local')
+        self.assertContains(resp, 'Mission-Critical')
+
+        # Filter by search
+        resp_search = self.client.get(reverse('alerts:assets_list') + '?search=dc01')
+        self.assertEqual(resp_search.status_code, 200)
+        self.assertContains(resp_search, 'dc01.corp.local')
+        self.assertNotContains(resp_search, 'test-vm-01')
+
+    def test_asset_crud_views(self):
+        from django.urls import reverse
+        from .models import Asset
+        # Create
+        create_resp = self.client.post(reverse('alerts:asset_create'), {
+            'name': 'Core Payment Gateway',
+            'hostname': 'paygw01.corp.local',
+            'ip_address': '10.0.5.20',
+            'criticality': 'CRITICAL',
+            'criticality_multiplier': '2.0',
+            'asset_type': 'PAYMENT_GATEWAY',
+            'environment': 'PROD',
+            'business_unit': 'Fintech Core',
+            'is_active': 'on',
+        })
+        self.assertEqual(create_resp.status_code, 302)
+        new_asset = Asset.objects.get(hostname='paygw01.corp.local')
+        self.assertEqual(new_asset.criticality, 'CRITICAL')
+
+        # Edit GET (JSON for modal)
+        edit_get = self.client.get(reverse('alerts:asset_edit', args=[new_asset.id]))
+        self.assertEqual(edit_get.status_code, 200)
+        self.assertEqual(edit_get.json()['hostname'], 'paygw01.corp.local')
+
+        # Edit POST
+        edit_post = self.client.post(reverse('alerts:asset_edit', args=[new_asset.id]), {
+            'name': 'Updated Payment Gateway',
+            'hostname': 'paygw01.corp.local',
+            'ip_address': '10.0.5.20',
+            'criticality': 'HIGH',
+            'criticality_multiplier': '1.5',
+            'asset_type': 'PAYMENT_GATEWAY',
+            'environment': 'PROD',
+            'business_unit': 'Fintech Core',
+            'is_active': 'on',
+        })
+        self.assertEqual(edit_post.status_code, 302)
+        new_asset.refresh_from_db()
+        self.assertEqual(new_asset.name, 'Updated Payment Gateway')
+        self.assertEqual(new_asset.criticality, 'HIGH')
+
+        # Delete POST
+        del_resp = self.client.post(reverse('alerts:asset_delete', args=[new_asset.id]))
+        self.assertEqual(del_resp.status_code, 302)
+        self.assertFalse(Asset.objects.filter(id=new_asset.id).exists())
+
+    def test_recalculate_all_alerts_risk(self):
+        from django.urls import reverse
+        from .services import recalculate_alerts_risk_score
+        # Create an alert before linking
+        Alert.objects.create(
+            alert_name='Unlinked Alert on DC',
+            severity='Medium',
+            hostname='dc01.corp.local',
+            source=self.source,
+        )
+        count = recalculate_alerts_risk_score()
+        self.assertGreaterEqual(count, 1)
+        linked = Alert.objects.get(alert_name='Unlinked Alert on DC')
+        self.assertEqual(linked.asset, self.dc_asset)
+        self.assertEqual(linked.priority, 'Critical')
+
+
+
 

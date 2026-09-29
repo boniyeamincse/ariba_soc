@@ -83,6 +83,78 @@ CURRENT_OWNER_TEAM_CHOICES = [
     ('MANAGEMENT', 'Management'),
 ]
 
+ASSET_CRITICALITY_CHOICES = [
+    ('LOW', 'Low (0.8x)'),
+    ('MEDIUM', 'Medium (1.0x)'),
+    ('HIGH', 'High (1.5x)'),
+    ('CRITICAL', 'Mission-Critical (2.0x)'),
+]
+
+ASSET_TYPE_CHOICES = [
+    ('SERVER', 'Server'),
+    ('WORKSTATION', 'Workstation / Endpoint'),
+    ('DOMAIN_CONTROLLER', 'Domain Controller (DC)'),
+    ('DATABASE', 'Database Server'),
+    ('PAYMENT_GATEWAY', 'Payment / Financial Gateway'),
+    ('FIREWALL', 'Firewall / Gateway'),
+    ('CLOUD_INSTANCE', 'Cloud VM / Container'),
+    ('OTHER', 'Other Infrastructure'),
+]
+
+ENVIRONMENT_CHOICES = [
+    ('PROD', 'Production'),
+    ('STAGE', 'Staging'),
+    ('DEV', 'Development'),
+    ('DMZ', 'DMZ / Perimeter'),
+    ('CORP', 'Corporate Internal'),
+    ('TEST', 'Test / Sandbox'),
+]
+
+
+class Asset(models.Model):
+    hostname = models.CharField(max_length=200, db_index=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True, db_index=True)
+    agent_id = models.CharField(max_length=50, blank=True, db_index=True, help_text='Linked Wazuh Agent ID')
+    name = models.CharField(max_length=200, help_text='Friendly business asset name')
+
+    criticality = models.CharField(max_length=20, choices=ASSET_CRITICALITY_CHOICES, default='MEDIUM')
+    criticality_multiplier = models.FloatField(default=1.0)
+    asset_type = models.CharField(max_length=30, choices=ASSET_TYPE_CHOICES, default='SERVER')
+    environment = models.CharField(max_length=20, choices=ENVIRONMENT_CHOICES, default='PROD')
+
+    business_unit = models.CharField(max_length=100, blank=True, help_text='Department or Service Owner')
+    owner = models.CharField(max_length=100, blank=True, help_text='Responsible Engineer or Team')
+    mac_address = models.CharField(max_length=50, blank=True)
+    os_name = models.CharField(max_length=100, blank=True)
+    description = models.TextField(blank=True)
+
+    is_active = models.BooleanField(default=True)
+    auto_discovered = models.BooleanField(default=False)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Asset'
+        verbose_name_plural = 'Assets'
+        ordering = ['-criticality_multiplier', 'hostname']
+        indexes = [
+            models.Index(fields=['hostname']),
+            models.Index(fields=['ip_address']),
+            models.Index(fields=['agent_id']),
+            models.Index(fields=['criticality']),
+        ]
+
+    def __str__(self):
+        return f"{self.name or self.hostname} ({self.get_criticality_display()})"
+
+    def save(self, *args, **kwargs):
+        multipliers = {'LOW': 0.8, 'MEDIUM': 1.0, 'HIGH': 1.5, 'CRITICAL': 2.0}
+        if self.criticality in multipliers and (not self.criticality_multiplier or self.criticality_multiplier == 1.0 or kwargs.pop('recalc_multiplier', False)):
+            self.criticality_multiplier = multipliers[self.criticality]
+        super().save(*args, **kwargs)
+
 
 class AlertSource(models.Model):
     name = models.CharField(max_length=100)
@@ -169,6 +241,10 @@ class Alert(models.Model):
     first_seen_at = models.DateTimeField(default=timezone.now)
     last_seen_at = models.DateTimeField(default=timezone.now)
 
+    asset = models.ForeignKey('Asset', on_delete=models.SET_NULL, null=True, blank=True, related_name='alerts')
+    asset_criticality = models.CharField(max_length=20, blank=True, default='')
+    risk_score = models.FloatField(default=0.0, help_text='Dynamic Risk Score incorporating asset criticality multiplier')
+
     is_incident_candidate = models.BooleanField(default=False)
     is_escalated = models.BooleanField(default=False)
 
@@ -215,6 +291,9 @@ class Alert(models.Model):
             models.Index(fields=['wazuh_alert_id']),
             models.Index(fields=['workflow_state']),
             models.Index(fields=['current_tier']),
+            models.Index(fields=['asset']),
+            models.Index(fields=['asset_criticality']),
+            models.Index(fields=['risk_score']),
         ]
 
     def __str__(self):

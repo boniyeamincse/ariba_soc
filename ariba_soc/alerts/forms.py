@@ -69,3 +69,32 @@ class AlertCommentForm(forms.ModelForm):
 
 class AlertQuickAssignForm(forms.Form):
     alert_id = forms.IntegerField(widget=forms.HiddenInput())
+
+
+class AssetForm(forms.ModelForm):
+    class Meta:
+        from .models import Asset
+        model = Asset
+        fields = [
+            'name', 'hostname', 'ip_address', 'agent_id',
+            'criticality', 'criticality_multiplier', 'asset_type',
+            'environment', 'business_unit', 'owner', 'mac_address',
+            'os_name', 'description', 'is_active',
+        ]
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Primary Active Directory DC'}),
+            'hostname': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. dc01.corp.local'}),
+            'ip_address': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. 10.0.1.10'}),
+            'agent_id': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. 001'}),
+            'criticality': forms.Select(attrs={'class': 'form-select'}),
+            'criticality_multiplier': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1'}),
+            'asset_type': forms.Select(attrs={'class': 'form-select'}),
+            'environment': forms.Select(attrs={'class': 'form-select'}),
+            'business_unit': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Core Banking / IT'}),
+            'owner': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Infrastructure Team'}),
+            'mac_address': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '00:1A:2B:3C:4D:5E'}),
+            'os_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Windows Server 2022'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': 'Asset function and notes...'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+

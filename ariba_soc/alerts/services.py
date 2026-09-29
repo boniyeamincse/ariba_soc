@@ -277,7 +277,235 @@ def ingest_or_aggregate_alert(data):
     data['event_count'] = 1
     data['first_seen_at'] = incoming_time
     data['last_seen_at'] = incoming_time
+
+    # Resolve asset & apply dynamic criticality multiplier
+    asset = resolve_asset_for_alert(
+        agent_id=agent_id,
+        agent_ip=data.get('agent_ip'),
+        hostname=hostname,
+        destination_ip=destination_ip,
+        source_ip=source_ip,
+    )
+    if asset:
+        data['asset'] = asset
+        data['asset_criticality'] = asset.criticality
+        multiplier = float(asset.criticality_multiplier or 1.0)
+        base_map = {'Critical': 90, 'High': 70, 'Medium': 50, 'Low': 25, 'Informational': 10}
+        score = data.get('severity_score') or base_map.get(data.get('severity', 'Medium'), 50)
+        data['risk_score'] = round(min(100.0, score * multiplier), 1)
+
+        if asset.criticality == 'CRITICAL':
+            data['priority'] = 'Critical'
+            data['is_incident_candidate'] = True
+            if data.get('severity') in ['Informational', 'Low', 'Medium']:
+                data['severity'] = 'High'
+        elif asset.criticality == 'HIGH':
+            if data.get('priority') in ['Low', 'Medium', None]:
+                data['priority'] = 'High'
+            if data.get('severity') in ['Informational', 'Low']:
+                data['severity'] = 'Medium'
+    else:
+        base_map = {'Critical': 90, 'High': 70, 'Medium': 50, 'Low': 25, 'Informational': 10}
+        data['risk_score'] = float(data.get('severity_score') or base_map.get(data.get('severity', 'Medium'), 50))
+
     alert = Alert.objects.create(**data)
     return alert, True
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Asset Inventory & Criticality Multiplier Service
+# ---------------------------------------------------------------------------
+
+def resolve_asset_for_alert(agent_id=None, agent_ip=None, hostname=None, source_ip=None, destination_ip=None):
+    """
+    Attempts to match an active Asset in the inventory based on agent_id,
+    hostname, agent_ip, destination_ip, or source_ip.
+    """
+    from alerts.models import Asset
+
+    # 1. Match by agent_id (most reliable for endpoint telemetry)
+    if agent_id and str(agent_id).strip():
+        asset = Asset.objects.filter(agent_id=str(agent_id).strip(), is_active=True).first()
+        if asset:
+            return asset
+
+    # 2. Match by hostname
+    if hostname and str(hostname).strip():
+        h = str(hostname).strip()
+        asset = Asset.objects.filter(hostname__iexact=h, is_active=True).first()
+        if asset:
+            return asset
+
+    # 3. Match by agent IP
+    if agent_ip and str(agent_ip).strip():
+        asset = Asset.objects.filter(ip_address=str(agent_ip).strip(), is_active=True).first()
+        if asset:
+            return asset
+
+    # 4. Match by destination IP (target server in network alerts)
+    if destination_ip and str(destination_ip).strip():
+        asset = Asset.objects.filter(ip_address=str(destination_ip).strip(), is_active=True).first()
+        if asset:
+            return asset
+
+    # 5. Match by source IP (in case the compromised machine is initiating)
+    if source_ip and str(source_ip).strip():
+        asset = Asset.objects.filter(ip_address=str(source_ip).strip(), is_active=True).first()
+        if asset:
+            return asset
+
+    return None
+
+
+def apply_asset_criticality(alert, asset=None):
+    """
+    Calculates dynamic risk score and adjusts alert priority & severity based
+    on the business asset's criticality multiplier.
+    """
+    if asset is None:
+        asset = resolve_asset_for_alert(
+            agent_id=getattr(alert, 'agent_id', None),
+            agent_ip=getattr(alert, 'agent_ip', None),
+            hostname=getattr(alert, 'hostname', None),
+            destination_ip=getattr(alert, 'destination_ip', None),
+            source_ip=getattr(alert, 'source_ip', None),
+        )
+
+    if asset:
+        alert.asset = asset
+        alert.asset_criticality = asset.criticality
+        multiplier = float(asset.criticality_multiplier or 1.0)
+
+        # Baseline score from rule level or severity
+        base_map = {'Critical': 90, 'High': 70, 'Medium': 50, 'Low': 25, 'Informational': 10}
+        score = alert.severity_score if alert.severity_score > 0 else base_map.get(alert.severity, 50)
+        
+        # Dynamic risk score capped at 100
+        alert.risk_score = round(min(100.0, score * multiplier), 1)
+
+        # Dynamic priority and severity adjustment for high-value targets
+        if asset.criticality == 'CRITICAL':
+            alert.priority = 'Critical'
+            alert.is_incident_candidate = True
+            if alert.severity in ['Informational', 'Low', 'Medium']:
+                alert.severity = 'High'
+        elif asset.criticality == 'HIGH':
+            if alert.priority in ['Low', 'Medium']:
+                alert.priority = 'High'
+            if alert.severity in ['Informational', 'Low']:
+                alert.severity = 'Medium'
+        elif asset.criticality == 'LOW':
+            if alert.priority == 'Critical' and alert.severity not in ['Critical']:
+                alert.priority = 'Medium'
+    else:
+        base_map = {'Critical': 90, 'High': 70, 'Medium': 50, 'Low': 25, 'Informational': 10}
+        alert.risk_score = float(alert.severity_score if alert.severity_score > 0 else base_map.get(alert.severity, 50))
+
+    return alert
+
+
+def sync_assets_from_wazuh():
+    """
+    Queries Wazuh Manager API for registered/connected agents and auto-populates
+    or updates the Asset Directory.
+    Returns: dict with 'created', 'updated', 'total'
+    """
+    from wazuh_integration.models import WazuhManagerConfig
+    from wazuh_integration.services import ManagerClient
+    from alerts.models import Asset
+
+    manager_config = WazuhManagerConfig.objects.first()
+    if not manager_config:
+        return {'created': 0, 'updated': 0, 'total': 0, 'error': 'No Wazuh Manager configured'}
+
+    client = ManagerClient(manager_config)
+    response = client.fetch_agents()
+    items = response.get('data', {}).get('affected_items', [])
+    if not items and 'data' in response and 'items' in response['data']:
+        items = response['data']['items']
+
+    created_count = 0
+    updated_count = 0
+
+    for item in items:
+        agent_id = str(item.get('id', '')).strip()
+        hostname = str(item.get('name', '')).strip()
+        ip_addr = item.get('ip')
+        if ip_addr in ['any', '127.0.0.1', None]:
+            ip_addr = None
+
+        os_data = item.get('os', {})
+        os_str = f"{os_data.get('name', '')} {os_data.get('version', '')}".strip()
+
+        # Check existing
+        asset = Asset.objects.filter(agent_id=agent_id).first()
+        if not asset and hostname:
+            asset = Asset.objects.filter(hostname__iexact=hostname).first()
+
+        now = timezone.now()
+
+        if asset:
+            updated = False
+            if ip_addr and asset.ip_address != ip_addr:
+                asset.ip_address = ip_addr
+                updated = True
+            if os_str and asset.os_name != os_str:
+                asset.os_name = os_str
+                updated = True
+            if not asset.agent_id and agent_id:
+                asset.agent_id = agent_id
+                updated = True
+            asset.last_seen_at = now
+            asset.save()
+            updated_count += 1
+        else:
+            asset_type = 'SERVER'
+            criticality = 'MEDIUM'
+            name_lower = hostname.lower()
+            if any(k in name_lower for k in ['dc', 'domain', 'ad']):
+                asset_type = 'DOMAIN_CONTROLLER'
+                criticality = 'CRITICAL'
+            elif any(k in name_lower for k in ['db', 'sql', 'postgres', 'mongo', 'oracle']):
+                asset_type = 'DATABASE'
+                criticality = 'HIGH'
+            elif any(k in name_lower for k in ['pay', 'bank', 'swift', 'core']):
+                asset_type = 'PAYMENT_GATEWAY'
+                criticality = 'CRITICAL'
+            elif 'manager' in name_lower or agent_id == '000':
+                asset_type = 'SERVER'
+                criticality = 'HIGH'
+
+            Asset.objects.create(
+                hostname=hostname or f"agent-{agent_id}",
+                name=hostname or f"Agent {agent_id}",
+                agent_id=agent_id,
+                ip_address=ip_addr,
+                os_name=os_str,
+                asset_type=asset_type,
+                criticality=criticality,
+                environment='PROD',
+                auto_discovered=True,
+                last_seen_at=now,
+            )
+            created_count += 1
+
+    return {
+        'created': created_count,
+        'updated': updated_count,
+        'total': len(items),
+    }
+
+
+def recalculate_alerts_risk_score():
+    """
+    Batch recalculates dynamic risk score and asset links for existing alerts.
+    """
+    count = 0
+    for alert in Alert.objects.select_related('asset').all():
+        apply_asset_criticality(alert)
+        alert.save(update_fields=['asset', 'asset_criticality', 'risk_score', 'priority', 'severity', 'is_incident_candidate'])
+        count += 1
+    return count
+
 
 

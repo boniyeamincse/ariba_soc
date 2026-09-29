@@ -481,3 +481,150 @@ def alert_move_api(request, alert_id):
         create_audit_log(alert, request.user, 'Status Changed', old, new_status, request)
         return JsonResponse({'success': True})
     return JsonResponse({'success': False, 'error': 'Invalid status'}, status=400)
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Asset Inventory Views
+# ---------------------------------------------------------------------------
+from .models import Asset
+from .forms import AssetForm
+from .services import sync_assets_from_wazuh, recalculate_alerts_risk_score
+
+
+@login_required
+def asset_directory(request):
+    """
+    Asset Inventory and Criticality Directory with filtering, search, and live metrics.
+    """
+    qs = Asset.objects.all()
+    search = request.GET.get('search', '').strip()
+    criticality = request.GET.get('criticality', '').strip()
+    environment = request.GET.get('environment', '').strip()
+    asset_type = request.GET.get('asset_type', '').strip()
+
+    if search:
+        qs = qs.filter(
+            Q(hostname__icontains=search) |
+            Q(name__icontains=search) |
+            Q(ip_address__icontains=search) |
+            Q(agent_id__icontains=search) |
+            Q(business_unit__icontains=search) |
+            Q(owner__icontains=search)
+        )
+
+    if criticality:
+        qs = qs.filter(criticality=criticality)
+    if environment:
+        qs = qs.filter(environment=environment)
+    if asset_type:
+        qs = qs.filter(asset_type=asset_type)
+
+    paginator = Paginator(qs, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    stats = {
+        'total': Asset.objects.count(),
+        'critical': Asset.objects.filter(criticality='CRITICAL').count(),
+        'high': Asset.objects.filter(criticality='HIGH').count(),
+        'medium': Asset.objects.filter(criticality='MEDIUM').count(),
+        'low': Asset.objects.filter(criticality='LOW').count(),
+        'auto_discovered': Asset.objects.filter(auto_discovered=True).count(),
+    }
+
+    form = AssetForm()
+
+    return render(request, 'ariba_soc/asset_directory.html', {
+        'page_obj': page_obj,
+        'assets': page_obj,
+        'stats': stats,
+        'form': form,
+        'search': search,
+        'criticality': criticality,
+        'environment': environment,
+        'asset_type': asset_type,
+    })
+
+
+@login_required
+@require_POST
+def asset_create(request):
+    form = AssetForm(request.POST)
+    if form.is_valid():
+        asset = form.save()
+        messages.success(request, f'Asset "{asset.name or asset.hostname}" created successfully.')
+    else:
+        errors = '; '.join([f"{f}: {e[0]}" for f, e in form.errors.items()])
+        messages.error(request, f'Failed to create asset: {errors}')
+    return redirect('alerts:assets_list')
+
+
+@login_required
+def asset_edit(request, asset_id):
+    asset = get_object_or_404(Asset, id=asset_id)
+    if request.method == 'POST':
+        form = AssetForm(request.POST, instance=asset)
+        if form.is_valid():
+            asset = form.save(commit=False)
+            asset.save(recalc_multiplier=True)
+            form.save_m2m()
+            messages.success(request, f'Asset "{asset.name or asset.hostname}" updated.')
+            return redirect('alerts:assets_list')
+        else:
+            errors = '; '.join([f"{f}: {e[0]}" for f, e in form.errors.items()])
+            messages.error(request, f'Failed to update asset: {errors}')
+            return redirect('alerts:assets_list')
+
+    return JsonResponse({
+        'id': asset.id,
+        'name': asset.name,
+        'hostname': asset.hostname,
+        'ip_address': asset.ip_address or '',
+        'agent_id': asset.agent_id or '',
+        'criticality': asset.criticality,
+        'criticality_multiplier': asset.criticality_multiplier,
+        'asset_type': asset.asset_type,
+        'environment': asset.environment,
+        'business_unit': asset.business_unit,
+        'owner': asset.owner,
+        'mac_address': asset.mac_address,
+        'os_name': asset.os_name,
+        'description': asset.description,
+        'is_active': asset.is_active,
+    })
+
+
+@login_required
+@require_POST
+def asset_delete(request, asset_id):
+    asset = get_object_or_404(Asset, id=asset_id)
+    name = asset.name or asset.hostname
+    asset.delete()
+    messages.success(request, f'Asset "{name}" deleted.')
+    return redirect('alerts:assets_list')
+
+
+@login_required
+@require_POST
+def asset_sync_wazuh(request):
+    try:
+        res = sync_assets_from_wazuh()
+        if 'error' in res:
+            messages.error(request, f"Wazuh Sync error: {res['error']}")
+        else:
+            messages.success(request, f"Wazuh Asset Discovery complete: {res['total']} agents scanned, {res['created']} added, {res['updated']} updated.")
+    except Exception as e:
+        messages.error(request, f"Failed to sync from Wazuh: {str(e)}")
+    return redirect('alerts:assets_list')
+
+
+@login_required
+@require_POST
+def recalculate_all_alerts_risk(request):
+    try:
+        count = recalculate_alerts_risk_score()
+        messages.success(request, f"Recalculated dynamic risk score and asset links for {count} alerts.")
+    except Exception as e:
+        messages.error(request, f"Failed to recalculate risk scores: {str(e)}")
+    return redirect('alerts:assets_list')
+

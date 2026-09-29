@@ -1,0 +1,508 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0 text-white">
+                <i class="bi bi-hdd-network text-info"></i> SOC Asset Directory & Criticality Multiplier
+            </h4>
+            <small class="text-secondary">
+                Track organizational assets, assign business criticality tiers, and dynamically elevate alert risk scores.
+            </small>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-ariba-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createAssetModal">
+                <i class="bi bi-plus-circle"></i> Add Asset
+            </button>
+            <form method="post" action="{% url 'alerts:asset_sync_wazuh' %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-ariba-outline btn-sm">
+                    <i class="bi bi-arrow-repeat"></i> Sync with Wazuh
+                </button>
+            </form>
+            <form method="post" action="{% url 'alerts:recalculate_risk' %}" class="d-inline" onsubmit="return confirm('Recalculate dynamic risk scores and priority across all alerts?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-ariba-outline btn-sm text-warning" title="Recalculate risk scores on alerts">
+                    <i class="bi bi-lightning-charge"></i> Recalculate Risk
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-sm-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="kpi-label">Total Assets</span>
+                    <i class="bi bi-server text-info fs-5"></i>
+                </div>
+                <div class="kpi-value text-white mb-1">{{ stats.total }}</div>
+                <small class="text-secondary">{{ stats.auto_discovered }} Auto-Discovered</small>
+            </div>
+        </div>
+
+        <div class="col-md-3 col-sm-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="kpi-label">Mission-Critical (2.0x)</span>
+                    <i class="bi bi-shield-fill-exclamation text-danger fs-5"></i>
+                </div>
+                <div class="kpi-value text-danger mb-1">{{ stats.critical }}</div>
+                <small class="text-secondary">Auto-escalates to Critical / High Priority</small>
+            </div>
+        </div>
+
+        <div class="col-md-3 col-sm-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="kpi-label">High Impact (1.5x)</span>
+                    <i class="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
+                </div>
+                <div class="kpi-value text-warning mb-1">{{ stats.high }}</div>
+                <small class="text-secondary">Core databases & production hosts</small>
+            </div>
+        </div>
+
+        <div class="col-md-3 col-sm-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="kpi-label">Standard & Low Tier</span>
+                    <i class="bi bi-pc-display text-primary fs-5"></i>
+                </div>
+                <div class="kpi-value text-primary mb-1">{{ stats.medium|add:stats.low }}</div>
+                <small class="text-secondary">{{ stats.medium }} Medium &bull; {{ stats.low }} Low</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="ariba-card p-3 mb-4">
+        <form method="get" class="row g-3 align-items-end">
+            <!-- Search -->
+            <div class="col-md-4 col-sm-12">
+                <label class="form-label small text-secondary mb-1">Search Asset</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-search"></i></span>
+                    <input type="text" name="search" value="{{ search }}" class="form-control bg-dark text-white border-secondary" placeholder="Search hostname, IP, agent ID, owner...">
+                </div>
+            </div>
+
+            <!-- Criticality Filter -->
+            <div class="col-md-2 col-sm-6">
+                <label class="form-label small text-secondary mb-1">Criticality Tier</label>
+                <select name="criticality" class="form-select form-select-sm bg-dark text-white border-secondary">
+                    <option value="">All Criticalities</option>
+                    <option value="CRITICAL" {% if criticality == 'CRITICAL' %}selected{% endif %}>Mission-Critical (2.0x)</option>
+                    <option value="HIGH" {% if criticality == 'HIGH' %}selected{% endif %}>High (1.5x)</option>
+                    <option value="MEDIUM" {% if criticality == 'MEDIUM' %}selected{% endif %}>Medium (1.0x)</option>
+                    <option value="LOW" {% if criticality == 'LOW' %}selected{% endif %}>Low (0.8x)</option>
+                </select>
+            </div>
+
+            <!-- Environment Filter -->
+            <div class="col-md-2 col-sm-6">
+                <label class="form-label small text-secondary mb-1">Environment</label>
+                <select name="environment" class="form-select form-select-sm bg-dark text-white border-secondary">
+                    <option value="">All Environments</option>
+                    <option value="PROD" {% if environment == 'PROD' %}selected{% endif %}>Production</option>
+                    <option value="DMZ" {% if environment == 'DMZ' %}selected{% endif %}>DMZ</option>
+                    <option value="STAGE" {% if environment == 'STAGE' %}selected{% endif %}>Staging</option>
+                    <option value="CORP" {% if environment == 'CORP' %}selected{% endif %}>Corporate</option>
+                    <option value="DEV" {% if environment == 'DEV' %}selected{% endif %}>Development</option>
+                    <option value="TEST" {% if environment == 'TEST' %}selected{% endif %}>Test / Sandbox</option>
+                </select>
+            </div>
+
+            <!-- Asset Type Filter -->
+            <div class="col-md-2 col-sm-6">
+                <label class="form-label small text-secondary mb-1">Asset Type</label>
+                <select name="asset_type" class="form-select form-select-sm bg-dark text-white border-secondary">
+                    <option value="">All Types</option>
+                    <option value="DOMAIN_CONTROLLER" {% if asset_type == 'DOMAIN_CONTROLLER' %}selected{% endif %}>Domain Controller</option>
+                    <option value="DATABASE" {% if asset_type == 'DATABASE' %}selected{% endif %}>Database Server</option>
+                    <option value="PAYMENT_GATEWAY" {% if asset_type == 'PAYMENT_GATEWAY' %}selected{% endif %}>Payment Gateway</option>
+                    <option value="SERVER" {% if asset_type == 'SERVER' %}selected{% endif %}>Server</option>
+                    <option value="FIREWALL" {% if asset_type == 'FIREWALL' %}selected{% endif %}>Firewall</option>
+                    <option value="WORKSTATION" {% if asset_type == 'WORKSTATION' %}selected{% endif %}>Workstation</option>
+                    <option value="CLOUD_INSTANCE" {% if asset_type == 'CLOUD_INSTANCE' %}selected{% endif %}>Cloud Instance</option>
+                </select>
+            </div>
+
+            <!-- Actions -->
+            <div class="col-md-2 col-sm-6 d-flex gap-2">
+                <button type="submit" class="btn btn-ariba-primary btn-sm w-100">
+                    <i class="bi bi-funnel"></i> Filter
+                </button>
+                <a href="{% url 'alerts:assets_list' %}" class="btn btn-ariba-outline btn-sm">
+                    Reset
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Assets Table Card -->
+    <div class="ariba-card p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="m-0 text-white"><i class="bi bi-list-columns-reverse text-primary"></i> Asset Directory Inventory</h5>
+            <small class="text-secondary">Showing {{ assets|length }} assets</small>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-dark table-hover table-sm align-middle mb-0">
+                <thead>
+                    <tr class="text-secondary small">
+                        <th>Asset Name / Hostname</th>
+                        <th>IP Address</th>
+                        <th>Agent ID</th>
+                        <th>Type</th>
+                        <th>Environment</th>
+                        <th>Criticality Tier</th>
+                        <th>Risk Multiplier</th>
+                        <th>Business Unit / Owner</th>
+                        <th>Discovery</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in assets %}
+                    <tr>
+                        <td>
+                            <div>
+                                <strong class="text-white">{{ a.name }}</strong>
+                                <small class="text-secondary d-block font-monospace">{{ a.hostname }}</small>
+                            </div>
+                        </td>
+                        <td class="font-monospace text-info small">
+                            {{ a.ip_address|default:"—" }}
+                        </td>
+                        <td>
+                            {% if a.agent_id %}
+                            <span class="badge bg-dark border border-secondary text-secondary font-monospace">Agent {{ a.agent_id }}</span>
+                            {% else %}
+                            <span class="text-muted small">None</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">{{ a.get_asset_type_display }}</span>
+                        </td>
+                        <td>
+                            {% if a.environment == 'PROD' %}
+                            <span class="badge bg-danger">Production</span>
+                            {% elif a.environment == 'DMZ' %}
+                            <span class="badge bg-warning text-dark">DMZ</span>
+                            {% elif a.environment == 'STAGE' %}
+                            <span class="badge bg-primary">Staging</span>
+                            {% else %}
+                            <span class="badge bg-dark border border-secondary text-secondary">{{ a.get_environment_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if a.criticality == 'CRITICAL' %}
+                            <span class="badge bg-danger"><i class="bi bi-shield-fill-exclamation"></i> Mission-Critical</span>
+                            {% elif a.criticality == 'HIGH' %}
+                            <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill"></i> High</span>
+                            {% elif a.criticality == 'MEDIUM' %}
+                            <span class="badge bg-primary">Medium</span>
+                            {% else %}
+                            <span class="badge bg-success">Low</span>
+                            {% endif %}
+                        </td>
+                        <td class="fw-bold {% if a.criticality_multiplier >= 2.0 %}text-danger{% elif a.criticality_multiplier >= 1.5 %}text-warning{% else %}text-secondary{% endif %}">
+                            {{ a.criticality_multiplier }}x
+                        </td>
+                        <td>
+                            <small class="text-white">{{ a.business_unit|default:"—" }}</small>
+                            {% if a.owner %}
+                            <small class="text-secondary d-block">{{ a.owner }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if a.auto_discovered %}
+                            <span class="badge bg-info bg-opacity-25 text-info border border-info border-opacity-50">
+                                <i class="bi bi-broadcast"></i> Wazuh Agent
+                            </span>
+                            {% else %}
+                            <span class="badge bg-secondary bg-opacity-25 text-secondary border border-secondary">
+                                <i class="bi bi-pencil"></i> Manual
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <button type="button" class="btn btn-ariba-outline btn-sm py-0 px-2" onclick="editAssetModal({{ a.id }})">
+                                <i class="bi bi-pencil-square"></i> Edit
+                            </button>
+                            <form method="post" action="{% url 'alerts:asset_delete' a.id %}" class="d-inline" onsubmit="return confirm('Delete asset {{ a.name }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-ariba-outline btn-sm py-0 px-2 text-danger">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center text-secondary py-4">
+                            <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+                            No assets found. Click <strong>"Sync with Wazuh"</strong> to auto-discover agents or <strong>"Add Asset"</strong> to create one manually.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <nav class="mt-3">
+            <ul class="pagination pagination-sm justify-content-center mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link bg-dark text-white border-secondary" href="?page={{ page_obj.previous_page_number }}&search={{ search }}&criticality={{ criticality }}&environment={{ environment }}&asset_type={{ asset_type }}">&laquo; Previous</a>
+                </li>
+                {% endif %}
+                <li class="page-item disabled">
+                    <span class="page-link bg-dark text-secondary border-secondary">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                </li>
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link bg-dark text-white border-secondary" href="?page={{ page_obj.next_page_number }}&search={{ search }}&criticality={{ criticality }}&environment={{ environment }}&asset_type={{ asset_type }}">Next &raquo;</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal: Create Asset -->
+<div class="modal fade" id="createAssetModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <form method="post" action="{% url 'alerts:asset_create' %}">
+                {% csrf_token %}
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle text-primary"></i> Add Asset to Inventory</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Asset Friendly Name *</label>
+                            {{ form.name }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Hostname / FQDN *</label>
+                            {{ form.hostname }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">IP Address</label>
+                            {{ form.ip_address }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Wazuh Agent ID (optional)</label>
+                            {{ form.agent_id }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Criticality Tier *</label>
+                            {{ form.criticality }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Risk Multiplier (e.g. 2.0)</label>
+                            {{ form.criticality_multiplier }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Asset Type *</label>
+                            {{ form.asset_type }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Environment *</label>
+                            {{ form.environment }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Business Unit / Department</label>
+                            {{ form.business_unit }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Owner / Contact</label>
+                            {{ form.owner }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Operating System</label>
+                            {{ form.os_name }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">MAC Address</label>
+                            {{ form.mac_address }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small text-secondary">Description & Notes</label>
+                            {{ form.description }}
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                {{ form.is_active }}
+                                <label class="form-check-label small text-secondary" for="{{ form.is_active.id_for_label }}">Asset is Active for Alert Prioritization</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-ariba-primary btn-sm">Create Asset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Edit Asset -->
+<div class="modal fade" id="editAssetModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <form id="editAssetForm" method="post" action="">
+                {% csrf_token %}
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title"><i class="bi bi-pencil-square text-info"></i> Edit Asset Criticality & Details</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Asset Friendly Name *</label>
+                            <input type="text" name="name" id="edit_name" class="form-control bg-dark text-white border-secondary" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Hostname / FQDN *</label>
+                            <input type="text" name="hostname" id="edit_hostname" class="form-control bg-dark text-white border-secondary" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">IP Address</label>
+                            <input type="text" name="ip_address" id="edit_ip_address" class="form-control bg-dark text-white border-secondary">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Wazuh Agent ID</label>
+                            <input type="text" name="agent_id" id="edit_agent_id" class="form-control bg-dark text-white border-secondary">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Criticality Tier *</label>
+                            <select name="criticality" id="edit_criticality" class="form-select bg-dark text-white border-secondary" onchange="autoFillMultiplier(this.value)">
+                                <option value="CRITICAL">Mission-Critical (2.0x)</option>
+                                <option value="HIGH">High (1.5x)</option>
+                                <option value="MEDIUM">Medium (1.0x)</option>
+                                <option value="LOW">Low (0.8x)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Risk Multiplier</label>
+                            <input type="number" step="0.1" name="criticality_multiplier" id="edit_criticality_multiplier" class="form-control bg-dark text-white border-secondary">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Asset Type *</label>
+                            <select name="asset_type" id="edit_asset_type" class="form-select bg-dark text-white border-secondary">
+                                <option value="DOMAIN_CONTROLLER">Domain Controller (DC)</option>
+                                <option value="DATABASE">Database Server</option>
+                                <option value="PAYMENT_GATEWAY">Payment / Financial Gateway</option>
+                                <option value="SERVER">Server</option>
+                                <option value="FIREWALL">Firewall / Gateway</option>
+                                <option value="WORKSTATION">Workstation / Endpoint</option>
+                                <option value="CLOUD_INSTANCE">Cloud VM / Container</option>
+                                <option value="OTHER">Other Infrastructure</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Environment *</label>
+                            <select name="environment" id="edit_environment" class="form-select bg-dark text-white border-secondary">
+                                <option value="PROD">Production</option>
+                                <option value="DMZ">DMZ / Perimeter</option>
+                                <option value="STAGE">Staging</option>
+                                <option value="CORP">Corporate Internal</option>
+                                <option value="DEV">Development</option>
+                                <option value="TEST">Test / Sandbox</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Business Unit / Department</label>
+                            <input type="text" name="business_unit" id="edit_business_unit" class="form-control bg-dark text-white border-secondary">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Owner / Contact</label>
+                            <input type="text" name="owner" id="edit_owner" class="form-control bg-dark text-white border-secondary">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">Operating System</label>
+                            <input type="text" name="os_name" id="edit_os_name" class="form-control bg-dark text-white border-secondary">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-secondary">MAC Address</label>
+                            <input type="text" name="mac_address" id="edit_mac_address" class="form-control bg-dark text-white border-secondary">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small text-secondary">Description & Notes</label>
+                            <textarea name="description" id="edit_description" rows="2" class="form-control bg-dark text-white border-secondary"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input type="checkbox" name="is_active" id="edit_is_active" class="form-check-input">
+                                <label class="form-check-label small text-secondary" for="edit_is_active">Asset is Active for Alert Prioritization</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-ariba-primary btn-sm">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function autoFillMultiplier(crit) {
+    const map = {'CRITICAL': 2.0, 'HIGH': 1.5, 'MEDIUM': 1.0, 'LOW': 0.8};
+    const input = document.getElementById('edit_criticality_multiplier');
+    if (input && map[crit]) {
+        input.value = map[crit];
+    }
+}
+
+function editAssetModal(assetId) {
+    const form = document.getElementById('editAssetForm');
+    form.action = `/alerts/assets/${assetId}/edit/`;
+
+    fetch(`/alerts/assets/${assetId}/edit/`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('edit_name').value = data.name || '';
+        document.getElementById('edit_hostname').value = data.hostname || '';
+        document.getElementById('edit_ip_address').value = data.ip_address || '';
+        document.getElementById('edit_agent_id').value = data.agent_id || '';
+        document.getElementById('edit_criticality').value = data.criticality || 'MEDIUM';
+        document.getElementById('edit_criticality_multiplier').value = data.criticality_multiplier || 1.0;
+        document.getElementById('edit_asset_type').value = data.asset_type || 'SERVER';
+        document.getElementById('edit_environment').value = data.environment || 'PROD';
+        document.getElementById('edit_business_unit').value = data.business_unit || '';
+        document.getElementById('edit_owner').value = data.owner || '';
+        document.getElementById('edit_os_name').value = data.os_name || '';
+        document.getElementById('edit_mac_address').value = data.mac_address || '';
+        document.getElementById('edit_description').value = data.description || '';
+        document.getElementById('edit_is_active').checked = !!data.is_active;
+
+        const modal = new bootstrap.Modal(document.getElementById('editAssetModal'));
+        modal.show();
+    })
+    .catch(err => {
+        console.error('Failed to load asset details:', err);
+        alert('Failed to load asset details. Please try again.');
+    });
+}
+</script>
+{% endblock %}

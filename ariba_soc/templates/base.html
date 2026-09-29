@@ -53,6 +53,7 @@
                     {% if role != 'VIEWER' and role != 'MONITOR' %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'hunting:live_search' %}"><i class="bi bi-crosshair"></i> Threat Hunting</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'vulnerabilities:overview' %}"><i class="bi bi-shield-exclamation"></i> Vulnerabilities</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:assets_list' %}"><i class="bi bi-hdd-network"></i> Assets</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'incidents:list' %}"><i class="bi bi-exclamation-triangle"></i> Incidents</a></li>
                     {% endif %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'audit:list' %}"><i class="bi bi-journal-text"></i> Audit Logs</a></li>
@@ -80,6 +81,7 @@
                                     <a class="dropdown-item ps-0" href="{% url 'settings:escalation' %}"><i class="bi bi-arrow-up-circle"></i> Escalation Settings</a>
                                     <a class="dropdown-item ps-0 text-info" href="{% url 'settings:aggregation' %}"><i class="bi bi-layers-half"></i> Alert Aggregation</a>
                                     <a class="dropdown-item ps-0 text-warning" href="{% url 'settings:suppression_rules' %}"><i class="bi bi-funnel"></i> Suppression & Tuning</a>
+                                    <a class="dropdown-item ps-0 text-success" href="{% url 'alerts:assets_list' %}"><i class="bi bi-hdd-network"></i> Asset Directory & Criticality</a>
                                 </div>
                                 <div class="col-md-3">
                                     <h6 class="dropdown-header px-0 border-bottom pb-2 mb-2"><i class="bi bi-cloud-connect"></i> Integration</h6>

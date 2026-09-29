@@ -447,6 +447,8 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
                 data['first_seen_at'] = timezone.now()
                 data['last_seen_at'] = timezone.now()
                 alert_obj = Alert(**data)
+                from alerts.services import apply_asset_criticality
+                apply_asset_criticality(alert_obj)
                 batch.append(alert_obj)
                 if agg_key:
                     batch_keys[agg_key] = alert_obj

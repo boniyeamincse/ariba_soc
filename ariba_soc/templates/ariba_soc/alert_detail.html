@@ -76,6 +76,14 @@
                                     </span>
                                 </div>
                                 {% endif %}
+                                {% if alert.risk_score %}
+                                <div class="mt-1 small">
+                                    <span class="text-secondary">Dynamic Risk Score:</span>
+                                    <span class="fw-bold {% if alert.risk_score >= 80 %}text-danger{% elif alert.risk_score >= 60 %}text-warning{% else %}text-info{% endif %}">
+                                        {{ alert.risk_score }}/100
+                                    </span>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
 
@@ -94,6 +102,31 @@
                                 <div class="small text-muted mt-1">
                                     Dest IP: <code class="text-info">{{ alert.destination_ip|default:'Internal / Local' }}</code>
                                 </div>
+                                {% if alert.asset %}
+                                <div class="mt-2 pt-2 border-top border-secondary border-opacity-25">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="small text-secondary">Asset Tier:</span>
+                                        {% if alert.asset.criticality == 'CRITICAL' %}
+                                        <span class="badge bg-danger"><i class="bi bi-shield-fill-exclamation"></i> MISSION-CRITICAL ({{ alert.asset.criticality_multiplier }}x)</span>
+                                        {% elif alert.asset.criticality == 'HIGH' %}
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill"></i> HIGH IMPACT ({{ alert.asset.criticality_multiplier }}x)</span>
+                                        {% elif alert.asset.criticality == 'MEDIUM' %}
+                                        <span class="badge bg-primary">Medium ({{ alert.asset.criticality_multiplier }}x)</span>
+                                        {% else %}
+                                        <span class="badge bg-success">Low ({{ alert.asset.criticality_multiplier }}x)</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="small text-muted mt-1">
+                                        <a href="{% url 'alerts:assets_list' %}?search={{ alert.asset.hostname }}" class="text-info text-decoration-none fw-semibold">
+                                            {{ alert.asset.name }}
+                                        </a> ({{ alert.asset.get_asset_type_display }} &bull; {{ alert.asset.get_environment_display }})
+                                    </div>
+                                </div>
+                                {% elif alert.asset_criticality %}
+                                <div class="mt-2 pt-1 border-top border-secondary border-opacity-25">
+                                    <span class="badge bg-warning text-dark">{{ alert.asset_criticality }} Asset</span>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
 
