@@ -571,6 +571,18 @@ def status_toggle(request, pk):
     messages.success(request, f'Status {"activated" if obj.is_active else "deactivated"}.')
     return redirect('settings:statuses')
 
+@require_POST
+def status_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    obj = get_object_or_404(StatusSettings, id=pk)
+    name = obj.name
+    _log_setting_change(request.user, f'Deleted status {name}', 'StatusSettings', obj.id, name, 'Deleted', request)
+    obj.delete()
+    messages.success(request, f'Status "{name}" permanently deleted.')
+    return redirect('settings:statuses')
+
 def verdict_settings(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -614,6 +626,18 @@ def verdict_toggle(request, pk):
     obj.is_active = not obj.is_active
     obj.save()
     messages.success(request, f'Verdict {"activated" if obj.is_active else "deactivated"}.')
+    return redirect('settings:verdicts')
+
+@require_POST
+def verdict_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    obj = get_object_or_404(VerdictSettings, id=pk)
+    name = obj.name
+    _log_setting_change(request.user, f'Deleted verdict {name}', 'VerdictSettings', obj.id, name, 'Deleted', request)
+    obj.delete()
+    messages.success(request, f'Verdict "{name}" permanently deleted.')
     return redirect('settings:verdicts')
 
 def sla_settings(request):

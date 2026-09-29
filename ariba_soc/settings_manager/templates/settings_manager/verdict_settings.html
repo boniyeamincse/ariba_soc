@@ -48,7 +48,7 @@
                                 <a href="{% url 'settings:verdict_edit' v.id %}" class="btn btn-ariba-outline btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
                                 <form method="post" action="{% url 'settings:verdict_toggle' v.id %}" class="d-inline">
                                     {% csrf_token %}
-                                    <button type="submit" class="btn btn-ariba-outline btn-sm" title="Toggle">
+                                    <button type="submit" class="btn btn-ariba-outline btn-sm" title="Toggle Active/Inactive">
                                     {% if v.is_active %}
                                     <i class="bi bi-toggle-on text-success"></i>
                                     {% else %}
@@ -56,6 +56,9 @@
                                     {% endif %}
                                     </button>
                                 </form>
+                                <button type="button" class="btn btn-outline-danger btn-sm" title="Delete Verdict" data-bs-toggle="modal" data-bs-target="#deleteVerdictModal{{ v.id }}">
+                                    <i class="bi bi-trash"></i>
+                                </button>
                             </div>
                         </td>
                     </tr>
@@ -122,4 +125,32 @@
         </div>
     </div>
 </div>
+
+{% for v in verdicts %}
+<div class="modal fade ariba-modal" id="deleteVerdictModal{{ v.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-danger">
+                <h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>Delete Verdict</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to <strong class="text-danger">permanently delete</strong> this verdict?</p>
+                <div class="ariba-card p-3">
+                    <div class="fw-bold">{{ v.name }} (Type: {{ v.verdict_type|default:'None' }})</div>
+                    <div class="text-muted small">This action cannot be undone. Alerts using this verdict might be affected.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <form method="post" action="{% url 'settings:verdict_delete' v.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash-fill me-1"></i>Delete Permanently</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
 {% endblock %}

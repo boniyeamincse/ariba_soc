@@ -2,6 +2,13 @@
 
 {% block settings_content %}
 <div class="container-fluid py-3">
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'settings:dashboard' %}">Settings</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'settings:verdicts' %}">Verdicts</a></li>
+            <li class="breadcrumb-item active">Edit: {{ object.name }}</li>
+        </ol>
+    </nav>
     <div class="d-flex justify-content-between align-items-center mb-2">
         <h4 class="m-0"><i class="bi bi-check2-square"></i> Edit Verdict: {{ object.name }}</h4>
     </div>
