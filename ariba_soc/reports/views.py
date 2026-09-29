@@ -119,3 +119,144 @@ def export_excel(request):
     response = HttpResponse(output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = 'attachment; filename="ariba_alerts_export.xlsx"'
     return response
+
+
+# ---------------------------------------------------------------------------
+# MTTA / MTTR Analytics Views (Phase 4)
+# ---------------------------------------------------------------------------
+from datetime import datetime
+from django.contrib.auth.models import User
+from reports.services import calculate_mtta_mttr_analytics
+
+
+def _parse_mtta_filters(request):
+    range_param = request.GET.get('range', '30d')
+    severity = request.GET.get('severity', 'All')
+    assignee = request.GET.get('assignee', 'All')
+    custom_from = request.GET.get('date_from', '').strip()
+    custom_to = request.GET.get('date_to', '').strip()
+
+    now = timezone.now()
+    date_from = None
+    date_to = None
+
+    if range_param == '24h':
+        date_from = now - timedelta(hours=24)
+        date_to = now
+    elif range_param == '7d':
+        date_from = now - timedelta(days=7)
+        date_to = now
+    elif range_param == '30d':
+        date_from = now - timedelta(days=30)
+        date_to = now
+    elif range_param == '90d':
+        date_from = now - timedelta(days=90)
+        date_to = now
+    elif range_param == 'all':
+        date_from = None
+        date_to = None
+    elif range_param == 'custom':
+        if custom_from:
+            try:
+                date_from = timezone.make_aware(datetime.strptime(custom_from, '%Y-%m-%d'))
+            except (ValueError, TypeError):
+                pass
+        if custom_to:
+            try:
+                parsed_to = datetime.strptime(custom_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+                date_to = timezone.make_aware(parsed_to)
+            except (ValueError, TypeError):
+                pass
+
+    return {
+        'range': range_param,
+        'severity': severity,
+        'assignee': assignee,
+        'date_from': date_from,
+        'date_to': date_to,
+        'custom_from': custom_from,
+        'custom_to': custom_to,
+    }
+
+
+@login_required
+def mtta_mttr_analytics(request):
+    filters = _parse_mtta_filters(request)
+    metrics = calculate_mtta_mttr_analytics(
+        date_from=filters['date_from'],
+        date_to=filters['date_to'],
+        severity=filters['severity'],
+        assignee_id=filters['assignee'],
+    )
+    analysts = User.objects.filter(is_active=True).select_related('analyst_profile').order_by('username')
+    context = {
+        'metrics': metrics,
+        'selected_range': filters['range'],
+        'selected_severity': filters['severity'],
+        'selected_assignee': filters['assignee'],
+        'custom_from': filters['custom_from'],
+        'custom_to': filters['custom_to'],
+        'analysts': analysts,
+        'severities': ['Critical', 'High', 'Medium', 'Low', 'Informational'],
+    }
+    return render(request, 'ariba_soc/mtta_mttr_analytics.html', context)
+
+
+@login_required
+def export_mtta_mttr_csv(request):
+    filters = _parse_mtta_filters(request)
+    metrics = calculate_mtta_mttr_analytics(
+        date_from=filters['date_from'],
+        date_to=filters['date_to'],
+        severity=filters['severity'],
+        assignee_id=filters['assignee'],
+    )
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="ariba_mtta_mttr_sla_analytics.csv"'
+    writer = csv.writer(response)
+
+    writer.writerow(['ARIBA SOC — MTTA / MTTR & SLA PERFORMANCE REPORT'])
+    writer.writerow(['Generated on', timezone.now().strftime('%Y-%m-%d %H:%M:%S UTC')])
+    writer.writerow(['Range Filter', filters['range']])
+    writer.writerow(['Severity Filter', filters['severity']])
+    writer.writerow(['Assignee Filter', filters['assignee']])
+    writer.writerow([])
+
+    writer.writerow(['--- EXECUTIVE METRICS ---'])
+    writer.writerow(['Metric', 'Value'])
+    writer.writerow(['Total Alerts', metrics['total_alerts']])
+    writer.writerow(['Total Acknowledged', metrics['total_acknowledged']])
+    writer.writerow(['Total Resolved', metrics['total_resolved']])
+    writer.writerow(['Avg MTTA (Mean Time to Acknowledge)', metrics['avg_mtta_display']])
+    writer.writerow(['Median MTTA', metrics['median_mtta_display']])
+    writer.writerow(['Avg MTTR (Mean Time to Resolve)', metrics['avg_mttr_display']])
+    writer.writerow(['Median MTTR', metrics['median_mttr_display']])
+    writer.writerow(['SLA Compliance Rate', f"{metrics['sla_compliance_rate']}%"])
+    writer.writerow(['Total SLA Breaches', metrics['total_breached']])
+    writer.writerow([])
+
+    writer.writerow(['--- SEVERITY PERFORMANCE BREAKDOWN ---'])
+    writer.writerow(['Severity', 'Total Alerts', 'Avg MTTA', 'Median MTTA', 'Target Ack', 'Ack SLA %', 'Avg MTTR', 'Median MTTR', 'Target Resolve', 'Resolve SLA %', 'Breaches', 'Overall SLA Compliance %'])
+    for s in metrics['severity_breakdown']:
+        writer.writerow([
+            s['severity'], s['total'], s['avg_mtta_display'], s['median_mtta_display'],
+            s['ack_target_display'], f"{s['ack_compliance_pct']}%",
+            s['avg_mttr_display'], s['median_mttr_display'],
+            s['res_target_display'], f"{s['res_compliance_pct']}%",
+            s['breached'], f"{s['sla_compliance_pct']}%",
+        ])
+    writer.writerow([])
+
+    writer.writerow(['--- ANALYST PERFORMANCE LEADERBOARD ---'])
+    writer.writerow(['Analyst', 'Role', 'Assigned', 'In Progress', 'Resolved', 'Avg MTTA', 'Median MTTA', 'Avg MTTR', 'Median MTTR', 'Breaches', 'SLA Adherence %', 'TP Rate %'])
+    for a in metrics['analysts_breakdown']:
+        writer.writerow([
+            a['full_name'] or a['username'], a['role'], a['assigned'],
+            a['in_progress'], a['resolved'], a['avg_mtta_display'],
+            a['median_mtta_display'], a['avg_mttr_display'],
+            a['median_mttr_display'], a['breached'],
+            f"{a['sla_adherence_pct']}%", f"{a['tp_rate']}%",
+        ])
+
+    return response
+

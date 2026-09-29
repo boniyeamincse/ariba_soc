@@ -249,3 +249,334 @@ def generate_report(report, now=None, errors=None, generated_by=None):
     report.last_report_file = relative_path
     report.save(update_fields=['last_generated_at', 'last_report_file'])
     return relative_path
+
+
+# ---------------------------------------------------------------------------
+# MTTA / MTTR Analytics & SLA Performance Service (Phase 4)
+# ---------------------------------------------------------------------------
+import json
+import statistics
+from collections import defaultdict
+
+
+def format_duration_minutes(minutes):
+    """Format minutes into human-readable duration (e.g. 45s, 14m, 2.5h, 3.1d)."""
+    if minutes is None:
+        return 'N/A'
+    if minutes < 1:
+        return f"{int(round(minutes * 60))}s"
+    if minutes < 60:
+        return f"{int(round(minutes))}m"
+    if minutes < 1440:
+        hours = round(minutes / 60.0, 1)
+        return f"{int(hours) if hours.is_integer() else hours}h"
+    days = round(minutes / 1440.0, 1)
+    return f"{int(days) if days.is_integer() else days}d"
+
+
+def get_sla_targets():
+    """Retrieve SLA targets from database with standard SOC defaults fallback."""
+    from settings_manager.models import SLASettings
+    defaults = {
+        'Critical': {'ack_min': 15, 'resolve_min': 240},
+        'High': {'ack_min': 30, 'resolve_min': 480},
+        'Medium': {'ack_min': 120, 'resolve_min': 1440},
+        'Low': {'ack_min': 480, 'resolve_min': 4320},
+        'Informational': {'ack_min': 480, 'resolve_min': 4320},
+    }
+    targets = dict(defaults)
+    try:
+        for sla in SLASettings.objects.filter(is_active=True):
+            targets[sla.severity] = {
+                'ack_min': sla.acknowledge_minutes,
+                'resolve_min': sla.resolve_minutes,
+            }
+    except Exception:
+        pass
+    return targets
+
+
+def calculate_mtta_mttr_analytics(date_from=None, date_to=None, severity=None, assignee_id=None):
+    """
+    Computes MTTA, MTTR, SLA compliance, severity breakdown, analyst performance,
+    and daily trend data for the filtered set of alerts.
+    """
+    sla_targets = get_sla_targets()
+    qs = Alert.objects.select_related('assignee', 'assignee__analyst_profile').all()
+
+    if date_from:
+        qs = qs.filter(alert_time__gte=date_from)
+    if date_to:
+        qs = qs.filter(alert_time__lte=date_to)
+    if severity and severity != 'All':
+        qs = qs.filter(severity=severity)
+    if assignee_id and assignee_id != 'All':
+        if str(assignee_id).lower() == 'unassigned':
+            qs = qs.filter(assignee__isnull=True)
+        else:
+            qs = qs.filter(assignee_id=assignee_id)
+
+    fields = [
+        'id', 'alert_name', 'severity', 'status', 'verdict', 'alert_time',
+        'acknowledged_at', 'assigned_at', 'accepted_at', 'resolved_at',
+        'closed_at', 'sla_status', 'sla_due_at', 'assignee_id',
+    ]
+    alerts = list(qs.only(*fields))
+
+    total_alerts = len(alerts)
+    all_tta = []
+    all_ttr = []
+    sla_breached_count = 0
+    sla_within_count = 0
+
+    # Severity tracking
+    severities = ['Critical', 'High', 'Medium', 'Low', 'Informational']
+    sev_stats = {
+        sev: {
+            'total': 0,
+            'tta_list': [],
+            'ttr_list': [],
+            'breached': 0,
+            'within_sla': 0,
+            'ack_target': sla_targets.get(sev, {}).get('ack_min', 120),
+            'res_target': sla_targets.get(sev, {}).get('resolve_min', 1440),
+        }
+        for sev in severities
+    }
+
+    # Analyst tracking
+    analyst_stats = defaultdict(lambda: {
+        'username': '',
+        'full_name': '',
+        'role': 'Analyst',
+        'assigned': 0,
+        'in_progress': 0,
+        'resolved': 0,
+        'tta_list': [],
+        'ttr_list': [],
+        'breached': 0,
+        'tp_count': 0,
+        'fp_count': 0,
+    })
+
+    # Daily trend tracking
+    daily_stats = defaultdict(lambda: {
+        'total': 0,
+        'resolved': 0,
+        'breached': 0,
+        'tta_list': [],
+        'ttr_list': [],
+    })
+
+    for a in alerts:
+        # Check SLA status
+        if a.sla_status == 'Breached':
+            sla_breached_count += 1
+        elif a.sla_status == 'Within SLA':
+            sla_within_count += 1
+
+        sev = a.severity if a.severity in sev_stats else 'Medium'
+        sev_stats[sev]['total'] += 1
+        if a.sla_status == 'Breached':
+            sev_stats[sev]['breached'] += 1
+        else:
+            sev_stats[sev]['within_sla'] += 1
+
+        day_str = a.alert_time.strftime('%Y-%m-%d') if a.alert_time else timezone.now().strftime('%Y-%m-%d')
+        daily_stats[day_str]['total'] += 1
+        if a.sla_status == 'Breached':
+            daily_stats[day_str]['breached'] += 1
+
+        # Calculate TTA (Time to Acknowledge / Triage)
+        ack_time = a.acknowledged_at or a.assigned_at or a.accepted_at
+        if ack_time and a.alert_time and ack_time >= a.alert_time:
+            tta_min = (ack_time - a.alert_time).total_seconds() / 60.0
+            all_tta.append(tta_min)
+            sev_stats[sev]['tta_list'].append(tta_min)
+            daily_stats[day_str]['tta_list'].append(tta_min)
+
+        # Calculate TTR (Time to Resolve / Respond)
+        res_time = a.resolved_at or a.closed_at
+        is_closed = a.status in ['Closed', 'Archived'] or res_time is not None
+        if is_closed and a.alert_time:
+            if not res_time:
+                res_time = getattr(a, 'updated_at', a.alert_time)
+            if res_time and res_time >= a.alert_time:
+                ttr_min = (res_time - a.alert_time).total_seconds() / 60.0
+                all_ttr.append(ttr_min)
+                sev_stats[sev]['ttr_list'].append(ttr_min)
+                res_day = res_time.strftime('%Y-%m-%d')
+                daily_stats[res_day]['resolved'] += 1
+                daily_stats[res_day]['ttr_list'].append(ttr_min)
+
+        # Analyst breakdown
+        assignee = a.assignee
+        user_key = assignee.username if assignee else 'unassigned'
+        a_entry = analyst_stats[user_key]
+        if assignee:
+            a_entry['username'] = assignee.username
+            a_entry['full_name'] = assignee.get_full_name() or assignee.username
+            profile = getattr(assignee, 'analyst_profile', None)
+            if profile:
+                a_entry['role'] = profile.get_role_display()
+        else:
+            a_entry['username'] = 'Unassigned'
+            a_entry['full_name'] = 'Unassigned Pool'
+            a_entry['role'] = 'Queue'
+
+        a_entry['assigned'] += 1
+        if a.status in ['In Progress', 'Awaiting Action', 'Pending']:
+            a_entry['in_progress'] += 1
+        elif a.status in ['Closed', 'Archived']:
+            a_entry['resolved'] += 1
+
+        if ack_time and a.alert_time and ack_time >= a.alert_time:
+            a_entry['tta_list'].append((ack_time - a.alert_time).total_seconds() / 60.0)
+
+        if is_closed and a.alert_time and res_time and res_time >= a.alert_time:
+            a_entry['ttr_list'].append((res_time - a.alert_time).total_seconds() / 60.0)
+
+        if a.sla_status == 'Breached':
+            a_entry['breached'] += 1
+
+        if a.verdict == 'True Positive':
+            a_entry['tp_count'] += 1
+        elif a.verdict == 'False Positive':
+            a_entry['fp_count'] += 1
+
+    # High-level Metrics
+    avg_mtta = sum(all_tta) / len(all_tta) if all_tta else None
+    median_mtta = statistics.median(all_tta) if all_tta else None
+    avg_mttr = sum(all_ttr) / len(all_ttr) if all_ttr else None
+    median_mttr = statistics.median(all_ttr) if all_ttr else None
+
+    evaluated_sla = sla_within_count + sla_breached_count
+    sla_compliance_rate = round((sla_within_count / evaluated_sla) * 100, 1) if evaluated_sla > 0 else 100.0
+
+    # Format Severity Breakdown list
+    severity_breakdown = []
+    for sev in severities:
+        s_data = sev_stats[sev]
+        count = s_data['total']
+        ttas = s_data['tta_list']
+        ttrs = s_data['ttr_list']
+        sev_avg_mtta = sum(ttas) / len(ttas) if ttas else None
+        sev_med_mtta = statistics.median(ttas) if ttas else None
+        sev_avg_mttr = sum(ttrs) / len(ttrs) if ttrs else None
+        sev_med_mttr = statistics.median(ttrs) if ttrs else None
+
+        ack_target = s_data['ack_target']
+        res_target = s_data['res_target']
+
+        ack_compliant = sum(1 for t in ttas if t <= ack_target)
+        ack_compliance_pct = round((ack_compliant / len(ttas)) * 100, 1) if ttas else 100.0
+
+        res_compliant = sum(1 for t in ttrs if t <= res_target)
+        res_compliance_pct = round((res_compliant / len(ttrs)) * 100, 1) if ttrs else 100.0
+
+        sev_evaluated = s_data['within_sla'] + s_data['breached']
+        overall_pct = round((s_data['within_sla'] / sev_evaluated) * 100, 1) if sev_evaluated > 0 else 100.0
+
+        severity_breakdown.append({
+            'severity': sev,
+            'total': count,
+            'ack_count': len(ttas),
+            'avg_mtta_min': sev_avg_mtta,
+            'avg_mtta_display': format_duration_minutes(sev_avg_mtta),
+            'median_mtta_display': format_duration_minutes(sev_med_mtta),
+            'ack_target_min': ack_target,
+            'ack_target_display': format_duration_minutes(ack_target),
+            'ack_compliance_pct': ack_compliance_pct,
+            'res_count': len(ttrs),
+            'avg_mttr_min': sev_avg_mttr,
+            'avg_mttr_display': format_duration_minutes(sev_avg_mttr),
+            'median_mttr_display': format_duration_minutes(sev_med_mttr),
+            'res_target_min': res_target,
+            'res_target_display': format_duration_minutes(res_target),
+            'res_compliance_pct': res_compliance_pct,
+            'breached': s_data['breached'],
+            'sla_compliance_pct': overall_pct,
+        })
+
+    # Format Analyst Breakdown list
+    analysts_list = []
+    for user_key, a_data in analyst_stats.items():
+        ttas = a_data['tta_list']
+        ttrs = a_data['ttr_list']
+        a_avg_mtta = sum(ttas) / len(ttas) if ttas else None
+        a_med_mtta = statistics.median(ttas) if ttas else None
+        a_avg_mttr = sum(ttrs) / len(ttrs) if ttrs else None
+        a_med_mttr = statistics.median(ttrs) if ttrs else None
+
+        total_evaluated_sla = a_data['assigned']
+        sla_rate = round(((total_evaluated_sla - a_data['breached']) / total_evaluated_sla) * 100, 1) if total_evaluated_sla > 0 else 100.0
+
+        verdict_total = a_data['tp_count'] + a_data['fp_count']
+        tp_rate = round((a_data['tp_count'] / verdict_total) * 100, 1) if verdict_total > 0 else 0.0
+
+        analysts_list.append({
+            'username': a_data['username'],
+            'full_name': a_data['full_name'],
+            'role': a_data['role'],
+            'assigned': a_data['assigned'],
+            'in_progress': a_data['in_progress'],
+            'resolved': a_data['resolved'],
+            'avg_mtta_display': format_duration_minutes(a_avg_mtta),
+            'median_mtta_display': format_duration_minutes(a_med_mtta),
+            'avg_mttr_display': format_duration_minutes(a_avg_mttr),
+            'median_mttr_display': format_duration_minutes(a_med_mttr),
+            'breached': a_data['breached'],
+            'sla_adherence_pct': sla_rate,
+            'tp_count': a_data['tp_count'],
+            'fp_count': a_data['fp_count'],
+            'tp_rate': tp_rate,
+        })
+
+    analysts_list.sort(key=lambda x: (x['username'] == 'Unassigned', -x['assigned']))
+
+    sorted_days = sorted(daily_stats.keys())
+    chart_dates = []
+    chart_mtta = []
+    chart_mttr = []
+    chart_created = []
+    chart_resolved = []
+    chart_breached = []
+
+    for day in sorted_days:
+        d = daily_stats[day]
+        chart_dates.append(day)
+        day_avg_mtta = round(sum(d['tta_list']) / len(d['tta_list']), 1) if d['tta_list'] else 0
+        day_avg_mttr = round(sum(d['ttr_list']) / len(d['ttr_list']), 1) if d['ttr_list'] else 0
+        chart_mtta.append(day_avg_mtta)
+        chart_mttr.append(day_avg_mttr)
+        chart_created.append(d['total'])
+        chart_resolved.append(d['resolved'])
+        chart_breached.append(d['breached'])
+
+    trend_chart_data = {
+        'dates': chart_dates,
+        'mtta': chart_mtta,
+        'mttr': chart_mttr,
+        'created': chart_created,
+        'resolved': chart_resolved,
+        'breached': chart_breached,
+    }
+
+    return {
+        'total_alerts': total_alerts,
+        'total_acknowledged': len(all_tta),
+        'total_resolved': len(all_ttr),
+        'total_breached': sla_breached_count,
+        'total_within_sla': sla_within_count,
+        'sla_compliance_rate': sla_compliance_rate,
+        'avg_mtta_min': avg_mtta,
+        'avg_mtta_display': format_duration_minutes(avg_mtta),
+        'median_mtta_display': format_duration_minutes(median_mtta),
+        'avg_mttr_min': avg_mttr,
+        'avg_mttr_display': format_duration_minutes(avg_mttr),
+        'median_mttr_display': format_duration_minutes(median_mttr),
+        'severity_breakdown': severity_breakdown,
+        'analysts_breakdown': analysts_list,
+        'trend_chart_data': trend_chart_data,
+        'trend_chart_json': json.dumps(trend_chart_data),
+    }
