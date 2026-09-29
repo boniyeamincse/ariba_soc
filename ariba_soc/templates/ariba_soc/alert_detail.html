@@ -45,6 +45,140 @@
                     </div>
                 </div>
 
+                <!-- 5 Ws SOC Triage Cockpit -->
+                <div class="p-3 mb-4 rounded" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(59, 130, 246, 0.25); border-left: 4px solid var(--accent-blue);">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="text-uppercase fw-bold text-info" style="font-size: 0.8rem; letter-spacing: 0.08em;">
+                            <i class="bi bi-shield-check me-1"></i> SOC Analyst Triage Checklist (5 Ws)
+                        </span>
+                        <span class="badge bg-secondary bg-opacity-50 text-light" style="font-size: 0.7rem;">
+                            SLA: {{ alert.sla_status|default:'Standard' }}
+                        </span>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- 1. What happened? -->
+                        <div class="col-md-4">
+                            <div class="p-2 h-100 rounded" style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.05);">
+                                <div class="text-secondary small fw-bold mb-1">
+                                    <span class="badge bg-primary bg-opacity-25 text-info me-1">1</span> WHAT HAPPENED?
+                                </div>
+                                <div class="small fw-semibold text-light text-truncate" title="{{ alert.alert_name }}">
+                                    {{ alert.alert_name }}
+                                </div>
+                                <div class="small text-muted mt-1">
+                                    <i class="bi bi-hash"></i> Rule {{ alert.rule_id|default:'N/A' }} (Level {{ alert.rule_level }})
+                                </div>
+                                {% if alert.mitre_technique %}
+                                <div class="mt-1">
+                                    <span class="badge bg-dark text-info border border-secondary" style="font-size: 0.7rem;">
+                                        {{ alert.mitre_tactic|default:'MITRE' }}: {{ alert.mitre_technique }}
+                                    </span>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- 2. Where did it happen? -->
+                        <div class="col-md-4">
+                            <div class="p-2 h-100 rounded" style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.05);">
+                                <div class="text-secondary small fw-bold mb-1">
+                                    <span class="badge bg-primary bg-opacity-25 text-info me-1">2</span> WHERE DID IT HAPPEN?
+                                </div>
+                                <div class="small fw-semibold text-light text-truncate" title="{{ alert.hostname|default:alert.agent_name|default:'Unknown Host' }}">
+                                    <i class="bi bi-hdd-network text-info me-1"></i> {{ alert.hostname|default:alert.agent_name|default:'Unknown Host' }}
+                                </div>
+                                <div class="small text-muted mt-1">
+                                    Agent ID: <code class="text-light">{{ alert.agent_id|default:'—' }}</code>
+                                </div>
+                                <div class="small text-muted mt-1">
+                                    Dest IP: <code class="text-info">{{ alert.destination_ip|default:'Internal / Local' }}</code>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Who / What initiated it? -->
+                        <div class="col-md-4">
+                            <div class="p-2 h-100 rounded" style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.05);">
+                                <div class="text-secondary small fw-bold mb-1">
+                                    <span class="badge bg-primary bg-opacity-25 text-info me-1">3</span> WHO / WHAT INITIATED?
+                                </div>
+                                <div class="small fw-semibold text-light text-truncate" title="{{ alert.username|default:'System / Unknown' }}">
+                                    <i class="bi bi-person text-warning me-1"></i> {{ alert.username|default:'System / Unknown' }}
+                                </div>
+                                <div class="small text-muted mt-1">
+                                    Source IP: <code class="text-warning">{{ alert.source_ip|default:'—' }}</code>
+                                    {% if alert.enrichment_data.IPInfo.country %}
+                                    <span class="badge bg-secondary bg-opacity-50 ms-1">{{ alert.enrichment_data.IPInfo.country }}</span>
+                                    {% endif %}
+                                </div>
+                                {% if alert.process_name %}
+                                <div class="small text-muted mt-1 text-truncate" title="{{ alert.process_name }}">
+                                    Process: <code class="text-light">{{ alert.process_name }}</code>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- 4. Is it malicious? -->
+                        <div class="col-md-6">
+                            <div class="p-2 h-100 rounded" style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.05);">
+                                <div class="text-secondary small fw-bold mb-1">
+                                    <span class="badge bg-primary bg-opacity-25 text-info me-1">4</span> IS IT MALICIOUS?
+                                </div>
+                                <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+                                    {% include 'ariba_soc/_severity_badge.html' with severity=alert.severity %}
+                                    {% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}
+                                    {% if alert.event_count > 1 %}
+                                    <span class="badge bg-info bg-opacity-25 text-info"><i class="bi bi-layers-half"></i> {{ alert.event_count }} Events</span>
+                                    {% endif %}
+                                </div>
+                                <div class="small mt-2">
+                                    {% if alert.enrichment_data.VirusTotal %}
+                                        {% if alert.enrichment_data.VirusTotal.malicious > 0 %}
+                                        <span class="text-danger fw-semibold"><i class="bi bi-exclamation-triangle-fill"></i> VirusTotal: {{ alert.enrichment_data.VirusTotal.malicious }} engines flagged malicious!</span>
+                                        {% else %}
+                                        <span class="text-success"><i class="bi bi-check-circle"></i> VirusTotal: Clean (0 detections)</span>
+                                        {% endif %}
+                                    {% elif alert.severity == 'Critical' or alert.severity == 'High' %}
+                                        <span class="text-warning"><i class="bi bi-shield-exclamation"></i> High-risk signature matching known security violations.</span>
+                                    {% else %}
+                                        <span class="text-muted"><i class="bi bi-info-circle"></i> Low-risk anomaly signature; verify against baseline.</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5. What should we do next? -->
+                        <div class="col-md-6">
+                            <div class="p-2 h-100 rounded" style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.05);">
+                                <div class="text-secondary small fw-bold mb-1">
+                                    <span class="badge bg-primary bg-opacity-25 text-info me-1">5</span> WHAT SHOULD WE DO NEXT?
+                                </div>
+                                <div class="small text-light">
+                                    {% if alert.triage_guide %}
+                                        {{ alert.triage_guide|truncatechars:130 }}
+                                    {% elif alert.severity == 'Critical' or alert.severity == 'High' %}
+                                        Verify authentication source. If unauthorized, isolate host and escalate to Incident Response.
+                                    {% else %}
+                                        Verify user authorization. If legitimate administrative activity, close as False Positive.
+                                    {% endif %}
+                                </div>
+                                <div class="d-flex gap-2 mt-2 flex-wrap">
+                                    {% if alert.status != 'Closed' %}
+                                    <a href="{% url 'incidents:create' %}?alerts={{ alert.id }}" class="btn btn-sm btn-outline-danger" style="font-size:0.75rem;">
+                                        <i class="bi bi-shield-slash"></i> Escalate to Incident
+                                    </a>
+                                    {% endif %}
+                                    <a href="#auditTrailSection" class="btn btn-sm btn-ariba-outline" style="font-size:0.75rem;">
+                                        <i class="bi bi-clock-history"></i> Audit Trail
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="detail-section">
                     <h6 class="text-secondary"><i class="bi bi-info-circle"></i> Description</h6>
                     <p>{{ alert.description|default:alert.rule_description|default:'No description available' }}</p>
@@ -309,7 +443,7 @@
                 {% endif %}
             </div>
 
-            <div class="ariba-card p-3 mb-3">
+            <div class="ariba-card p-3 mb-3" id="auditTrailSection">
                 <h6 class="text-secondary"><i class="bi bi-clock-history"></i> Audit Trail</h6>
                 <hr style="border-color: var(--border-color);">
                 <div class="timeline" style="max-height: 300px; overflow-y: auto;">

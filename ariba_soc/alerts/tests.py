@@ -251,3 +251,30 @@ class AlertAggregationTest(TestCase):
         self.assertTrue(created2)
         self.assertNotEqual(alert1.id, alert2.id)
 
+    def test_alert_detail_renders_5w_checklist(self):
+        from django.urls import reverse
+        user = User.objects.create_superuser('socanalyst', 'soc@example.com', 'password123')
+        self.client.force_login(user)
+
+        alert = Alert.objects.create(
+            alert_name='SSH Bruteforce Detected',
+            severity='High',
+            rule_id='5710',
+            agent_name='kali-target',
+            source_ip='192.168.1.50',
+            destination_ip='10.0.0.15',
+            username='root',
+            source=self.source,
+            alert_time=timezone.now(),
+        )
+
+        resp = self.client.get(reverse('alerts:detail', args=[alert.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'SOC Analyst Triage Checklist (5 Ws)')
+        self.assertContains(resp, 'WHAT HAPPENED?')
+        self.assertContains(resp, 'WHERE DID IT HAPPEN?')
+        self.assertContains(resp, 'WHO / WHAT INITIATED?')
+        self.assertContains(resp, 'IS IT MALICIOUS?')
+        self.assertContains(resp, 'WHAT SHOULD WE DO NEXT?')
+
+
