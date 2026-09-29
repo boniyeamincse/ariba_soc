@@ -514,6 +514,18 @@ def severity_toggle(request, pk):
     messages.success(request, f'Severity {"activated" if obj.is_active else "deactivated"}.')
     return redirect('settings:severities')
 
+@require_POST
+def severity_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    obj = get_object_or_404(SeveritySettings, id=pk)
+    name = obj.name
+    _log_setting_change(request.user, f'Deleted severity {name}', 'SeveritySettings', obj.id, name, 'Deleted', request)
+    obj.delete()
+    messages.success(request, f'Severity "{name}" permanently deleted.')
+    return redirect('settings:severities')
+
 def status_settings(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')

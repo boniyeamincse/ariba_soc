@@ -21,6 +21,7 @@ urlpatterns = [
     path('severities/', views.severity_settings, name='severities'),
     path('severities/<int:pk>/edit/', views.severity_edit, name='severity_edit'),
     path('severities/<int:pk>/toggle/', views.severity_toggle, name='severity_toggle'),
+    path('severities/<int:pk>/delete/', views.severity_delete, name='severity_delete'),
     path('statuses/', views.status_settings, name='statuses'),
     path('statuses/<int:pk>/edit/', views.status_edit, name='status_edit'),
     path('statuses/<int:pk>/toggle/', views.status_toggle, name='status_toggle'),
