@@ -3,7 +3,7 @@ from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
     DashboardSetting, AuditLogSetting, SystemSetting, SettingAuditLog,
-    AlarmSetting, AlarmSystemSetting, IOCEnrichmentSetting
+    AlarmSetting, AlarmSystemSetting, IOCEnrichmentSetting, AlertAggregationSetting
 )
 
 @admin.register(AlertSourceSettings)
@@ -55,3 +55,10 @@ class AlarmSystemSettingAdmin(admin.ModelAdmin):
 class IOCEnrichmentSettingAdmin(admin.ModelAdmin):
     list_display = ['provider_name', 'is_active', 'auto_enrich', 'created_at']
     list_filter = ['is_active', 'auto_enrich']
+
+@admin.register(AlertAggregationSetting)
+class AlertAggregationSettingAdmin(admin.ModelAdmin):
+    list_display = ['id', 'is_enabled', 'window_minutes', 'max_events_per_alert', 'updated_at']
+    list_display_links = ['id']
+    list_editable = ['is_enabled', 'window_minutes']
+

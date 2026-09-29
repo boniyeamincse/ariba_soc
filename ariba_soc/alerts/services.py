@@ -208,3 +208,60 @@ def assign_alert(alert, user, assignee=None, request=None):
     
     if notify:
         _notify_assignment(alert, assignee, user, request)
+
+
+def ingest_or_aggregate_alert(data):
+    """
+    Ingests a new alert or dynamically aggregates into an existing matching alert
+    based on AlertAggregationSetting rules.
+    Returns: (alert, created: bool)
+    """
+    from datetime import timedelta
+    from settings_manager.models import AlertAggregationSetting
+
+    agg_setting = AlertAggregationSetting.load()
+    rule_id = str(data.get('rule_id', ''))
+    source_ip = str(data.get('source_ip', ''))
+    destination_ip = str(data.get('destination_ip', ''))
+    agent_id = str(data.get('agent_id', ''))
+    hostname = str(data.get('hostname', ''))
+    username = str(data.get('username', ''))
+    incoming_time = data.get('alert_time') or timezone.now()
+
+    agg_key = agg_setting.generate_aggregation_key(
+        rule_id=rule_id,
+        source_ip=source_ip,
+        destination_ip=destination_ip,
+        agent_id=agent_id,
+        hostname=hostname,
+        username=username,
+    ) if agg_setting.is_enabled else ''
+
+    if agg_key:
+        cutoff = incoming_time - timedelta(minutes=agg_setting.window_minutes)
+        future_limit = incoming_time + timedelta(minutes=agg_setting.window_minutes)
+        existing = Alert.objects.filter(
+            aggregation_key=agg_key,
+            status__in=['New', 'In Progress', 'Awaiting Action'],
+            last_seen_at__gte=cutoff,
+            last_seen_at__lte=future_limit,
+            event_count__lt=agg_setting.max_events_per_alert,
+        ).order_by('-last_seen_at').first()
+
+        if existing:
+            existing.event_count += 1
+            if incoming_time > existing.last_seen_at:
+                existing.last_seen_at = incoming_time
+            if incoming_time < existing.first_seen_at:
+                existing.first_seen_at = incoming_time
+            existing.save(update_fields=['event_count', 'first_seen_at', 'last_seen_at', 'updated_at'])
+            return existing, False
+
+    data['aggregation_key'] = agg_key
+    data['event_count'] = 1
+    data['first_seen_at'] = incoming_time
+    data['last_seen_at'] = incoming_time
+    alert = Alert.objects.create(**data)
+    return alert, True
+
+

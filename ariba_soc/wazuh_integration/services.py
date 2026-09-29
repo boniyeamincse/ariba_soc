@@ -310,7 +310,13 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
             wazuh_alert_id__in=[str(a.get('id', '')) for a in alerts_data if a.get('id')]
         ).values_list('wazuh_alert_id', flat=True))
 
+        from datetime import timedelta
+        from settings_manager.models import AlertAggregationSetting
+        agg_setting = AlertAggregationSetting.load()
+        cutoff = timezone.now() - timedelta(minutes=agg_setting.window_minutes) if agg_setting.is_enabled else None
+
         batch = []
+        batch_keys = {}
         for i, alert_raw in enumerate(alerts_data):
             alert_id = str(alert_raw.get('id', '')) or str(i)
             if alert_id in existing_ids:
@@ -318,7 +324,45 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
             try:
                 data = normalize_es_alert(alert_raw, i)
                 data['source'] = source
-                batch.append(Alert(**data))
+
+                agg_key = agg_setting.generate_aggregation_key(
+                    rule_id=str(data.get('rule_id', '')),
+                    source_ip=str(data.get('source_ip', '')),
+                    destination_ip=str(data.get('destination_ip', '')),
+                    agent_id=str(data.get('agent_id', '')),
+                    hostname=str(data.get('hostname', '')),
+                    username=str(data.get('username', '')),
+                ) if agg_setting.is_enabled else ''
+
+                if agg_key:
+                    existing_agg = Alert.objects.filter(
+                        aggregation_key=agg_key,
+                        status__in=['New', 'In Progress', 'Awaiting Action'],
+                        last_seen_at__gte=cutoff,
+                        event_count__lt=agg_setting.max_events_per_alert,
+                    ).order_by('-last_seen_at').first()
+
+                    if existing_agg:
+                        existing_agg.event_count += 1
+                        existing_agg.last_seen_at = timezone.now()
+                        existing_agg.save(update_fields=['event_count', 'last_seen_at', 'updated_at'])
+                        continue
+
+                    if agg_key in batch_keys:
+                        prev_alert = batch_keys[agg_key]
+                        if prev_alert.event_count < agg_setting.max_events_per_alert:
+                            prev_alert.event_count += 1
+                            prev_alert.last_seen_at = timezone.now()
+                            continue
+
+                data['aggregation_key'] = agg_key
+                data['event_count'] = 1
+                data['first_seen_at'] = timezone.now()
+                data['last_seen_at'] = timezone.now()
+                alert_obj = Alert(**data)
+                batch.append(alert_obj)
+                if agg_key:
+                    batch_keys[agg_key] = alert_obj
             except Exception as e:
                 logger.error(f'Failed to normalize alert {alert_id}: {e}')
 

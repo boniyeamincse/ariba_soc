@@ -398,3 +398,66 @@ class IOCEnrichmentSetting(models.Model):
 
     def __str__(self):
         return self.provider_name
+
+
+class AlertAggregationSetting(models.Model):
+    is_enabled = models.BooleanField(default=True, help_text='Enable or disable alert aggregation')
+    window_minutes = models.PositiveIntegerField(default=15, help_text='Time window in minutes to group duplicate alerts')
+    group_by_rule = models.BooleanField(default=True, help_text='Group alerts by Rule ID')
+    group_by_source_ip = models.BooleanField(default=True, help_text='Group alerts by Source IP')
+    group_by_destination_ip = models.BooleanField(default=False, help_text='Group alerts by Destination IP')
+    group_by_agent = models.BooleanField(default=True, help_text='Group alerts by Agent ID / Hostname')
+    group_by_username = models.BooleanField(default=False, help_text='Group alerts by Username')
+    max_events_per_alert = models.PositiveIntegerField(default=500, help_text='Max events before creating a new alert')
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Alert Aggregation Setting'
+        verbose_name_plural = 'Alert Aggregation Setting'
+
+    def __str__(self):
+        return f"Alert Aggregation ({'Enabled' if self.is_enabled else 'Disabled'}, {self.window_minutes}m)"
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def generate_aggregation_key(self, data_or_rule_id=None, source_ip=None, destination_ip=None, agent_id=None, hostname=None, username=None, **kwargs):
+        if not self.is_enabled:
+            return ''
+        import hashlib
+
+        if isinstance(data_or_rule_id, dict):
+            rule_id = str(data_or_rule_id.get('rule_id') or '')
+            source_ip = str(data_or_rule_id.get('source_ip') or '')
+            destination_ip = str(data_or_rule_id.get('destination_ip') or '')
+            agent_id = str(data_or_rule_id.get('agent_id') or '')
+            hostname = str(data_or_rule_id.get('hostname') or '')
+            username = str(data_or_rule_id.get('username') or '')
+        else:
+            rule_id = str(data_or_rule_id or '')
+            source_ip = str(source_ip or '')
+            destination_ip = str(destination_ip or '')
+            agent_id = str(agent_id or '')
+            hostname = str(hostname or '')
+            username = str(username or '')
+
+        parts = []
+        if self.group_by_rule and rule_id:
+            parts.append(f"rule:{rule_id}")
+        if self.group_by_source_ip and source_ip:
+            parts.append(f"src:{source_ip}")
+        if self.group_by_destination_ip and destination_ip:
+            parts.append(f"dst:{destination_ip}")
+        if self.group_by_agent and (agent_id or hostname):
+            parts.append(f"agent:{agent_id or hostname}")
+        if self.group_by_username and username:
+            parts.append(f"user:{username}")
+        if not parts:
+            return ''
+        raw = '|'.join(parts)
+        return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+
+

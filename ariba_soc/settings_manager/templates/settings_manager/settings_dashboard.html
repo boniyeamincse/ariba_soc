@@ -57,6 +57,14 @@
                 <div class="settings-stat-label"><i class="bi bi-check2-square"></i> Verdicts</div>
             </div>
         </div>
+        <div class="col-6 col-md-3">
+            <a href="{% url 'settings:aggregation' %}" class="text-decoration-none">
+                <div class="settings-stat-card border-info">
+                    <div class="settings-stat-value text-info">{% if agg_setting.is_enabled %}{{ agg_setting.window_minutes }}m{% else %}Off{% endif %}</div>
+                    <div class="settings-stat-label"><i class="bi bi-layers-half text-info"></i> Aggregation Window</div>
+                </div>
+            </a>
+        </div>
     </div>
 
     <div class="ariba-card p-3">

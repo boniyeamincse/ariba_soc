@@ -4,13 +4,13 @@ from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.contrib.auth.models import User
 from django.http import JsonResponse
-from django.db.models import Q
+from django.db.models import Q, Sum, Count
 from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES, SETTINGS_ALLOWED_ROLES as _FALLBACK_SETTINGS_ROLES
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
     DashboardSetting, AuditLogSetting, AlarmSetting, AlarmSystemSetting, SystemSetting, SettingAuditLog,
-    IOCEnrichmentSetting
+    IOCEnrichmentSetting, AlertAggregationSetting
 )
 from .forms import (
     UserManagementForm, UserEditForm, AnalystProfileForm,
@@ -18,7 +18,7 @@ from .forms import (
     VerdictSettingsForm, SLASettingsForm, EscalationRuleForm,
     NotificationSettingForm, ReportSettingForm, DashboardSettingForm,
     AuditLogSettingForm, AlarmSettingForm, AlarmSystemSettingForm, SystemSettingForm, ResetPasswordForm,
-    IOCEnrichmentSettingForm
+    IOCEnrichmentSettingForm, AlertAggregationSettingForm
 )
 
 def _get_allowed_roles():
@@ -59,6 +59,7 @@ def settings_dashboard(request):
         'escalation_count': EscalationRule.objects.filter(is_active=True).count(),
         'alarm_count': AlarmSetting.objects.count(),
         'alarm_enabled_count': AlarmSetting.objects.filter(is_enabled=True).count(),
+        'agg_setting': AlertAggregationSetting.load(),
         'recent_logs': SettingAuditLog.objects.select_related('user').all()[:10],
     }
     return render(request, 'settings_manager/settings_dashboard.html', ctx)
@@ -846,3 +847,71 @@ def ioc_enrichment_update(request, pk):
         
     ctx = {'section': 'ioc_enrichment', 'form': form, 'edit_mode': True, 'edit_obj': setting, 'title': 'Edit IOC Enrichment Setting'}
     return render(request, 'settings_manager/ioc_enrichment.html', ctx)
+
+
+def aggregation_settings(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    agg_setting = AlertAggregationSetting.load()
+    if request.method == 'POST':
+        form = AlertAggregationSettingForm(request.POST, instance=agg_setting)
+        if form.is_valid():
+            form.save()
+            _log_setting_change(
+                request.user,
+                'Updated alert aggregation configuration',
+                'AlertAggregationSetting',
+                agg_setting.id if agg_setting.id else 1,
+                '',
+                'Updated',
+                request,
+            )
+            messages.success(request, 'Alert aggregation configuration saved successfully.')
+            return redirect('settings:aggregation')
+    else:
+        form = AlertAggregationSettingForm(instance=agg_setting)
+
+    from alerts.models import Alert
+    total_alerts = Alert.objects.count()
+    aggregated_alerts = Alert.objects.filter(event_count__gt=1).count()
+    total_events_saved = (
+        Alert.objects.filter(event_count__gt=1).aggregate(
+            saved=Sum('event_count') - Count('id')
+        )['saved'] or 0
+    ) if aggregated_alerts > 0 else 0
+
+    ctx = {
+        'section': 'aggregation',
+        'form': form,
+        'agg_setting': agg_setting,
+        'total_alerts': total_alerts,
+        'aggregated_alerts': aggregated_alerts,
+        'total_events_saved': total_events_saved,
+    }
+    return render(request, 'settings_manager/aggregation_settings.html', ctx)
+
+
+@require_POST
+def aggregation_toggle(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    agg_setting = AlertAggregationSetting.load()
+    agg_setting.is_enabled = not agg_setting.is_enabled
+    agg_setting.save(update_fields=['is_enabled', 'updated_at'])
+    _log_setting_change(
+        request.user,
+        f'{"Enabled" if agg_setting.is_enabled else "Disabled"} alert aggregation',
+        'AlertAggregationSetting',
+        agg_setting.id,
+        '',
+        f'Enabled={agg_setting.is_enabled}',
+        request,
+    )
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'status': 'ok', 'is_enabled': agg_setting.is_enabled})
+    messages.success(request, f'Alert aggregation {"enabled" if agg_setting.is_enabled else "disabled"}.')
+    return redirect('settings:aggregation')
+
+

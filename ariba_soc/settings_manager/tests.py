@@ -57,3 +57,70 @@ class SettingsAccessAndAdminTest(TestCase):
         self.assertIn(VulnerabilityCase, admin.site._registry)
         self.assertIn(VulnerabilityAuditLog, admin.site._registry)
 
+
+class AlertAggregationSettingTest(TestCase):
+    def test_singleton_load(self):
+        from .models import AlertAggregationSetting
+        s1 = AlertAggregationSetting.load()
+        s2 = AlertAggregationSetting.load()
+        self.assertEqual(s1.pk, s2.pk)
+        self.assertTrue(s1.is_enabled)
+        self.assertEqual(s1.window_minutes, 15)
+
+    def test_generate_aggregation_key(self):
+        from .models import AlertAggregationSetting
+        setting = AlertAggregationSetting.load()
+        setting.group_by_rule = True
+        setting.group_by_agent = True
+        setting.group_by_source_ip = True
+        setting.group_by_destination_ip = False
+        setting.group_by_username = False
+        setting.save()
+
+        key1 = setting.generate_aggregation_key({
+            'rule_id': '100001',
+            'agent_id': 'agent-01',
+            'source_ip': '10.0.0.1',
+            'destination_ip': '10.0.0.2',
+            'username': 'alice',
+        })
+        key2 = setting.generate_aggregation_key({
+            'rule_id': '100001',
+            'agent_id': 'agent-01',
+            'source_ip': '10.0.0.1',
+            'destination_ip': '10.0.0.99',  # Different dst_ip, but group_by_destination_ip is False
+            'username': 'bob',             # Different user, but group_by_username is False
+        })
+        self.assertEqual(key1, key2)
+
+        key3 = setting.generate_aggregation_key({
+            'rule_id': '100001',
+            'agent_id': 'agent-01',
+            'source_ip': '10.0.0.5',        # Different src_ip
+        })
+        self.assertNotEqual(key1, key3)
+
+    def test_aggregation_views_access_and_toggle(self):
+        from django.contrib.auth.models import User
+        from django.urls import reverse
+        from .models import AlertAggregationSetting
+
+        user = User.objects.create_superuser('adminuser', 'admin@example.com', 'adminpass')
+        self.client.force_login(user)
+
+        # GET settings page
+        url = reverse('settings:aggregation')
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+
+        # POST toggle
+        toggle_url = reverse('settings:aggregation_toggle')
+        resp = self.client.post(toggle_url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()['is_enabled'])
+
+        setting = AlertAggregationSetting.load()
+        self.assertFalse(setting.is_enabled)
+
+
+

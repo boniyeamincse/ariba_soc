@@ -68,7 +68,14 @@
                         <td><button type="button" class="btn btn-sm btn-link text-secondary p-0 expand-row-btn" data-row-id="{{ alert.id }}"><i class="bi bi-chevron-down"></i></button></td>
                         <td><small><code class="text-info">{{ alert.wazuh_alert_id|default:alert.id }}</code></small></td>
                         <td class="text-nowrap"><small>{{ alert.alert_time|date:"M d, H:i" }}</small></td>
-                        <td><span class="fw-medium">{{ alert.alert_name|truncatechars:50 }}</span></td>
+                        <td>
+                            <span class="fw-medium">{{ alert.alert_name|truncatechars:50 }}</span>
+                            {% if alert.event_count > 1 %}
+                            <span class="badge bg-secondary bg-opacity-75 text-info ms-1" title="Aggregated {{ alert.event_count }} events">
+                                <i class="bi bi-layers-half"></i> {{ alert.event_count }}
+                            </span>
+                            {% endif %}
+                        </td>
                         <td>{% include 'ariba_soc/_severity_badge.html' with severity=alert.severity %}</td>
                         <td>{% include 'ariba_soc/_status_pill.html' with status=alert.status %}</td>
                         <td class="d-none d-lg-table-cell">{% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}</td>

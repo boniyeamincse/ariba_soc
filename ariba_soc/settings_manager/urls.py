@@ -50,4 +50,6 @@ urlpatterns = [
     path('system/<int:pk>/edit/', views.system_edit, name='system_edit'),
     path('ioc-enrichment/', views.ioc_enrichment_list, name='ioc_enrichment'),
     path('ioc-enrichment/<int:pk>/edit/', views.ioc_enrichment_update, name='ioc_enrichment_update'),
+    path('aggregation/', views.aggregation_settings, name='aggregation'),
+    path('aggregation/toggle/', views.aggregation_toggle, name='aggregation_toggle'),
 ]

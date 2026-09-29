@@ -164,6 +164,11 @@ class Alert(models.Model):
     archived_at = models.DateTimeField(null=True, blank=True)
     status_updated_at = models.DateTimeField(auto_now_add=True)
 
+    aggregation_key = models.CharField(max_length=64, blank=True, db_index=True)
+    event_count = models.PositiveIntegerField(default=1)
+    first_seen_at = models.DateTimeField(default=timezone.now)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+
     is_incident_candidate = models.BooleanField(default=False)
     is_escalated = models.BooleanField(default=False)
 

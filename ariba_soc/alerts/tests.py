@@ -130,3 +130,124 @@ class AlarmNotificationTest(TestCase):
         created = emit_alarm_notification(alert)
         self.assertEqual(created, 0)
         self.assertEqual(Notification.objects.count(), 0)
+
+
+class AlertAggregationTest(TestCase):
+    def setUp(self):
+        from datetime import timedelta
+        from settings_manager.models import AlertAggregationSetting
+        self.source = AlertSource.objects.create(name='Wazuh', source_type='Wazuh')
+        self.setting = AlertAggregationSetting.load()
+        self.setting.is_enabled = True
+        self.setting.window_minutes = 15
+        self.setting.group_by_rule = True
+        self.setting.group_by_agent = True
+        self.setting.group_by_source_ip = True
+        self.setting.group_by_destination_ip = False
+        self.setting.group_by_username = False
+        self.setting.max_events_per_alert = 5
+        self.setting.save()
+
+    def test_single_alert_created_when_none_exists(self):
+        from alerts.services import ingest_or_aggregate_alert
+        data = {
+            'alert_name': 'SSH Bruteforce',
+            'severity': 'High',
+            'rule_id': '5710',
+            'agent_id': '001',
+            'source_ip': '192.168.1.50',
+            'source': self.source,
+            'alert_time': timezone.now(),
+        }
+        alert, created = ingest_or_aggregate_alert(data)
+        self.assertTrue(created)
+        self.assertEqual(alert.event_count, 1)
+        self.assertIsNotNone(alert.aggregation_key)
+
+    def test_alert_aggregated_within_window(self):
+        from datetime import timedelta
+        from alerts.services import ingest_or_aggregate_alert
+        now = timezone.now()
+        data = {
+            'alert_name': 'SSH Bruteforce',
+            'severity': 'High',
+            'rule_id': '5710',
+            'agent_id': '001',
+            'source_ip': '192.168.1.50',
+            'source': self.source,
+            'alert_time': now,
+        }
+        alert1, created1 = ingest_or_aggregate_alert(data)
+        self.assertTrue(created1)
+
+        # Ingest identical event 2 minutes later
+        data2 = data.copy()
+        data2['alert_time'] = now + timedelta(minutes=2)
+        alert2, created2 = ingest_or_aggregate_alert(data2)
+        self.assertFalse(created2)
+        self.assertEqual(alert1.id, alert2.id)
+        alert2.refresh_from_db()
+        self.assertEqual(alert2.event_count, 2)
+        self.assertEqual(alert2.last_seen_at, now + timedelta(minutes=2))
+
+    def test_different_ip_creates_separate_alert(self):
+        from alerts.services import ingest_or_aggregate_alert
+        now = timezone.now()
+        data1 = {
+            'alert_name': 'SSH Bruteforce',
+            'severity': 'High',
+            'rule_id': '5710',
+            'agent_id': '001',
+            'source_ip': '192.168.1.50',
+            'source': self.source,
+            'alert_time': now,
+        }
+        alert1, created1 = ingest_or_aggregate_alert(data1)
+
+        data2 = data1.copy()
+        data2['source_ip'] = '192.168.1.51'
+        alert2, created2 = ingest_or_aggregate_alert(data2)
+        self.assertTrue(created2)
+        self.assertNotEqual(alert1.id, alert2.id)
+
+    def test_alert_not_aggregated_outside_window(self):
+        from datetime import timedelta
+        from alerts.services import ingest_or_aggregate_alert
+        now = timezone.now()
+        data1 = {
+            'alert_name': 'SSH Bruteforce',
+            'severity': 'High',
+            'rule_id': '5710',
+            'agent_id': '001',
+            'source_ip': '192.168.1.50',
+            'source': self.source,
+            'alert_time': now - timedelta(minutes=20),
+        }
+        alert1, created1 = ingest_or_aggregate_alert(data1)
+
+        data2 = data1.copy()
+        data2['alert_time'] = now
+        alert2, created2 = ingest_or_aggregate_alert(data2)
+        self.assertTrue(created2)
+        self.assertNotEqual(alert1.id, alert2.id)
+
+    def test_aggregation_disabled_creates_distinct_alerts(self):
+        from alerts.services import ingest_or_aggregate_alert
+        self.setting.is_enabled = False
+        self.setting.save()
+        now = timezone.now()
+        data = {
+            'alert_name': 'SSH Bruteforce',
+            'severity': 'High',
+            'rule_id': '5710',
+            'agent_id': '001',
+            'source_ip': '192.168.1.50',
+            'source': self.source,
+            'alert_time': now,
+        }
+        alert1, created1 = ingest_or_aggregate_alert(data)
+        alert2, created2 = ingest_or_aggregate_alert(data.copy())
+        self.assertTrue(created1)
+        self.assertTrue(created2)
+        self.assertNotEqual(alert1.id, alert2.id)
+
