@@ -26,11 +26,13 @@
             {% csrf_token %}
             <div class="row g-3">
                 <div class="col-md-5 border-end border-secondary">
-                    <label class="form-label small text-info"><i class="bi bi-volume-up"></i> Audio Settings</label>
+                    <h6 class="text-info"><i class="bi bi-volume-up"></i> Audio Settings</h6>
                     <div class="mb-3">
                         {{ alarm_system_form.sound_file }}
                         {% if alarm_system.sound_file %}
-                        <div class="small text-muted mt-1">Current file: <a href="{{ alarm_system.sound_file.url }}" target="_blank">{{ alarm_system.sound_file.name }}</a></div>
+                        <div class="small text-muted mt-1">
+                            Current file: <a href="{{ alarm_system.sound_file.url }}" target="_blank">{{ alarm_system.sound_file.name }}</a>
+                        </div>
                         {% endif %}
                     </div>
                     <div class="mb-2">
@@ -39,7 +41,7 @@
                     </div>
                 </div>
                 <div class="col-md-7">
-                    <label class="form-label small text-info"><i class="bi bi-sliders"></i> Master Controls</label>
+                    <h6 class="text-info"><i class="bi bi-sliders"></i> Master Controls</h6>
                     
                     <div class="form-check form-switch mb-2">
                         {{ alarm_system_form.is_enabled }}

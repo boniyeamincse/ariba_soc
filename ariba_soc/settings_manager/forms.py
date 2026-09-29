@@ -237,12 +237,17 @@ class AlarmSettingForm(forms.ModelForm):
 class AlarmSystemSettingForm(forms.ModelForm):
     class Meta:
         model = AlarmSystemSetting
-        fields = ['is_enabled', 'sound_file']
+        fields = ['is_enabled', 'enable_audio', 'enable_visual', 'volume', 'sound_file']
+        widgets = {
+            'sound_file': forms.FileInput(attrs={'class': 'form-control form-control-sm', 'accept': '.mp3,audio/mpeg'})
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['is_enabled'].widget.attrs.update({'class': 'form-check-input'})
-        self.fields['sound_file'].widget.attrs.update({'class': 'form-control form-control-sm', 'accept': '.mp3,audio/mpeg'})
+        self.fields['enable_audio'].widget.attrs.update({'class': 'form-check-input'})
+        self.fields['enable_visual'].widget.attrs.update({'class': 'form-check-input'})
+        self.fields['volume'].widget.attrs.update({'type': 'range', 'class': 'form-range', 'min': '0', 'max': '100', 'step': '1'})
 
 class AlertAggregationSettingForm(forms.ModelForm):
     class Meta:
