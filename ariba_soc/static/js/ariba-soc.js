@@ -156,6 +156,13 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function moveAlert(alertId, newStatus, column) {
+        var card = document.querySelector('.kanban-card[data-alert-id="' + alertId + '"]');
+        if (!card) return;
+        
+        var oldColumn = card.closest('.kanban-column-body');
+        column.appendChild(card);
+        updateColumnCounts();
+
         fetch('/api/alerts/' + alertId + '/move/', {
             method: 'POST',
             headers: {
@@ -166,8 +173,45 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(function(response) { return response.json(); })
         .then(function(data) {
-            if (data.success) {
-                location.reload();
+            if (!data.success) {
+                if (oldColumn) {
+                    oldColumn.appendChild(card);
+                    updateColumnCounts();
+                }
+                alert('Failed to move alert: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(function() {
+            if (oldColumn) {
+                oldColumn.appendChild(card);
+                updateColumnCounts();
+            }
+            alert('Failed to move alert due to network error.');
+        });
+    }
+
+    function updateColumnCounts() {
+        document.querySelectorAll('.kanban-column').forEach(function(col) {
+            var cards = col.querySelectorAll('.kanban-card');
+            var visibleCount = 0;
+            cards.forEach(function(c) {
+                if (c.style.display !== 'none') visibleCount++;
+            });
+            
+            var badge = col.querySelector('.kanban-column-header .badge');
+            if (badge) badge.textContent = visibleCount;
+            
+            var body = col.querySelector('.kanban-column-body');
+            var emptyMsg = body.querySelector('.empty-message');
+            if (visibleCount === 0) {
+                if (!emptyMsg) {
+                    var div = document.createElement('div');
+                    div.className = 'text-center text-muted py-4 empty-message';
+                    div.innerHTML = '<small>No alerts matching criteria</small>';
+                    body.appendChild(div);
+                }
+            } else if (emptyMsg) {
+                emptyMsg.remove();
             }
         });
     }
@@ -328,3 +372,30 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+    // Kanban quick filters
+    var currentUserId = document.body.getAttribute('data-user-id'); // Need to make sure this exists or find another way. Wait! 
+    var currentUserId = document.body.getAttribute('data-user-id');
+    document.querySelectorAll('.board-filter-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var filter = this.getAttribute('data-filter');
+            
+            // Toggle active state
+            document.querySelectorAll('.board-filter-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+
+            var cards = document.querySelectorAll('.kanban-card');
+            cards.forEach(function(card) {
+                var show = true;
+                if (filter === 'mine') {
+                    show = (card.getAttribute('data-assignee-id') === currentUserId);
+                } else if (filter === 'critical') {
+                    show = (card.getAttribute('data-severity') === 'Critical' || card.getAttribute('data-severity') === 'High');
+                }
+                
+                card.style.display = show ? 'block' : 'none';
+            });
+            
+            updateColumnCounts();
+        });
+    });

@@ -1,5 +1,5 @@
 <div class="kanban-card {% if alert.severity == 'Critical' %}critical-card{% elif alert.severity == 'High' %}high-card{% elif alert.severity == 'Medium' %}medium-card{% else %}low-card{% endif %}"
-     data-alert-id="{{ alert.id }}" draggable="true">
+     data-alert-id="{{ alert.id }}" data-severity="{{ alert.severity }}" data-assignee-id="{{ alert.assignee_id|default:'' }}" draggable="true">
     <div class="kanban-card-title">
         {{ alert.alert_name|truncatechars:60 }}
         {% if alert.event_count > 1 %}

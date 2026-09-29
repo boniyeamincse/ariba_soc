@@ -22,6 +22,12 @@
             <button class="btn btn-ariba-outline btn-sm" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
         </div>
     </div>
+    
+    <div class="mb-3 d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary board-filter-btn" data-filter="mine"><i class="bi bi-person"></i> My Alerts</button>
+        <button class="btn btn-sm btn-outline-danger board-filter-btn" data-filter="critical"><i class="bi bi-exclamation-triangle"></i> Critical Only</button>
+        <button class="btn btn-sm btn-outline-info board-filter-btn" data-filter="clear"><i class="bi bi-x-circle"></i> Clear Filters</button>
+    </div>
 
     <div class="kanban-board">
         <div class="kanban-column board-col-new">
@@ -33,7 +39,7 @@
                 {% for alert in new_alerts %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
-                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                <div class="text-center text-muted py-4 empty-message"><small>No alerts</small></div>
                 {% endfor %}
             </div>
         </div>
@@ -47,7 +53,7 @@
                 {% for alert in awaiting_alerts %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
-                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                <div class="text-center text-muted py-4 empty-message"><small>No alerts</small></div>
                 {% endfor %}
             </div>
         </div>
@@ -61,7 +67,7 @@
                 {% for alert in in_progress_alerts %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
-                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                <div class="text-center text-muted py-4 empty-message"><small>No alerts</small></div>
                 {% endfor %}
             </div>
         </div>
@@ -75,7 +81,7 @@
                 {% for alert in pending_alerts %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
-                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                <div class="text-center text-muted py-4 empty-message"><small>No alerts</small></div>
                 {% endfor %}
             </div>
         </div>
@@ -89,7 +95,7 @@
                 {% for alert in escalated_alerts %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
-                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                <div class="text-center text-muted py-4 empty-message"><small>No alerts</small></div>
                 {% endfor %}
             </div>
         </div>
@@ -103,7 +109,7 @@
                 {% for alert in remediation_alerts %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
-                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                <div class="text-center text-muted py-4 empty-message"><small>No alerts</small></div>
                 {% endfor %}
             </div>
         </div>
@@ -117,7 +123,7 @@
                 {% for alert in true_positives %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
-                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                <div class="text-center text-muted py-4 empty-message"><small>No alerts</small></div>
                 {% endfor %}
             </div>
         </div>
@@ -131,7 +137,7 @@
                 {% for alert in false_positives %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
-                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                <div class="text-center text-muted py-4 empty-message"><small>No alerts</small></div>
                 {% endfor %}
             </div>
         </div>
@@ -145,7 +151,7 @@
                 {% for alert in closed_other_alerts %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
-                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                <div class="text-center text-muted py-4 empty-message"><small>No alerts</small></div>
                 {% endfor %}
             </div>
         </div>
@@ -159,7 +165,7 @@
                 {% for alert in archived_alerts %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
-                <div class="text-center text-muted py-4"><small>No alerts</small></div>
+                <div class="text-center text-muted py-4 empty-message"><small>No alerts</small></div>
                 {% endfor %}
             </div>
         </div>
