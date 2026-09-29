@@ -67,7 +67,7 @@ class UserEditForm(forms.ModelForm):
             self.initial['designation'] = p.designation
             self.initial['is_active'] = p.is_active
 
-    def save(self, commit=True):
+    def save(self, commit=True, files=None):
         user = super().save(commit=False)
         if commit:
             user.save()
@@ -77,6 +77,8 @@ class UserEditForm(forms.ModelForm):
             profile.phone = self.cleaned_data.get('phone', '')
             profile.designation = self.cleaned_data.get('designation', '')
             profile.is_active = self.cleaned_data.get('is_active', True)
+            if files and 'avatar' in files and files['avatar']:
+                profile.avatar = files['avatar']
             profile.save()
         return user
 

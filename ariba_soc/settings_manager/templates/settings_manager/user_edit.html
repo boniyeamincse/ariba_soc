@@ -2,66 +2,103 @@
 
 {% block settings_content %}
 <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <h4 class="m-0"><i class="bi bi-person-gear"></i> Edit User: {{ edit_user.get_full_name|default:edit_user.username }}</h4>
-    </div>
-    <p class="settings-page-desc">Update user profile and account settings.</p>
 
-    <div class="ariba-card p-4">
-        <form method="post">
-            {% csrf_token %}
-            {% if form.errors %}
-            <div class="alert alert-danger py-2 small">
-                {% for field, errors in form.errors.items %}
-                    {% for error in errors %}<div>{{ field|title }}: {{ error }}</div>{% endfor %}
-                {% endfor %}
-            </div>
-            {% endif %}
-            <div class="row g-3">
-                <div class="col-12 col-md-6">
-                    <label class="form-label small">First Name</label>
-                    {{ form.first_name }}
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label small">Last Name</label>
-                    {{ form.last_name }}
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label small">Username</label>
-                    {{ form.username }}
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label small">Email</label>
-                    {{ form.email }}
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label small">Phone</label>
-                    {{ form.phone }}
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label small">Designation</label>
-                    {{ form.designation }}
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label small">Role</label>
-                    {{ form.role }}
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label small">Team</label>
-                    {{ form.team }}
-                </div>
-                <div class="col-12">
-                    <div class="form-check">
-                        {{ form.is_active }}
-                        <label class="form-check-label small">Active</label>
-                    </div>
-                </div>
-            </div>
-            <div class="mt-4 d-flex gap-2">
-                <button type="submit" class="btn btn-ariba-primary"><i class="bi bi-check-lg"></i> Save</button>
-                <a href="{% url 'settings:user_management' %}" class="btn btn-ariba-outline"><i class="bi bi-x-lg"></i> Cancel</a>
-            </div>
-        </form>
+  {# ── Breadcrumb ── #}
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'settings:dashboard' %}">Settings</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'settings:user_management' %}">Users</a></li>
+      <li class="breadcrumb-item active">Edit: {{ edit_user.get_full_name|default:edit_user.username }}</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex align-items-center gap-3 mb-3">
+    {# Avatar ── #}
+    {% if edit_user.analyst_profile.avatar %}
+      <img src="{{ edit_user.analyst_profile.avatar.url }}" class="rounded-circle border"
+           width="54" height="54" style="object-fit:cover;" alt="">
+    {% else %}
+      <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white fw-bold"
+           style="width:54px;height:54px;font-size:1.1rem;flex-shrink:0;">
+        {{ edit_user.first_name|slice:":1"|upper|default:edit_user.username|slice:":1"|upper }}
+      </div>
+    {% endif %}
+    <div>
+      <h4 class="m-0"><i class="bi bi-person-gear"></i> Edit User</h4>
+      <p class="settings-page-desc mb-0">{{ edit_user.username }} &mdash; {{ edit_user.analyst_profile.get_role_display }}</p>
     </div>
+  </div>
+
+  <div class="ariba-card p-4">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {% if form.errors %}
+      <div class="alert alert-danger py-2 small mb-3">
+        {% for field, errors in form.errors.items %}
+          {% for error in errors %}<div><strong>{{ field|title }}:</strong> {{ error }}</div>{% endfor %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <label class="form-label small">First Name</label>
+          {{ form.first_name }}
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small">Last Name</label>
+          {{ form.last_name }}
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small">Username</label>
+          {{ form.username }}
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small">Email</label>
+          {{ form.email }}
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small">Phone</label>
+          {{ form.phone }}
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small">Designation / Title</label>
+          {{ form.designation }}
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small">Role</label>
+          {{ form.role }}
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small">Team</label>
+          {{ form.team }}
+        </div>
+
+        {# Avatar upload ── #}
+        <div class="col-12">
+          <label class="form-label small">Profile Photo (Avatar)</label>
+          <input type="file" name="avatar" accept="image/*" class="form-control form-control-sm">
+          {% if edit_user.analyst_profile.avatar %}
+          <div class="mt-1 text-muted small">
+            Current: <a href="{{ edit_user.analyst_profile.avatar.url }}" target="_blank">{{ edit_user.analyst_profile.avatar.name }}</a>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="col-12">
+          <div class="form-check">
+            {{ form.is_active }}
+            <label class="form-check-label small ms-1">Active (user can log in)</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-4 d-flex gap-2">
+        <button type="submit" class="btn btn-ariba-primary"><i class="bi bi-check-lg"></i> Save Changes</button>
+        <a href="{% url 'settings:user_management' %}" class="btn btn-ariba-outline"><i class="bi bi-arrow-left"></i> Back to Users</a>
+        <a href="{% url 'settings:user_reset_password' edit_user.id %}" class="btn btn-ariba-outline ms-auto"><i class="bi bi-key"></i> Reset Password</a>
+      </div>
+    </form>
+  </div>
 </div>
 {% endblock %}

@@ -235,6 +235,16 @@ body.alarm-active .ariba-table tbody tr:hover {
 .severity-low { background: rgba(34,197,94,0.2); color: var(--severity-low); border: 1px solid rgba(34,197,94,0.3); }
 .severity-Informational { background: rgba(107,114,128,0.2); color: var(--severity-info); border: 1px solid rgba(107,114,128,0.3); }
 
+/* Role badges (User Management) */
+.role-badge-l1       { background: rgba(59,130,246,0.15);  color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+.role-badge-l2       { background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); }
+.role-badge-l3       { background: rgba(236,72,153,0.15);  color: #f472b6; border: 1px solid rgba(236,72,153,0.3); }
+.role-badge-soc_eng  { background: rgba(6,182,212,0.15);   color: #22d3ee; border: 1px solid rgba(6,182,212,0.3); }
+.role-badge-soc_mgr  { background: rgba(249,115,22,0.18);  color: #fb923c; border: 1px solid rgba(249,115,22,0.3); }
+.role-badge-admin    { background: rgba(239,68,68,0.18);   color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+.role-badge-viewer   { background: rgba(107,114,128,0.15); color: #9ca3af; border: 1px solid rgba(107,114,128,0.3); }
+.role-badge-monitor  { background: rgba(34,197,94,0.15);   color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+
 /* Status pills */
 .status-pill {
     padding: 0.2rem 0.6rem;

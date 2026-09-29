@@ -69,10 +69,30 @@ def user_management(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
         return redirect('alerts:table')
+
     search = request.GET.get('search', '')
-    users = User.objects.select_related('analyst_profile').all()
+    role_filter = request.GET.get('role', '')
+    team_filter = request.GET.get('team', '')
+    status_filter = request.GET.get('status', '')
+
+    users = User.objects.select_related('analyst_profile').all().order_by('username')
+
     if search:
-        users = users.filter(Q(username__icontains=search) | Q(first_name__icontains=search) | Q(last_name__icontains=search) | Q(email__icontains=search))
+        users = users.filter(
+            Q(username__icontains=search) |
+            Q(first_name__icontains=search) |
+            Q(last_name__icontains=search) |
+            Q(email__icontains=search)
+        )
+    if role_filter:
+        users = users.filter(analyst_profile__role=role_filter)
+    if team_filter:
+        users = users.filter(analyst_profile__team=team_filter)
+    if status_filter == 'active':
+        users = users.filter(analyst_profile__is_active=True)
+    elif status_filter == 'inactive':
+        users = users.filter(analyst_profile__is_active=False)
+
     if request.method == 'POST' and 'create' in request.POST:
         form = UserManagementForm(request.POST)
         if form.is_valid():
@@ -82,8 +102,140 @@ def user_management(request):
             return redirect('settings:user_management')
     else:
         form = UserManagementForm()
-    ctx = {'section': 'users', 'users': users, 'form': form, 'search': search}
+
+    from accounts.models import TEAM_CHOICES
+    total_users = User.objects.count()
+    active_users = User.objects.filter(analyst_profile__is_active=True).count()
+    inactive_users = total_users - active_users
+    role_counts = {r[0]: {'label': r[1], 'count': User.objects.filter(analyst_profile__role=r[0]).count()} for r in ROLE_CHOICES}
+
+    ctx = {
+        'section': 'users',
+        'users': users,
+        'form': form,
+        'search': search,
+        'role_filter': role_filter,
+        'team_filter': team_filter,
+        'status_filter': status_filter,
+        'role_choices': ROLE_CHOICES,
+        'team_choices': TEAM_CHOICES,
+        'total_users': total_users,
+        'active_users': active_users,
+        'inactive_users': inactive_users,
+        'role_counts': role_counts,
+    }
     return render(request, 'settings_manager/user_management.html', ctx)
+
+
+@require_POST
+def user_delete(request, user_id):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    user = get_object_or_404(User, id=user_id)
+    if user == request.user:
+        messages.error(request, 'You cannot delete your own account.')
+        return redirect('settings:user_management')
+    if user.is_superuser and User.objects.filter(is_superuser=True).count() <= 1:
+        messages.error(request, 'Cannot delete the only admin account.')
+        return redirect('settings:user_management')
+    username = user.username
+    _log_setting_change(request.user, f'Deleted user {username}', 'User', user.id, username, 'Deleted', request)
+    user.delete()
+    messages.success(request, f'User "{username}" permanently deleted.')
+    return redirect('settings:user_management')
+
+
+@require_POST
+def user_bulk_action(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    action = request.POST.get('action', '')
+    user_ids = request.POST.getlist('user_ids')
+    if not user_ids:
+        messages.warning(request, 'No users selected.')
+        return redirect('settings:user_management')
+
+    users_qs = User.objects.filter(id__in=user_ids).exclude(id=request.user.id).select_related('analyst_profile')
+    count = 0
+
+    if action == 'activate':
+        for u in users_qs:
+            profile = getattr(u, 'analyst_profile', None)
+            if profile and not profile.is_active:
+                profile.is_active = True
+                profile.save()
+                u.is_active = True
+                u.save()
+                count += 1
+        messages.success(request, f'Activated {count} user(s).')
+    elif action == 'deactivate':
+        for u in users_qs:
+            if u.is_superuser and User.objects.filter(is_superuser=True).count() <= 1:
+                continue
+            profile = getattr(u, 'analyst_profile', None)
+            if profile and profile.is_active:
+                profile.is_active = False
+                profile.save()
+                u.is_active = False
+                u.save()
+                count += 1
+        messages.success(request, f'Deactivated {count} user(s).')
+    elif action == 'delete':
+        for u in users_qs:
+            if u.is_superuser and User.objects.filter(is_superuser=True).count() <= 1:
+                continue
+            _log_setting_change(request.user, f'Bulk deleted user {u.username}', 'User', u.id, u.username, 'Deleted', request)
+            u.delete()
+            count += 1
+        messages.success(request, f'Deleted {count} user(s).')
+    elif action.startswith('role:'):
+        new_role = action.split(':', 1)[1]
+        valid_roles = [r[0] for r in ROLE_CHOICES]
+        if new_role in valid_roles:
+            for u in users_qs:
+                profile = getattr(u, 'analyst_profile', None)
+                if profile:
+                    old_role = profile.role
+                    profile.role = new_role
+                    profile.save()
+                    _log_setting_change(request.user, f'Bulk role change {u.username}: {old_role} -> {new_role}', 'User', u.id, old_role, new_role, request)
+                    count += 1
+            messages.success(request, f'Updated role to {new_role} for {count} user(s).')
+        else:
+            messages.error(request, 'Invalid role specified.')
+    else:
+        messages.error(request, 'Unknown bulk action.')
+
+    return redirect('settings:user_management')
+
+
+def user_export_csv(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    import csv
+    from django.http import HttpResponse
+    from django.utils.timezone import localtime
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="soc_users_export.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['Username', 'First Name', 'Last Name', 'Email', 'Role', 'Team', 'Phone', 'Designation', 'Active', 'Superuser', 'Last Login', 'Date Joined'])
+    for u in User.objects.select_related('analyst_profile').all().order_by('username'):
+        p = getattr(u, 'analyst_profile', None)
+        writer.writerow([
+            u.username, u.first_name, u.last_name, u.email,
+            getattr(p, 'role', ''), getattr(p, 'team', ''),
+            getattr(p, 'phone', ''), getattr(p, 'designation', ''),
+            'Yes' if getattr(p, 'is_active', True) else 'No',
+            'Yes' if u.is_superuser else 'No',
+            localtime(u.last_login).strftime('%Y-%m-%d %H:%M') if u.last_login else '',
+            localtime(u.date_joined).strftime('%Y-%m-%d %H:%M') if u.date_joined else '',
+        ])
+    _log_setting_change(request.user, 'Exported user list as CSV', 'User', 0, '', 'CSV Export', request)
+    return response
+
 
 def user_edit(request, user_id):
     if not _check_settings_access(request.user):
@@ -91,9 +243,9 @@ def user_edit(request, user_id):
         return redirect('alerts:table')
     user = get_object_or_404(User.objects.select_related('analyst_profile'), id=user_id)
     if request.method == 'POST':
-        form = UserEditForm(request.POST, instance=user)
+        form = UserEditForm(request.POST, request.FILES, instance=user)
         if form.is_valid():
-            form.save()
+            form.save(files=request.FILES)
             _log_setting_change(request.user, f'Edited user {user.username}', 'User', user.id, '', 'Updated', request)
             messages.success(request, 'User updated.')
             return redirect('settings:user_management')
@@ -101,6 +253,7 @@ def user_edit(request, user_id):
         form = UserEditForm(instance=user)
     ctx = {'section': 'users', 'form': form, 'edit_user': user}
     return render(request, 'settings_manager/user_edit.html', ctx)
+
 
 @require_POST
 def user_toggle_active(request, user_id):
