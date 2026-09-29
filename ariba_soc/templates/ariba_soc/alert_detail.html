@@ -296,7 +296,7 @@
                 <hr style="border-color: var(--border-color);">
                 <div class="detail-section">
                     <h6 class="text-secondary"><i class="bi bi-shield-check"></i> Threat Intelligence (Enrichment)</h6>
-                    <div class="row g-3 mt-1">
+                                        <div class="row g-3 mt-1">
                         {% if alert.enrichment_data.VirusTotal %}
                         <div class="col-md-6">
                             <div class="p-3" style="background: rgba(220,38,38,0.1); border-radius: 6px; border-left: 3px solid var(--bs-danger);">
@@ -322,6 +322,38 @@
                                 <div class="mt-2 small text-light">
                                     {{ alert.enrichment_data.IPInfo.city|default:'Unknown City' }}, {{ alert.enrichment_data.IPInfo.country|default:'Unknown Country' }}<br>
                                     <span class="text-muted">{{ alert.enrichment_data.IPInfo.org|default:'Unknown Org' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if alert.enrichment_data.AbuseIPDB %}
+                        <div class="col-md-6">
+                            <div class="p-3" style="background: rgba(234,179,8,0.1); border-radius: 6px; border-left: 3px solid var(--bs-warning);">
+                                <div class="d-flex justify-content-between">
+                                    <strong class="text-warning"><i class="bi bi-exclamation-triangle"></i> AbuseIPDB</strong>
+                                    <small class="text-muted">{{ alert.enrichment_data.AbuseIPDB.timestamp|slice:":10" }}</small>
+                                </div>
+                                <div class="mt-2">
+                                    <span class="badge {% if alert.enrichment_data.AbuseIPDB.abuseConfidenceScore > 50 %}bg-danger{% elif alert.enrichment_data.AbuseIPDB.abuseConfidenceScore > 10 %}bg-warning text-dark{% else %}bg-success{% endif %} rounded-pill">
+                                        Score: {{ alert.enrichment_data.AbuseIPDB.abuseConfidenceScore }}%
+                                    </span>
+                                    <span class="badge bg-secondary rounded-pill">{{ alert.enrichment_data.AbuseIPDB.totalReports }} Reports</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if alert.enrichment_data.OTX %}
+                        <div class="col-md-6">
+                            <div class="p-3" style="background: rgba(168,85,247,0.1); border-radius: 6px; border-left: 3px solid #a855f7;">
+                                <div class="d-flex justify-content-between">
+                                    <strong style="color: #a855f7;"><i class="bi bi-radar"></i> AlienVault OTX</strong>
+                                    <small class="text-muted">{{ alert.enrichment_data.OTX.timestamp|slice:":10" }}</small>
+                                </div>
+                                <div class="mt-2">
+                                    <span class="badge rounded-pill" style="background: #a855f7; color: white;">{{ alert.enrichment_data.OTX.pulse_count }} Pulses</span>
+                                    {% for pulse in alert.enrichment_data.OTX.pulses %}
+                                    <span class="badge bg-secondary rounded-pill text-truncate" style="max-width: 150px;">{{ pulse }}</span>
+                                    {% endfor %}
                                 </div>
                             </div>
                         </div>
