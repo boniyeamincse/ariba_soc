@@ -245,7 +245,7 @@
         </div>
     </nav>
     <div id="globalAlarmBanner"
-         class="global-alarm-banner {% if alarm_is_active %}show{% endif %}"
+         class="global-alarm-banner {% if alarm_is_active and alarm_system.enable_visual %}show{% endif %}"
          data-state-url="{% url 'settings:alarm_state' %}"
          data-stop-url="{% url 'settings:alarm_stop' %}"
          data-sound-url="{{ alarm_sound_url|default:'' }}">
@@ -260,8 +260,8 @@
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2">
-                {% if alarm_sound_url %}
-                <span class="badge bg-dark text-light">MP3 loaded</span>
+                {% if alarm_sound_url and alarm_system.enable_audio %}
+                <span class="badge bg-dark text-light"><i class="bi bi-volume-up"></i> {{ alarm_system.volume }}%</span>
                 {% endif %}
                 <button type="button" id="globalAlarmStopBtn" class="btn btn-sm btn-light">
                     <i class="bi bi-stop-circle"></i> Stop Alarm
@@ -269,7 +269,9 @@
             </div>
         </div>
     </div>
-    <audio id="globalAlarmAudio" preload="auto" loop {% if alarm_sound_url %}src="{{ alarm_sound_url }}"{% endif %}></audio>
+    {% if alarm_system.enable_audio %}
+    <audio id="globalAlarmAudio" preload="auto" loop data-volume="{{ alarm_system.volume|default:100 }}" {% if alarm_sound_url %}src="{{ alarm_sound_url }}"{% endif %}></audio>
+    {% endif %}
     <div class="ariba-main-content">
         {% if new_alerts_count > 0 %}
         <div class="alert alert-warning alert-dismissible fade show rounded-0 border-0 mb-0 text-center" role="alert">

@@ -30,6 +30,7 @@ def user_alerts_context(request):
         'edit_statuses': StatusSettings.objects.filter(is_active=True).order_by('sort_order'),
         'edit_verdicts': VerdictSettings.objects.filter(is_active=True).order_by('name'),
         'alarm_control': alarm_system,
+        'alarm_system': alarm_system,
         'alarm_is_active': alarm_system.is_active and alarm_system.is_enabled,
         'alarm_sound_url': alarm_system.sound_file.url if alarm_system.sound_file else '',
         'alarm_active_message': alarm_system.active_message,

@@ -24,24 +24,40 @@
     <div class="ariba-card p-3 mb-3">
         <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
-            <div class="row g-3 align-items-end">
-                <div class="col-12 col-lg-4">
-                    <label class="form-label small">Alarm Tone MP3</label>
-                    {{ alarm_system_form.sound_file }}
-                    {% if alarm_system.sound_file %}
-                    <div class="small text-muted mt-2">Current file: <a href="{{ alarm_system.sound_file.url }}" target="_blank">{{ alarm_system.sound_file.name }}</a></div>
-                    {% else %}
-                    <div class="small text-muted mt-2">Upload an MP3 file to play when alarm is triggered.</div>
-                    {% endif %}
-                </div>
-                <div class="col-12 col-lg-3">
-                    <div class="form-check mt-3">
-                        {{ alarm_system_form.is_enabled }}
-                        <label class="form-check-label">Enable alarm sound and dashboard flash</label>
+            <div class="row g-3">
+                <div class="col-md-5 border-end border-secondary">
+                    <label class="form-label small text-info"><i class="bi bi-volume-up"></i> Audio Settings</label>
+                    <div class="mb-3">
+                        {{ alarm_system_form.sound_file }}
+                        {% if alarm_system.sound_file %}
+                        <div class="small text-muted mt-1">Current file: <a href="{{ alarm_system.sound_file.url }}" target="_blank">{{ alarm_system.sound_file.name }}</a></div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small d-flex justify-content-between">Volume <span id="volVal">{{ alarm_system.volume }}%</span></label>
+                        {{ alarm_system_form.volume }}
                     </div>
                 </div>
-                <div class="col-12 col-lg-5 text-lg-end">
-                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-save"></i> Save Alarm Config</button>
+                <div class="col-md-7">
+                    <label class="form-label small text-info"><i class="bi bi-sliders"></i> Master Controls</label>
+                    
+                    <div class="form-check form-switch mb-2">
+                        {{ alarm_system_form.is_enabled }}
+                        <label class="form-check-label">Enable Global Alarms</label>
+                    </div>
+                    <div class="form-check form-switch mb-2 ms-4">
+                        {{ alarm_system_form.enable_audio }}
+                        <label class="form-check-label">Play Audio (MP3)</label>
+                    </div>
+                    <div class="form-check form-switch mb-4 ms-4">
+                        {{ alarm_system_form.enable_visual }}
+                        <label class="form-check-label">Flash Dashboard Red (Visual)</label>
+                    </div>
+                    
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-warning btn-sm" onclick="testAlarm()"><i class="bi bi-play-circle"></i> Test Alarm</button>
+                        <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-save"></i> Save Config</button>
+                    </div>
                 </div>
             </div>
         </form>
@@ -108,4 +124,54 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const volSlider = document.querySelector('input[name="volume"]');
+        const volVal = document.getElementById('volVal');
+        if (volSlider) {
+            volSlider.addEventListener('input', (e) => {
+                volVal.textContent = e.target.value + '%';
+            });
+        }
+    });
+
+    function testAlarm() {
+        const audioEnabled = document.querySelector('input[name="enable_audio"]').checked;
+        const visualEnabled = document.querySelector('input[name="enable_visual"]').checked;
+        const volume = document.querySelector('input[name="volume"]').value;
+        
+        if (visualEnabled) {
+            const banner = document.getElementById('globalAlarmBanner');
+            if (banner) banner.classList.add('show');
+            document.getElementById('globalAlarmMessage').innerText = "TEST ALARM ACTIVATED!";
+        }
+        
+        if (audioEnabled) {
+            const audio = document.getElementById('globalAlarmAudio');
+            if (audio && audio.src) {
+                audio.volume = volume / 100;
+                audio.play().catch(e => alert("Browser blocked autoplay. " + e));
+            } else {
+                alert("No MP3 uploaded yet to test audio.");
+            }
+        }
+        
+        setTimeout(() => {
+            if (visualEnabled) {
+                const banner = document.getElementById('globalAlarmBanner');
+                if (banner) banner.classList.remove('show');
+            }
+            if (audioEnabled) {
+                const audio = document.getElementById('globalAlarmAudio');
+                if (audio) {
+                    audio.pause();
+                    audio.currentTime = 0;
+                }
+            }
+        }, 3000);
+    }
+</script>
 {% endblock %}

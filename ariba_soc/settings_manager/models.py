@@ -281,6 +281,9 @@ class AlarmSetting(models.Model):
 
 class AlarmSystemSetting(models.Model):
     is_enabled = models.BooleanField(default=True)
+    enable_audio = models.BooleanField(default=True)
+    enable_visual = models.BooleanField(default=True)
+    volume = models.IntegerField(default=100)
     sound_file = models.FileField(
         upload_to='alarm_sounds/',
         blank=True,
