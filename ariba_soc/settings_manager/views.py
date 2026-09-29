@@ -469,6 +469,18 @@ def alert_source_toggle(request, pk):
     messages.success(request, f'Source {"activated" if obj.is_active else "deactivated"}.')
     return redirect('settings:alert_sources')
 
+@require_POST
+def alert_source_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    obj = get_object_or_404(AlertSourceSettings, id=pk)
+    name = obj.name
+    _log_setting_change(request.user, f'Deleted alert source {name}', 'AlertSourceSettings', obj.id, name, 'Deleted', request)
+    obj.delete()
+    messages.success(request, f'Alert Source "{name}" permanently deleted.')
+    return redirect('settings:alert_sources')
+
 def severity_settings(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -685,6 +697,18 @@ def sla_toggle(request, pk):
     messages.success(request, f'SLA {"activated" if obj.is_active else "deactivated"}.')
     return redirect('settings:sla')
 
+@require_POST
+def sla_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    obj = get_object_or_404(SLASettings, id=pk)
+    name = str(obj.severity)
+    _log_setting_change(request.user, f'Deleted SLA for severity {name}', 'SLASettings', obj.id, name, 'Deleted', request)
+    obj.delete()
+    messages.success(request, f'SLA for "{name}" permanently deleted.')
+    return redirect('settings:sla')
+
 def escalation_settings(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -728,6 +752,18 @@ def escalation_toggle(request, pk):
     obj.is_active = not obj.is_active
     obj.save()
     messages.success(request, f'Rule {"activated" if obj.is_active else "deactivated"}.')
+    return redirect('settings:escalation')
+
+@require_POST
+def escalation_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    obj = get_object_or_404(EscalationRule, id=pk)
+    name = obj.rule_name
+    _log_setting_change(request.user, f'Deleted escalation rule {name}', 'EscalationRule', obj.id, name, 'Deleted', request)
+    obj.delete()
+    messages.success(request, f'Escalation Rule "{name}" permanently deleted.')
     return redirect('settings:escalation')
 
 def notification_settings(request):
