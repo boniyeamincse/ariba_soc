@@ -3,65 +3,127 @@
 
 {% block dashboard_stats %}
 <div class="row g-3 mb-4">
-    <div class="col-md-2">
-        <div class="kpi-card text-center">
-            <div class="kpi-label">L1 Queue</div>
-            <div class="kpi-value" style="color: var(--status-new);">{{ new_l1_queue|length }}</div>
+    <div class="col-md-2 col-sm-4 col-6">
+        <div class="kpi-card text-center p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="kpi-label small text-secondary">L1 Queue</span>
+                <i class="bi bi-inbox-fill text-info"></i>
+            </div>
+            <div class="kpi-value text-info font-monospace fs-4">{{ new_l1_queue|length }}</div>
+            <small class="text-muted" style="font-size: 0.72rem;">Unclaimed Alerts</small>
         </div>
     </div>
-    <div class="col-md-2">
-        <div class="kpi-card text-center">
-            <div class="kpi-label">My Investigations</div>
-            <div class="kpi-value" style="color: var(--status-progress);">{{ my_investigations|length }}</div>
+    <div class="col-md-2 col-sm-4 col-6">
+        <div class="kpi-card text-center p-3 h-100 border-warning border-opacity-25" style="background: rgba(249, 115, 22, 0.05);">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="kpi-label small text-warning fw-bold">My Investigations</span>
+                <i class="bi bi-person-check-fill text-warning"></i>
+            </div>
+            <div class="kpi-value text-warning font-monospace fs-4">{{ my_investigations|length }}</div>
+            <small class="text-warning text-opacity-75" style="font-size: 0.72rem;">Assigned to You</small>
         </div>
     </div>
-    <div class="col-md-2">
-        <div class="kpi-card text-center">
-            <div class="kpi-label">Critical/High</div>
-            <div class="kpi-value" style="color: var(--severity-critical);">{{ critical_high|length }}</div>
+    <div class="col-md-2 col-sm-4 col-6">
+        <div class="kpi-card text-center p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="kpi-label small text-secondary">Critical / High</span>
+                <i class="bi bi-fire text-danger"></i>
+            </div>
+            <div class="kpi-value text-danger font-monospace fs-4">{{ critical_high|length }}</div>
+            <small class="text-muted" style="font-size: 0.72rem;">Urgent Triage</small>
         </div>
     </div>
-    <div class="col-md-2">
-        <div class="kpi-card text-center">
-            <div class="kpi-label">Returned from L2</div>
-            <div class="kpi-value" style="color: var(--status-return);">{{ returned_from_l2|length }}</div>
+    <div class="col-md-2 col-sm-4 col-6">
+        <div class="kpi-card text-center p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="kpi-label small text-secondary">Returned L2</span>
+                <i class="bi bi-arrow-return-left text-danger"></i>
+            </div>
+            <div class="kpi-value text-danger font-monospace fs-4">{{ returned_from_l2|length }}</div>
+            <small class="text-muted" style="font-size: 0.72rem;">Needs L1 Revision</small>
         </div>
     </div>
-    <div class="col-md-2">
-        <div class="kpi-card text-center">
-            <div class="kpi-label">SLA Near/Breached</div>
-            <div class="kpi-value" style="color: var(--severity-high);">{{ sla_near_breach|length }}</div>
+    <div class="col-md-2 col-sm-4 col-6">
+        <div class="kpi-card text-center p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="kpi-label small text-secondary">SLA Near/Breached</span>
+                <i class="bi bi-exclamation-triangle text-warning"></i>
+            </div>
+            <div class="kpi-value {% if sla_breached|length > 0 %}text-danger{% elif sla_near_breach|length > 0 %}text-warning{% else %}text-success{% endif %} font-monospace fs-4">
+                {{ sla_near_breach|length|add:sla_breached|length }}
+            </div>
+            <small class="text-muted" style="font-size: 0.72rem;">{{ sla_breached|length }} Breached</small>
         </div>
     </div>
-    <div class="col-md-2">
-        <div class="kpi-card text-center">
-            <div class="kpi-label">Escalated to L2</div>
-            <div class="kpi-value" style="color: var(--status-escalated);">{{ recently_escalated_l2|length }}</div>
+    <div class="col-md-2 col-sm-4 col-6">
+        <div class="kpi-card text-center p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="kpi-label small text-secondary">Escalated to L2</span>
+                <i class="bi bi-arrow-up-circle text-primary"></i>
+            </div>
+            <div class="kpi-value text-primary font-monospace fs-4">{{ recently_escalated_l2|length }}</div>
+            <small class="text-muted" style="font-size: 0.72rem;">Pending Acceptance</small>
         </div>
     </div>
 </div>
 {% endblock %}
 
 {% block dashboard_panels %}
+<!-- L1 Queue Panel -->
 <div class="col-lg-6">
-    <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-inbox"></i> L1 Queue (New / Unclaimed)</h6>
+    <div class="ariba-card p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="m-0 text-white fw-bold"><i class="bi bi-inbox-fill text-info me-2"></i> L1 Queue (New / Unclaimed)</h6>
+            <span class="badge bg-info-subtle text-info border border-info font-monospace">{{ new_l1_queue|length }} Queued</span>
+        </div>
         {% if new_l1_queue %}
-        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
-            <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>Alert</th><th>Severity</th><th>State</th><th>SLA</th><th>Action</th></tr></thead>
+        <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
+            <table class="table table-dark table-sm table-hover align-middle mb-0">
+                <thead>
+                    <tr class="text-secondary small">
+                        <th>Alert</th>
+                        <th>Severity</th>
+                        <th>State</th>
+                        <th>SLA</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
                 <tbody>
                 {% for a in new_l1_queue %}
                 <tr>
-                    <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:35 }}</a></td>
-                    <td><span class="badge bg-{% if a.severity == 'Critical' %}danger{% elif a.severity == 'High' %}warning{% elif a.severity == 'Medium' %}info{% else %}secondary{% endif %}">{{ a.severity }}</span></td>
-                    <td><small class="text-muted">{{ a.get_workflow_state_display }}</small></td>
-                    <td><small class="{% if a.sla_status == 'Breached' %}text-danger{% elif a.sla_status == 'Near SLA breach' %}text-warning{% else %}text-success{% endif %}">{{ a.sla_status }}</small></td>
                     <td>
+                        <a href="{% url 'alerts:detail' a.id %}" class="text-white text-decoration-none fw-semibold d-inline-block text-truncate" style="max-width: 190px;" title="{{ a.alert_name }}">
+                            {{ a.alert_name }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if a.severity == 'Critical' %}
+                        <span class="badge bg-danger">Crit</span>
+                        {% elif a.severity == 'High' %}
+                        <span class="badge bg-warning text-dark">High</span>
+                        {% elif a.severity == 'Medium' %}
+                        <span class="badge bg-info text-dark">Med</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Low</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge bg-secondary-subtle text-secondary border border-secondary">{{ a.get_workflow_state_display }}</span></td>
+                    <td>
+                        {% if a.sla_status == 'Breached' %}
+                        <span class="badge bg-danger">Breached</span>
+                        {% elif a.sla_status == 'Near SLA breach' %}
+                        <span class="badge bg-warning text-dark">Near Breach</span>
+                        {% else %}
+                        <span class="badge bg-success-subtle text-success border border-success">Within SLA</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
                         <form method="post" action="{% url 'alerts:claim' a.id %}" class="d-inline">
                             {% csrf_token %}
                             <input type="hidden" name="workflow_version" value="{{ a.workflow_version }}">
-                            <button type="submit" class="btn btn-sm btn-success py-0"><i class="bi bi-hand-index"></i> Claim</button>
+                            <button type="submit" class="btn btn-sm btn-success py-0 px-2 fw-semibold">
+                                <i class="bi bi-hand-index me-1"></i> Claim
+                            </button>
                         </form>
                     </td>
                 </tr>
@@ -70,30 +132,87 @@
             </table>
         </div>
         {% else %}
-        <div class="text-center text-muted py-4"><i class="bi bi-check-circle"></i> No unclaimed alerts in L1 queue</div>
+        <div class="text-center py-5 text-secondary">
+            <i class="bi bi-check-circle fs-2 d-block mb-2 text-success"></i>
+            <span class="fw-semibold text-white">No unclaimed alerts in L1 queue.</span>
+            <div class="small text-muted mt-1">All incoming alerts have been triaged or claimed by analysts.</div>
+        </div>
         {% endif %}
     </div>
 </div>
+
+<!-- My L1 Investigations Panel (High-Contrast & Color Accented) -->
 <div class="col-lg-6">
-    <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-person-check"></i> My L1 Investigations</h6>
+    <div class="ariba-card p-3 h-100 border-warning border-opacity-50" style="box-shadow: 0 0 15px rgba(249, 115, 22, 0.08);">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="m-0 text-white fw-bold">
+                <i class="bi bi-person-check-fill text-warning me-2 fs-5"></i> My L1 Investigations
+            </h6>
+            <span class="badge bg-warning-subtle text-warning border border-warning font-monospace px-2 py-1">
+                {{ my_investigations|length }} Assigned
+            </span>
+        </div>
         {% if my_investigations %}
-        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
-            <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>Alert</th><th>State</th><th>SLA</th></tr></thead>
+        <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
+            <table class="table table-dark table-sm table-hover align-middle mb-0">
+                <thead>
+                    <tr class="text-secondary small">
+                        <th>Alert</th>
+                        <th>Severity</th>
+                        <th>Workflow State</th>
+                        <th>SLA Status</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
                 <tbody>
                 {% for a in my_investigations %}
                 <tr>
-                    <td><a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none">{{ a.alert_name|truncatechars:40 }}</a></td>
-                    <td><small>{{ a.get_workflow_state_display }}</small></td>
-                    <td><small class="{% if a.sla_status == 'Breached' %}text-danger{% elif a.sla_status == 'Near SLA breach' %}text-warning{% else %}text-success{% endif %}">{{ a.sla_status }}</small></td>
+                    <td>
+                        <a href="{% url 'alerts:detail' a.id %}" class="text-white text-decoration-none fw-semibold d-inline-block text-truncate" style="max-width: 190px;" title="{{ a.alert_name }}">
+                            {{ a.alert_name }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if a.severity == 'Critical' %}
+                        <span class="badge bg-danger">Critical</span>
+                        {% elif a.severity == 'High' %}
+                        <span class="badge bg-warning text-dark">High</span>
+                        {% elif a.severity == 'Medium' %}
+                        <span class="badge bg-info text-dark">Medium</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Low</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge bg-warning-subtle text-warning border border-warning">
+                            <i class="bi bi-gear-wide-connected me-1"></i> {{ a.get_workflow_state_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if a.sla_status == 'Breached' %}
+                        <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i> Breached</span>
+                        {% elif a.sla_status == 'Near SLA breach' %}
+                        <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i> Near Breach</span>
+                        {% else %}
+                        <span class="badge bg-success-subtle text-success border border-success"><i class="bi bi-check-circle me-1"></i> Within SLA</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <a href="{% url 'alerts:detail' a.id %}" class="btn btn-sm btn-ariba-primary py-0 px-2 fw-semibold">
+                            <i class="bi bi-search me-1"></i> Open
+                        </a>
+                    </td>
                 </tr>
                 {% endfor %}
                 </tbody>
             </table>
         </div>
         {% else %}
-        <div class="text-center text-muted py-4"><i class="bi bi-inbox"></i> No alerts assigned to you</div>
+        <div class="text-center py-5 text-secondary">
+            <i class="bi bi-inbox fs-2 d-block mb-2 text-warning opacity-50"></i>
+            <span class="fw-semibold text-white">No active investigations assigned to you.</span>
+            <div class="small text-muted mt-1">Claim an alert from the L1 Queue on the left to start fast triage.</div>
+        </div>
         {% endif %}
     </div>
 </div>
@@ -101,59 +220,111 @@
 
 {% block dashboard_bottom %}
 <div class="col-lg-4">
-    <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-arrow-return-left"></i> Returned from L2</h6>
+    <div class="ariba-card p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="m-0 text-white fw-bold"><i class="bi bi-arrow-return-left text-danger me-2"></i> Returned from L2</h6>
+            <span class="badge bg-danger-subtle text-danger border border-danger font-monospace">{{ returned_from_l2|length }}</span>
+        </div>
         {% if returned_from_l2 %}
-        {% for a in returned_from_l2 %}
-        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
-            <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:35 }}</a>
-            <small class="text-muted">{{ a.returned_at|timesince }} ago</small>
+        <div class="d-flex flex-column gap-2" style="max-height: 250px; overflow-y: auto;">
+            {% for a in returned_from_l2 %}
+            <div class="d-flex justify-content-between align-items-center py-2 px-2 rounded bg-dark bg-opacity-50 border border-secondary border-opacity-25">
+                <a href="{% url 'alerts:detail' a.id %}" class="text-white text-decoration-none fw-semibold text-truncate small me-2" style="max-width: 220px;" title="{{ a.alert_name }}">
+                    {{ a.alert_name }}
+                </a>
+                <small class="text-danger font-monospace flex-shrink-0">{{ a.returned_at|timesince }} ago</small>
+            </div>
+            {% endfor %}
         </div>
-        {% endfor %}
         {% else %}
-        <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No returned cases</div>
+        <div class="text-center text-muted py-4"><i class="bi bi-check-circle me-1"></i> No returned cases</div>
         {% endif %}
     </div>
 </div>
+
 <div class="col-lg-4">
-    <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-exclamation-triangle"></i> SLA Near Breach</h6>
+    <div class="ariba-card p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="m-0 text-white fw-bold"><i class="bi bi-exclamation-triangle-fill text-warning me-2"></i> SLA Near Breach</h6>
+            <span class="badge bg-warning-subtle text-warning border border-warning font-monospace">{{ sla_near_breach|length }}</span>
+        </div>
         {% if sla_near_breach %}
-        {% for a in sla_near_breach %}
-        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
-            <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:35 }}</a>
-            <small class="text-warning">{{ a.sla_due_at|timeuntil }}</small>
+        <div class="d-flex flex-column gap-2" style="max-height: 250px; overflow-y: auto;">
+            {% for a in sla_near_breach %}
+            <div class="d-flex justify-content-between align-items-center py-2 px-2 rounded bg-dark bg-opacity-50 border border-secondary border-opacity-25">
+                <a href="{% url 'alerts:detail' a.id %}" class="text-white text-decoration-none fw-semibold text-truncate small me-2" style="max-width: 220px;" title="{{ a.alert_name }}">
+                    {{ a.alert_name }}
+                </a>
+                <small class="text-warning font-monospace flex-shrink-0"><i class="bi bi-hourglass-split"></i> {{ a.sla_due_at|timeuntil }}</small>
+            </div>
+            {% endfor %}
         </div>
-        {% endfor %}
         {% else %}
-        <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No alerts near SLA breach</div>
+        <div class="text-center text-muted py-4"><i class="bi bi-check-circle me-1"></i> No alerts near SLA breach</div>
         {% endif %}
     </div>
 </div>
+
 <div class="col-lg-4">
-    <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-arrow-up-circle"></i> Recently Escalated to L2</h6>
-        {% if recently_escalated_l2 %}
-        {% for a in recently_escalated_l2 %}
-        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
-            <a href="{% url 'alerts:detail' a.id %}" class="text-decoration-none small">{{ a.alert_name|truncatechars:35 }}</a>
-            <small class="text-muted">{{ a.escalated_at|timesince }} ago</small>
+    <div class="ariba-card p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="m-0 text-white fw-bold"><i class="bi bi-arrow-up-circle-fill text-primary me-2"></i> Escalated to L2</h6>
+            <span class="badge bg-primary-subtle text-primary border border-primary font-monospace">{{ recently_escalated_l2|length }}</span>
         </div>
-        {% endfor %}
+        {% if recently_escalated_l2 %}
+        <div class="d-flex flex-column gap-2" style="max-height: 250px; overflow-y: auto;">
+            {% for a in recently_escalated_l2 %}
+            <div class="d-flex justify-content-between align-items-center py-2 px-2 rounded bg-dark bg-opacity-50 border border-secondary border-opacity-25">
+                <a href="{% url 'alerts:detail' a.id %}" class="text-white text-decoration-none fw-semibold text-truncate small me-2" style="max-width: 220px;" title="{{ a.alert_name }}">
+                    {{ a.alert_name }}
+                </a>
+                <small class="text-muted font-monospace flex-shrink-0">{{ a.escalated_at|timesince }} ago</small>
+            </div>
+            {% endfor %}
+        </div>
         {% else %}
-        <div class="text-center text-muted py-3"><i class="bi bi-check-circle"></i> No recent escalations</div>
+        <div class="text-center text-muted py-4"><i class="bi bi-check-circle me-1"></i> No recent escalations</div>
         {% endif %}
     </div>
 </div>
-<div class="col-12">
+
+<div class="col-12 mt-3">
     <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-bar-chart"></i> L1 Shift Performance (Today)</h6>
-        <div class="row text-center">
-            <div class="col-md-2"><div class="kpi-label">Total Today</div><div class="fs-5 fw-bold">{{ shift_stats.total_today }}</div></div>
-            <div class="col-md-2"><div class="kpi-label">Closed Today</div><div class="fs-5 fw-bold text-success">{{ shift_stats.closed_today }}</div></div>
-            <div class="col-md-2"><div class="kpi-label">Escalated Today</div><div class="fs-5 fw-bold text-warning">{{ shift_stats.escalated_today }}</div></div>
-            <div class="col-md-3"><div class="kpi-label">Avg Response Time</div><div class="fs-5 fw-bold">{% if shift_stats.avg_response_today %}{{ shift_stats.avg_response_today }} min{% else %}N/A{% endif %}</div></div>
-            <div class="col-md-3"><div class="kpi-label">Weekly Total</div><div class="fs-5 fw-bold">{{ shift_stats.weekly_total }}</div></div>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="m-0 text-white fw-bold"><i class="bi bi-bar-chart-fill text-info me-2"></i> L1 Shift Performance (Today)</h6>
+            <span class="text-muted small">Shift Analytics &bull; {% now "M d, Y" %}</span>
+        </div>
+        <div class="row text-center g-3">
+            <div class="col-md-2 col-6">
+                <div class="p-2 rounded bg-dark bg-opacity-50 border border-secondary border-opacity-25">
+                    <div class="kpi-label small text-secondary">Total Today</div>
+                    <div class="fs-5 fw-bold text-white font-monospace">{{ shift_stats.total_today }}</div>
+                </div>
+            </div>
+            <div class="col-md-2 col-6">
+                <div class="p-2 rounded bg-dark bg-opacity-50 border border-secondary border-opacity-25">
+                    <div class="kpi-label small text-secondary">Closed Today</div>
+                    <div class="fs-5 fw-bold text-success font-monospace">{{ shift_stats.closed_today }}</div>
+                </div>
+            </div>
+            <div class="col-md-2 col-6">
+                <div class="p-2 rounded bg-dark bg-opacity-50 border border-secondary border-opacity-25">
+                    <div class="kpi-label small text-secondary">Escalated Today</div>
+                    <div class="fs-5 fw-bold text-warning font-monospace">{{ shift_stats.escalated_today }}</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="p-2 rounded bg-dark bg-opacity-50 border border-secondary border-opacity-25">
+                    <div class="kpi-label small text-secondary">Avg Response Time</div>
+                    <div class="fs-5 fw-bold text-info font-monospace">{% if shift_stats.avg_response_today %}{{ shift_stats.avg_response_today }} min{% else %}N/A{% endif %}</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="p-2 rounded bg-dark bg-opacity-50 border border-secondary border-opacity-25">
+                    <div class="kpi-label small text-secondary">Weekly Total</div>
+                    <div class="fs-5 fw-bold text-primary font-monospace">{{ shift_stats.weekly_total }}</div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
