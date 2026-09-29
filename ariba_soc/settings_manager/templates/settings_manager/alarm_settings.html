@@ -138,6 +138,18 @@
                 volVal.textContent = e.target.value + '%';
             });
         }
+        
+        // Auto-toggle audio switch when file is uploaded
+        const fileInput = document.querySelector('input[name="sound_file"]');
+        const audioSwitch = document.querySelector('input[name="enable_audio"]');
+        
+        if (fileInput && audioSwitch) {
+            fileInput.addEventListener('change', function() {
+                if (this.files.length > 0) {
+                    audioSwitch.checked = true;
+                }
+            });
+        }
     });
 
     function testAlarm() {

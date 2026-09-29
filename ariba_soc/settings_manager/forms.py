@@ -249,6 +249,17 @@ class AlarmSystemSettingForm(forms.ModelForm):
         self.fields['enable_visual'].widget.attrs.update({'class': 'form-check-input'})
         self.fields['volume'].widget.attrs.update({'type': 'range', 'class': 'form-range', 'min': '0', 'max': '100', 'step': '1'})
 
+    def clean(self):
+        cleaned_data = super().clean()
+        enable_audio = cleaned_data.get('enable_audio')
+        sound_file = cleaned_data.get('sound_file')
+        
+        # If user enables audio but there is no MP3 file, automatically disable it
+        if enable_audio and not sound_file:
+            cleaned_data['enable_audio'] = False
+            
+        return cleaned_data
+
 class AlertAggregationSettingForm(forms.ModelForm):
     class Meta:
         model = AlertAggregationSetting
