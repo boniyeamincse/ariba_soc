@@ -468,17 +468,25 @@ class AlertSuppressionRule(models.Model):
         ('DROP', 'Drop (Do not ingest alert)'),
     ]
 
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending Approval'),
+        ('APPROVED', 'Approved & Active'),
+        ('REJECTED', 'Rejected'),
+    ]
+
     name = models.CharField(max_length=200, help_text="Rule name / description")
     rule_id = models.CharField(max_length=50, blank=True, help_text="Rule ID to suppress (e.g. 5710, or blank for any)")
-    source_ip = models.CharField(max_length=100, blank=True, help_text="Source IP to match (blank for any)")
-    destination_ip = models.CharField(max_length=100, blank=True, help_text="Destination IP to match (blank for any)")
-    hostname = models.CharField(max_length=255, blank=True, help_text="Hostname or keyword to match (blank for any)")
-    agent_id = models.CharField(max_length=50, blank=True, help_text="Agent ID to match (blank for any)")
-    username = models.CharField(max_length=150, blank=True, help_text="Username to match (blank for any)")
+    source_ip = models.CharField(max_length=100, blank=True, help_text="Source IP or CIDR (e.g. 10.0.0.0/24)")
+    destination_ip = models.CharField(max_length=100, blank=True, help_text="Destination IP or CIDR")
+    hostname = models.CharField(max_length=255, blank=True, help_text="Hostname to match (supports regex if enabled)")
+    agent_id = models.CharField(max_length=50, blank=True, help_text="Agent ID to match")
+    username = models.CharField(max_length=150, blank=True, help_text="Username to match (supports regex if enabled)")
+    is_regex = models.BooleanField(default=False, help_text="Evaluate text fields (Hostname, Username) as Regular Expressions")
     action = models.CharField(max_length=20, choices=ACTION_CHOICES, default='AUTO_CLOSE', help_text="Action to take when alert matches")
     reason = models.TextField(blank=True, help_text="Business justification / False positive rationale / Change ticket")
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='suppression_rules')
-    expires_at = models.DateTimeField(null=True, blank=True, help_text="Optional expiration date/time (e.g. for maintenance windows)")
+    expires_at = models.DateTimeField(null=True, blank=True, help_text="Optional expiration date/time")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='APPROVED', help_text="Approval status (Phase 5)")
     is_active = models.BooleanField(default=True, help_text="Enable or disable this suppression rule")
     match_count = models.PositiveIntegerField(default=0, help_text="Number of alerts suppressed by this rule")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -509,33 +517,52 @@ class AlertSuppressionRule(models.Model):
             if str(alert_data.get('rule_id') or '') != str(self.rule_id):
                 return False
 
-        if self.source_ip:
-            has_criteria = True
-            if str(alert_data.get('source_ip') or '') != str(self.source_ip):
-                return False
-
-        if self.destination_ip:
-            has_criteria = True
-            if str(alert_data.get('destination_ip') or '') != str(self.destination_ip):
-                return False
-
-        if self.hostname:
-            has_criteria = True
-            host = str(alert_data.get('hostname') or '')
-            if self.hostname.lower() not in host.lower():
-                return False
-
         if self.agent_id:
             has_criteria = True
             if str(alert_data.get('agent_id') or '') != str(self.agent_id):
                 return False
 
+        import re
+        import ipaddress
+
+        def match_ip(rule_ip, target_ip):
+            if not rule_ip: return True
+            if not target_ip: return False
+            try:
+                if '/' in rule_ip:
+                    return ipaddress.ip_address(target_ip) in ipaddress.ip_network(rule_ip)
+                return rule_ip == target_ip
+            except ValueError:
+                return rule_ip == target_ip
+
+        if self.source_ip:
+            has_criteria = True
+            if not match_ip(self.source_ip, alert_data.get('source_ip', '')):
+                return False
+        
+        if self.destination_ip:
+            has_criteria = True
+            if not match_ip(self.destination_ip, alert_data.get('destination_ip', '')):
+                return False
+
+        def match_text(rule_text, target_text):
+            if not rule_text: return True
+            if not target_text: return False
+            if self.is_regex:
+                try:
+                    return bool(re.search(rule_text, target_text))
+                except re.error:
+                    return False
+            return rule_text.lower() in target_text.lower()
+
         if self.username:
             has_criteria = True
-            if str(alert_data.get('username') or '') != str(self.username):
+            if not match_text(self.username, alert_data.get('username', '')):
+                return False
+                
+        if self.hostname:
+            has_criteria = True
+            if not match_text(self.hostname, alert_data.get('hostname', '')):
                 return False
 
         return has_criteria
-
-
-

@@ -267,7 +267,8 @@ class AlertSuppressionRuleForm(forms.ModelForm):
         model = AlertSuppressionRule
         fields = [
             'name', 'action', 'rule_id', 'source_ip', 'destination_ip',
-            'hostname', 'agent_id', 'username', 'reason', 'expires_at', 'is_active'
+            'hostname', 'agent_id', 'username', 'is_regex', 'reason', 
+            'expires_at', 'status', 'is_active'
         ]
         widgets = {
             'expires_at': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control form-control-sm'}),
