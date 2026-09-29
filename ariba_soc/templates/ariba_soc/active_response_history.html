@@ -18,7 +18,64 @@
         </div>
     </div>
 
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="ariba-card p-3 border-start border-4 border-primary">
+                <h6 class="text-secondary mb-1">Total Executions</h6>
+                <h3 class="m-0 text-light">{{ stats.total }}</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="ariba-card p-3 border-start border-4 {% if stats.success_rate >= 90 %}border-success{% elif stats.success_rate >= 70 %}border-warning{% else %}border-danger{% endif %}">
+                <h6 class="text-secondary mb-1">Success Rate</h6>
+                <h3 class="m-0 text-light">{{ stats.success_rate }}%</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="ariba-card p-3 border-start border-4 border-danger">
+                <h6 class="text-secondary mb-1">Firewall Drops</h6>
+                <h3 class="m-0 text-light">{{ stats.fw_drops }}</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="ariba-card p-3 border-start border-4 border-info">
+                <h6 class="text-secondary mb-1">Account Disables</h6>
+                <h3 class="m-0 text-light">{{ stats.account_disables }}</h3>
+            </div>
+        </div>
+    </div>
+
     <div class="ariba-card p-3 mb-4">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label text-secondary small mb-1">Search Target</label>
+                <input type="text" name="q" class="form-control form-control-sm" placeholder="IP, User, Agent..." value="{{ search_query|default:'' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label text-secondary small mb-1">Command</label>
+                <select name="command" class="form-select form-select-sm">
+                    <option value="">All Commands</option>
+                    <option value="firewall-drop" {% if current_command == 'firewall-drop' %}selected{% endif %}>Firewall Drop</option>
+                    <option value="host-deny" {% if current_command == 'host-deny' %}selected{% endif %}>Host Deny</option>
+                    <option value="disable-account" {% if current_command == 'disable-account' %}selected{% endif %}>Disable Account</option>
+                    <option value="restart-wazuh" {% if current_command == 'restart-wazuh' %}selected{% endif %}>Restart Agent</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label text-secondary small mb-1">Status</label>
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">All Statuses</option>
+                    <option value="SUCCESS" {% if current_status == 'SUCCESS' %}selected{% endif %}>Success</option>
+                    <option value="FAILED" {% if current_status == 'FAILED' %}selected{% endif %}>Failed</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-funnel"></i> Filter</button>
+                <a href="?" class="btn btn-ariba-outline btn-sm">Clear</a>
+            </div>
+        </form>
+    </div>
+    <div class="ariba-card p-0 mb-4">
         <div class="table-responsive">
             <table class="table ariba-table table-hover mb-0">
                 <thead>
@@ -31,10 +88,11 @@
                         <th>Alert Context</th>
                         <th>Execution Status</th>
                         <th>Response Message</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for item in executions %}
+                    {% for item in page_obj %}
                     <tr>
                         <td class="text-nowrap small text-muted">{{ item.executed_at|date:"M d, H:i:s" }}</td>
                         <td>
@@ -88,8 +146,30 @@
                         </td>
                         <td>
                             <small class="{% if item.status == 'FAILED' %}text-danger{% else %}text-light{% endif %}" title="{{ item.response_message }}">
-                                {{ item.response_message|truncatechars:70 }}
+                                {{ item.response_message|truncatechars:50 }}
                             </small>
+                        </td>
+                        <td>
+                            {% if item.status == 'FAILED' and can_contain %}
+                            <form method="post" action="{% url 'wazuh_integration:active_response_execute' %}" class="d-inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="command" value="{{ item.command }}">
+                                <input type="hidden" name="agent_id" value="{{ item.target_agent_id }}">
+                                <input type="hidden" name="target_ip" value="{{ item.target_ip }}">
+                                <input type="hidden" name="target_user" value="{{ item.target_user }}">
+                                {% if item.alert %}<input type="hidden" name="alert_id" value="{{ item.alert.id }}">{% endif %}
+                                <button type="submit" class="btn btn-sm btn-outline-warning py-0 px-2" title="Retry"><i class="bi bi-arrow-clockwise"></i></button>
+                            </form>
+                            {% elif item.status == 'SUCCESS' and item.command == 'firewall-drop' and can_contain %}
+                            <form method="post" action="{% url 'wazuh_integration:active_response_execute' %}" class="d-inline" onsubmit="return confirm('Attempt to remove firewall block for {{ item.target_ip }}?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="command" value="firewall-drop">
+                                <input type="hidden" name="agent_id" value="{{ item.target_agent_id }}">
+                                <input type="hidden" name="target_ip" value="{{ item.target_ip }}">
+                                <input type="hidden" name="custom_args" value='["delete", "-", "{{ item.target_ip }}"]'>
+                                <button type="submit" class="btn btn-sm btn-outline-info py-0 px-2" title="Unblock IP"><i class="bi bi-unlock"></i></button>
+                            </form>
+                            {% endif %}
                         </td>
                     </tr>
                     {% empty %}
@@ -104,5 +184,21 @@
             </table>
         </div>
     </div>
+    
+    {% if page_obj.has_other_pages %}
+    <nav>
+        <ul class="pagination pagination-sm justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ search_query|default:'' }}&command={{ current_command|default:'' }}&status={{ current_status|default:'' }}">Prev</a></li>
+            {% endif %}
+            
+            <li class="page-item active"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+            
+            {% if page_obj.has_next %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ search_query|default:'' }}&command={{ current_command|default:'' }}&status={{ current_status|default:'' }}">Next</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
 </div>
 {% endblock %}

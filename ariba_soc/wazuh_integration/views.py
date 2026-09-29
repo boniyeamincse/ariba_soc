@@ -312,13 +312,59 @@ def active_response_execute(request):
     return redirect('alerts:detail', alert.id) if alert else redirect('wazuh_integration:active_response_history')
 
 
+from django.core.paginator import Paginator
+from django.db.models import Q
+
 @login_required
 def active_response_history(request):
     _check_wazuh_access(request.user)
-    executions = ActiveResponseExecution.objects.select_related('alert', 'user').all()[:100]
+    
+    qs = ActiveResponseExecution.objects.select_related('alert', 'user').all()
+    
+    command_filter = request.GET.get('command')
+    status_filter = request.GET.get('status')
+    search_query = request.GET.get('q')
+    
+    if command_filter:
+        qs = qs.filter(command=command_filter)
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    if search_query:
+        qs = qs.filter(
+            Q(target_ip__icontains=search_query) | 
+            Q(target_user__icontains=search_query) | 
+            Q(target_agent_id__icontains=search_query) |
+            Q(target_agent_name__icontains=search_query)
+        )
+        
+    qs = qs.order_by('-executed_at')
+    
+    paginator = Paginator(qs, 15)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    # Calculate Metrics
+    total_execs = ActiveResponseExecution.objects.count()
+    success_execs = ActiveResponseExecution.objects.filter(status='SUCCESS').count()
+    failed_execs = ActiveResponseExecution.objects.filter(status='FAILED').count()
+    success_rate = round((success_execs / total_execs * 100) if total_execs > 0 else 0)
+    
+    fw_drops = ActiveResponseExecution.objects.filter(command='firewall-drop').count()
+    account_disables = ActiveResponseExecution.objects.filter(command='disable-account').count()
+    
     can_contain = request.user.is_superuser or (hasattr(request.user, 'analyst_profile') and request.user.analyst_profile.role in CONTAINMENT_ROLES)
     return render(request, 'ariba_soc/active_response_history.html', {
-        'executions': executions,
+        'page_obj': page_obj,
         'can_contain': can_contain,
+        'current_command': command_filter,
+        'current_status': status_filter,
+        'search_query': search_query,
+        'stats': {
+            'total': total_execs,
+            'success_rate': success_rate,
+            'fw_drops': fw_drops,
+            'account_disables': account_disables,
+            'failed': failed_execs
+        }
     })
 
