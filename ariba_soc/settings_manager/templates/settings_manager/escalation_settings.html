@@ -156,3 +156,14 @@
 {% endfor %}
 
 {% endblock %}
+
+{% block extra_js %}
+{% if form.errors %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        var addRuleModal = new bootstrap.Modal(document.getElementById('addRuleModal'));
+        addRuleModal.show();
+    });
+</script>
+{% endif %}
+{% endblock %}
