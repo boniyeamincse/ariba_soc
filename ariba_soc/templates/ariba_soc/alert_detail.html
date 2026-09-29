@@ -170,6 +170,9 @@
                                         <i class="bi bi-shield-slash"></i> Escalate to Incident
                                     </a>
                                     {% endif %}
+                                    <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#createSuppressionModal" style="font-size:0.75rem;">
+                                        <i class="bi bi-funnel"></i> Tune / Suppress Rule
+                                    </button>
                                     <a href="#auditTrailSection" class="btn btn-sm btn-ariba-outline" style="font-size:0.75rem;">
                                         <i class="bi bi-clock-history"></i> Audit Trail
                                     </a>
@@ -379,6 +382,9 @@
                         data-priority="{{ alert.priority }}">
                         <i class="bi bi-pencil"></i> Edit Alert
                     </button>
+                    <button type="button" class="btn btn-sm btn-outline-warning text-start" data-bs-toggle="modal" data-bs-target="#createSuppressionModal">
+                        <i class="bi bi-funnel"></i> Tune / Suppress Rule
+                    </button>
                     {% if alert.status != 'Closed' and alert.status != 'Archived' %}
                     <form method="post" action="{% url 'alerts:escalate' alert.id %}">
                         {% csrf_token %}
@@ -463,6 +469,85 @@
                     {% endfor %}
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: 1-Click Suppression Rule -->
+<div class="modal fade" id="createSuppressionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content ariba-card border">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title"><i class="bi bi-funnel text-warning me-2"></i> Create Suppression / Tuning Rule</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{% url 'settings:suppression_rule_create' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <div class="modal-body">
+                    <div class="p-2 mb-3 rounded" style="background: rgba(234, 179, 8, 0.1); border-left: 3px solid var(--bs-warning);">
+                        <small class="text-warning">
+                            <i class="bi bi-info-circle me-1"></i> Pre-populated with IOC parameters from this alert. Customize matching criteria below to silence recurring false positives.
+                        </small>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">Rule Name *</label>
+                            <input type="text" name="name" class="form-control form-control-sm" value="Mute: {{ alert.alert_name|truncatechars:45 }}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Action</label>
+                            <select name="action" class="form-select form-select-sm">
+                                <option value="AUTO_CLOSE" selected>Auto-Close as False Positive</option>
+                                <option value="DROP">Drop Silently (No DB Record)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Rule ID (Match)</label>
+                            <input type="text" name="rule_id" class="form-control form-control-sm" value="{{ alert.rule_id|default:'' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Source IP (Match)</label>
+                            <input type="text" name="source_ip" class="form-control form-control-sm" value="{{ alert.source_ip|default:'' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Destination IP (Match)</label>
+                            <input type="text" name="destination_ip" class="form-control form-control-sm" value="{{ alert.destination_ip|default:'' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Hostname (Match)</label>
+                            <input type="text" name="hostname" class="form-control form-control-sm" value="{{ alert.hostname|default:'' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Agent ID (Match)</label>
+                            <input type="text" name="agent_id" class="form-control form-control-sm" value="{{ alert.agent_id|default:'' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Username (Match)</label>
+                            <input type="text" name="username" class="form-control form-control-sm" value="{{ alert.username|default:'' }}">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">Expiration Window (Optional)</label>
+                            <input type="datetime-local" name="expires_at" class="form-control form-control-sm">
+                            <div class="form-text small">Leave blank for permanent exception rule.</div>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-center mt-4">
+                            <div class="form-check form-switch">
+                                <input type="checkbox" name="is_active" class="form-check-input" id="id_suppress_active" checked>
+                                <label class="form-check-label fw-bold ms-2" for="id_suppress_active">Rule Active</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Justification / Rationale</label>
+                            <textarea name="reason" class="form-control form-control-sm" rows="2" placeholder="e.g. Verified authorized penetration test / maintenance backup activity">Identified as False Positive / Benign during triage of alert #{{ alert.wazuh_alert_id|default:alert.id }}.</textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-shield-check"></i> Create Suppression Rule</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

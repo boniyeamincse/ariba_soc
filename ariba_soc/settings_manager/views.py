@@ -10,7 +10,7 @@ from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
     DashboardSetting, AuditLogSetting, AlarmSetting, AlarmSystemSetting, SystemSetting, SettingAuditLog,
-    IOCEnrichmentSetting, AlertAggregationSetting
+    IOCEnrichmentSetting, AlertAggregationSetting, AlertSuppressionRule
 )
 from .forms import (
     UserManagementForm, UserEditForm, AnalystProfileForm,
@@ -18,7 +18,7 @@ from .forms import (
     VerdictSettingsForm, SLASettingsForm, EscalationRuleForm,
     NotificationSettingForm, ReportSettingForm, DashboardSettingForm,
     AuditLogSettingForm, AlarmSettingForm, AlarmSystemSettingForm, SystemSettingForm, ResetPasswordForm,
-    IOCEnrichmentSettingForm, AlertAggregationSettingForm
+    IOCEnrichmentSettingForm, AlertAggregationSettingForm, AlertSuppressionRuleForm
 )
 
 def _get_allowed_roles():
@@ -60,6 +60,7 @@ def settings_dashboard(request):
         'alarm_count': AlarmSetting.objects.count(),
         'alarm_enabled_count': AlarmSetting.objects.filter(is_enabled=True).count(),
         'agg_setting': AlertAggregationSetting.load(),
+        'suppression_count': AlertSuppressionRule.objects.filter(is_active=True).count(),
         'recent_logs': SettingAuditLog.objects.select_related('user').all()[:10],
     }
     return render(request, 'settings_manager/settings_dashboard.html', ctx)
@@ -913,5 +914,145 @@ def aggregation_toggle(request):
         return JsonResponse({'status': 'ok', 'is_enabled': agg_setting.is_enabled})
     messages.success(request, f'Alert aggregation {"enabled" if agg_setting.is_enabled else "disabled"}.')
     return redirect('settings:aggregation')
+
+
+def suppression_rules(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+
+    rules = AlertSuppressionRule.objects.select_related('created_by').all()
+    total_suppressed = rules.aggregate(total=Sum('match_count'))['total'] or 0
+
+    if request.method == 'POST':
+        form = AlertSuppressionRuleForm(request.POST)
+        if form.is_valid():
+            rule = form.save(commit=False)
+            rule.created_by = request.user
+            rule.save()
+            _log_setting_change(
+                request.user,
+                f'Created suppression rule {rule.name}',
+                'AlertSuppressionRule',
+                rule.id,
+                '',
+                f'Action={rule.action}',
+                request,
+            )
+            messages.success(request, f'Suppression rule "{rule.name}" created successfully.')
+            return redirect('settings:suppression_rules')
+    else:
+        initial_data = {}
+        for param in ['rule_id', 'source_ip', 'destination_ip', 'hostname', 'agent_id', 'username', 'name']:
+            if param in request.GET:
+                initial_data[param] = request.GET[param]
+        form = AlertSuppressionRuleForm(initial=initial_data)
+
+    ctx = {
+        'section': 'suppression',
+        'rules': rules,
+        'form': form,
+        'total_rules': rules.count(),
+        'active_rules': rules.filter(is_active=True).count(),
+        'total_suppressed': total_suppressed,
+    }
+    return render(request, 'settings_manager/suppression_rules.html', ctx)
+
+
+def suppression_rule_create(request):
+    """Direct endpoint to create a suppression rule (e.g. from 1-click modal on Alert Detail)."""
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+
+    if request.method == 'POST':
+        form = AlertSuppressionRuleForm(request.POST)
+        if form.is_valid():
+            rule = form.save(commit=False)
+            rule.created_by = request.user
+            rule.save()
+            _log_setting_change(
+                request.user,
+                f'Created suppression rule {rule.name}',
+                'AlertSuppressionRule',
+                rule.id,
+                '',
+                f'Action={rule.action}',
+                request,
+            )
+            messages.success(request, f'Suppression rule "{rule.name}" activated.')
+            next_url = request.POST.get('next') or request.GET.get('next')
+            if next_url:
+                return redirect(next_url)
+            return redirect('settings:suppression_rules')
+        else:
+            messages.error(request, 'Failed to create suppression rule. Please check required fields.')
+            next_url = request.POST.get('next') or request.GET.get('next')
+            if next_url:
+                return redirect(next_url)
+    return redirect('settings:suppression_rules')
+
+
+def suppression_rule_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    rule = get_object_or_404(AlertSuppressionRule, id=pk)
+    if request.method == 'POST':
+        form = AlertSuppressionRuleForm(request.POST, instance=rule)
+        if form.is_valid():
+            form.save()
+            _log_setting_change(
+                request.user,
+                f'Edited suppression rule {rule.name}',
+                'AlertSuppressionRule',
+                rule.id,
+                '',
+                'Updated',
+                request,
+            )
+            messages.success(request, f'Suppression rule "{rule.name}" updated.')
+            return redirect('settings:suppression_rules')
+    else:
+        form = AlertSuppressionRuleForm(instance=rule)
+    ctx = {'section': 'suppression', 'form': form, 'rule': rule}
+    return render(request, 'settings_manager/suppression_rule_edit.html', ctx)
+
+
+@require_POST
+def suppression_rule_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    rule = get_object_or_404(AlertSuppressionRule, id=pk)
+    rule.is_active = not rule.is_active
+    rule.save(update_fields=['is_active', 'updated_at'])
+    _log_setting_change(
+        request.user,
+        f'{"Activated" if rule.is_active else "Deactivated"} suppression rule {rule.name}',
+        'AlertSuppressionRule',
+        rule.id,
+        '',
+        f'Active={rule.is_active}',
+        request,
+    )
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'status': 'ok', 'is_active': rule.is_active})
+    messages.success(request, f'Rule "{rule.name}" {"activated" if rule.is_active else "deactivated"}.')
+    return redirect('settings:suppression_rules')
+
+
+@require_POST
+def suppression_rule_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    rule = get_object_or_404(AlertSuppressionRule, id=pk)
+    name = rule.name
+    rule.delete()
+    _log_setting_change(request.user, f'Deleted suppression rule {name}', 'AlertSuppressionRule', pk, '', 'Deleted', request)
+    messages.success(request, f'Suppression rule "{name}" deleted.')
+    return redirect('settings:suppression_rules')
+
 
 

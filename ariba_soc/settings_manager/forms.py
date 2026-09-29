@@ -6,7 +6,7 @@ from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
     DashboardSetting, AuditLogSetting, AlarmSetting, AlarmSystemSetting, SystemSetting, IOCEnrichmentSetting,
-    AlertAggregationSetting
+    AlertAggregationSetting, AlertSuppressionRule
 )
 
 class UserManagementForm(UserCreationForm):
@@ -258,6 +258,30 @@ class AlertAggregationSettingForm(forms.ModelForm):
                 f.widget.attrs.update({'class': 'form-check-input'})
             else:
                 f.widget.attrs.update({'class': 'form-control form-control-sm'})
+
+
+class AlertSuppressionRuleForm(forms.ModelForm):
+    class Meta:
+        model = AlertSuppressionRule
+        fields = [
+            'name', 'action', 'rule_id', 'source_ip', 'destination_ip',
+            'hostname', 'agent_id', 'username', 'reason', 'expires_at', 'is_active'
+        ]
+        widgets = {
+            'expires_at': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control form-control-sm'}),
+            'reason': forms.Textarea(attrs={'rows': 2, 'class': 'form-control form-control-sm', 'placeholder': 'Reason for suppression, false positive context or change ticket...'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.update({'class': 'form-check-input'})
+            elif isinstance(field.widget, forms.Select):
+                field.widget.attrs.update({'class': 'form-select form-select-sm'})
+            elif name not in ['expires_at', 'reason']:
+                field.widget.attrs.update({'class': 'form-control form-control-sm'})
+
 
 class SystemSettingForm(forms.ModelForm):
     class Meta:

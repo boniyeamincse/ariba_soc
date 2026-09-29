@@ -277,4 +277,52 @@ class AlertAggregationTest(TestCase):
         self.assertContains(resp, 'IS IT MALICIOUS?')
         self.assertContains(resp, 'WHAT SHOULD WE DO NEXT?')
 
+    def test_suppression_rule_drop_and_autoclose(self):
+        from settings_manager.models import AlertSuppressionRule
+        from alerts.services import ingest_or_aggregate_alert
+
+        # 1. Test DROP
+        drop_rule = AlertSuppressionRule.objects.create(
+            name='Drop Pentest IP',
+            source_ip='10.99.99.99',
+            action='DROP',
+            is_active=True,
+        )
+        data_drop = {
+            'alert_name': 'Portscan',
+            'severity': 'Medium',
+            'source_ip': '10.99.99.99',
+            'source': self.source,
+            'alert_time': timezone.now(),
+        }
+        res_alert, created = ingest_or_aggregate_alert(data_drop)
+        self.assertIsNone(res_alert)
+        self.assertFalse(created)
+        drop_rule.refresh_from_db()
+        self.assertEqual(drop_rule.match_count, 1)
+
+        # 2. Test AUTO_CLOSE
+        close_rule = AlertSuppressionRule.objects.create(
+            name='Auto Close Scheduled Backup',
+            rule_id='9999',
+            action='AUTO_CLOSE',
+            is_active=True,
+        )
+        data_close = {
+            'alert_name': 'Backup Script Execution',
+            'severity': 'Low',
+            'rule_id': '9999',
+            'source': self.source,
+            'alert_time': timezone.now(),
+        }
+        res_alert2, created2 = ingest_or_aggregate_alert(data_close)
+        self.assertIsNotNone(res_alert2)
+        self.assertTrue(created2)
+        self.assertEqual(res_alert2.status, 'Closed')
+        self.assertEqual(res_alert2.verdict, 'False Positive')
+        self.assertIn('Auto-suppressed by rule', res_alert2.closure_reason)
+        close_rule.refresh_from_db()
+        self.assertEqual(close_rule.match_count, 1)
+
+
 

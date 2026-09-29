@@ -213,11 +213,27 @@ def assign_alert(alert, user, assignee=None, request=None):
 def ingest_or_aggregate_alert(data):
     """
     Ingests a new alert or dynamically aggregates into an existing matching alert
-    based on AlertAggregationSetting rules.
-    Returns: (alert, created: bool)
+    based on AlertAggregationSetting rules and AlertSuppressionRule exceptions.
+    Returns: (alert or None, created: bool)
     """
     from datetime import timedelta
-    from settings_manager.models import AlertAggregationSetting
+    from settings_manager.models import AlertAggregationSetting, AlertSuppressionRule
+
+    # 1. Evaluate Alert Suppression Rules (False Positive / Noise Reduction)
+    active_suppression_rules = AlertSuppressionRule.objects.filter(is_active=True)
+    for srule in active_suppression_rules:
+        if srule.matches(data):
+            srule.match_count += 1
+            srule.save(update_fields=['match_count'])
+            if srule.action == 'DROP':
+                return None, False
+            elif srule.action == 'AUTO_CLOSE':
+                data['status'] = 'Closed'
+                data['verdict'] = 'False Positive'
+                data['closure_reason'] = f'Auto-suppressed by rule: {srule.name}'
+                if srule.reason:
+                    data['root_cause_summary'] = f'Suppression justification: {srule.reason}'
+            break
 
     agg_setting = AlertAggregationSetting.load()
     rule_id = str(data.get('rule_id', ''))

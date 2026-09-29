@@ -311,9 +311,10 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
         ).values_list('wazuh_alert_id', flat=True))
 
         from datetime import timedelta
-        from settings_manager.models import AlertAggregationSetting
+        from settings_manager.models import AlertAggregationSetting, AlertSuppressionRule
         agg_setting = AlertAggregationSetting.load()
         cutoff = timezone.now() - timedelta(minutes=agg_setting.window_minutes) if agg_setting.is_enabled else None
+        active_suppression_rules = list(AlertSuppressionRule.objects.filter(is_active=True))
 
         batch = []
         batch_keys = {}
@@ -324,6 +325,25 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
             try:
                 data = normalize_es_alert(alert_raw, i)
                 data['source'] = source
+
+                # Evaluate suppression
+                matched_srule = None
+                for srule in active_suppression_rules:
+                    if srule.matches(data):
+                        matched_srule = srule
+                        srule.match_count += 1
+                        srule.save(update_fields=['match_count'])
+                        break
+
+                if matched_srule:
+                    if matched_srule.action == 'DROP':
+                        continue
+                    elif matched_srule.action == 'AUTO_CLOSE':
+                        data['status'] = 'Closed'
+                        data['verdict'] = 'False Positive'
+                        data['closure_reason'] = f'Auto-suppressed by rule: {matched_srule.name}'
+                        if matched_srule.reason:
+                            data['root_cause_summary'] = f'Suppression justification: {matched_srule.reason}'
 
                 agg_key = agg_setting.generate_aggregation_key(
                     rule_id=str(data.get('rule_id', '')),

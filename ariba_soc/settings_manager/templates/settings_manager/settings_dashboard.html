@@ -65,6 +65,14 @@
                 </div>
             </a>
         </div>
+        <div class="col-6 col-md-3">
+            <a href="{% url 'settings:suppression_rules' %}" class="text-decoration-none">
+                <div class="settings-stat-card border-warning">
+                    <div class="settings-stat-value text-warning">{{ suppression_count }}</div>
+                    <div class="settings-stat-label"><i class="bi bi-funnel text-warning"></i> Suppression Rules</div>
+                </div>
+            </a>
+        </div>
     </div>
 
     <div class="ariba-card p-3">

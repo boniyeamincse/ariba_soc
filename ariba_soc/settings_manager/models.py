@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 from django.core.validators import MinValueValidator, FileExtensionValidator
 from config.fields import EncryptedCharField
 from accounts.models import ROLE_CHOICES
@@ -459,5 +460,82 @@ class AlertAggregationSetting(models.Model):
             return ''
         raw = '|'.join(parts)
         return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+
+
+class AlertSuppressionRule(models.Model):
+    ACTION_CHOICES = [
+        ('AUTO_CLOSE', 'Auto-Close as False Positive'),
+        ('DROP', 'Drop (Do not ingest alert)'),
+    ]
+
+    name = models.CharField(max_length=200, help_text="Rule name / description")
+    rule_id = models.CharField(max_length=50, blank=True, help_text="Rule ID to suppress (e.g. 5710, or blank for any)")
+    source_ip = models.CharField(max_length=100, blank=True, help_text="Source IP to match (blank for any)")
+    destination_ip = models.CharField(max_length=100, blank=True, help_text="Destination IP to match (blank for any)")
+    hostname = models.CharField(max_length=255, blank=True, help_text="Hostname or keyword to match (blank for any)")
+    agent_id = models.CharField(max_length=50, blank=True, help_text="Agent ID to match (blank for any)")
+    username = models.CharField(max_length=150, blank=True, help_text="Username to match (blank for any)")
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES, default='AUTO_CLOSE', help_text="Action to take when alert matches")
+    reason = models.TextField(blank=True, help_text="Business justification / False positive rationale / Change ticket")
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='suppression_rules')
+    expires_at = models.DateTimeField(null=True, blank=True, help_text="Optional expiration date/time (e.g. for maintenance windows)")
+    is_active = models.BooleanField(default=True, help_text="Enable or disable this suppression rule")
+    match_count = models.PositiveIntegerField(default=0, help_text="Number of alerts suppressed by this rule")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Alert Suppression Rule'
+        verbose_name_plural = 'Alert Suppression Rules'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.get_action_display()})"
+
+    @property
+    def is_expired(self):
+        if self.expires_at and timezone.now() > self.expires_at:
+            return True
+        return False
+
+    def matches(self, alert_data):
+        if not self.is_active or self.is_expired:
+            return False
+
+        has_criteria = False
+
+        if self.rule_id:
+            has_criteria = True
+            if str(alert_data.get('rule_id') or '') != str(self.rule_id):
+                return False
+
+        if self.source_ip:
+            has_criteria = True
+            if str(alert_data.get('source_ip') or '') != str(self.source_ip):
+                return False
+
+        if self.destination_ip:
+            has_criteria = True
+            if str(alert_data.get('destination_ip') or '') != str(self.destination_ip):
+                return False
+
+        if self.hostname:
+            has_criteria = True
+            host = str(alert_data.get('hostname') or '')
+            if self.hostname.lower() not in host.lower():
+                return False
+
+        if self.agent_id:
+            has_criteria = True
+            if str(alert_data.get('agent_id') or '') != str(self.agent_id):
+                return False
+
+        if self.username:
+            has_criteria = True
+            if str(alert_data.get('username') or '') != str(self.username):
+                return False
+
+        return has_criteria
+
 
 

@@ -52,4 +52,10 @@ urlpatterns = [
     path('ioc-enrichment/<int:pk>/edit/', views.ioc_enrichment_update, name='ioc_enrichment_update'),
     path('aggregation/', views.aggregation_settings, name='aggregation'),
     path('aggregation/toggle/', views.aggregation_toggle, name='aggregation_toggle'),
+    path('suppression/', views.suppression_rules, name='suppression_rules'),
+    path('suppression/create/', views.suppression_rule_create, name='suppression_rule_create'),
+    path('suppression/<int:pk>/edit/', views.suppression_rule_edit, name='suppression_rule_edit'),
+    path('suppression/<int:pk>/toggle/', views.suppression_rule_toggle, name='suppression_rule_toggle'),
+    path('suppression/<int:pk>/delete/', views.suppression_rule_delete, name='suppression_rule_delete'),
 ]
+

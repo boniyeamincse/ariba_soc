@@ -123,4 +123,77 @@ class AlertAggregationSettingTest(TestCase):
         self.assertFalse(setting.is_enabled)
 
 
+class AlertSuppressionRuleTest(TestCase):
+    def test_rule_matches_and_expiration(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from .models import AlertSuppressionRule
+
+        rule = AlertSuppressionRule.objects.create(
+            name='Mute scanner',
+            rule_id='5710',
+            source_ip='192.168.1.100',
+            action='AUTO_CLOSE',
+            is_active=True,
+        )
+
+        # Matches identical alert
+        self.assertTrue(rule.matches({'rule_id': '5710', 'source_ip': '192.168.1.100'}))
+
+        # Does not match different IP
+        self.assertFalse(rule.matches({'rule_id': '5710', 'source_ip': '192.168.1.101'}))
+
+        # Does not match if inactive
+        rule.is_active = False
+        rule.save()
+        self.assertFalse(rule.matches({'rule_id': '5710', 'source_ip': '192.168.1.100'}))
+
+        # Does not match if expired
+        rule.is_active = True
+        rule.expires_at = timezone.now() - timedelta(minutes=5)
+        rule.save()
+        self.assertTrue(rule.is_expired)
+        self.assertFalse(rule.matches({'rule_id': '5710', 'source_ip': '192.168.1.100'}))
+
+    def test_suppression_views_crud_and_toggle(self):
+        from django.contrib.auth.models import User
+        from django.urls import reverse
+        from .models import AlertSuppressionRule
+
+        user = User.objects.create_superuser('soclead', 'lead@example.com', 'password')
+        self.client.force_login(user)
+
+        # List
+        resp = self.client.get(reverse('settings:suppression_rules'))
+        self.assertEqual(resp.status_code, 200)
+
+        # Create
+        create_resp = self.client.post(reverse('settings:suppression_rules'), {
+            'name': 'Suppress Test Rule',
+            'action': 'AUTO_CLOSE',
+            'rule_id': '100045',
+            'source_ip': '10.10.10.10',
+            'reason': 'Authorized scan',
+            'is_active': 'on',
+        })
+        self.assertEqual(create_resp.status_code, 302)
+        rule = AlertSuppressionRule.objects.get(name='Suppress Test Rule')
+        self.assertEqual(rule.rule_id, '100045')
+        self.assertEqual(rule.created_by, user)
+
+        # Toggle via AJAX
+        toggle_resp = self.client.post(
+            reverse('settings:suppression_rule_toggle', args=[rule.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(toggle_resp.status_code, 200)
+        self.assertFalse(toggle_resp.json()['is_active'])
+
+        # Delete
+        del_resp = self.client.post(reverse('settings:suppression_rule_delete', args=[rule.id]))
+        self.assertEqual(del_resp.status_code, 302)
+        self.assertFalse(AlertSuppressionRule.objects.filter(id=rule.id).exists())
+
+
+
 
