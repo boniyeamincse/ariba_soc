@@ -869,9 +869,22 @@ def _write_pdf_xhtml(base, report, since, now, headers, rows, generated_by=None)
         highest = max(sevs, key=lambda s: sev_order.get(s, -1)) if sevs else 'None'
         a['highest'] = highest
 
-    mitre_tactics = qs.exclude(rule_description='').values('rule_description').annotate(count=Count('id')).order_by('-count')[:5]
+    mitre_tactics = qs.exclude(mitre_tactic='').values('mitre_tactic').annotate(count=Count('id')).order_by('-count')[:5]
     for t in mitre_tactics:
-        t['tactic'] = t['rule_description'][:30] # approximation since mitre field missing
+        t['tactic'] = t['mitre_tactic']
+
+    # Compliance mappings
+    pci_count = qs.exclude(compliance_pci='').count()
+    gdpr_count = qs.exclude(compliance_gdpr='').count()
+    hipaa_count = qs.exclude(compliance_hipaa='').count()
+    nist_count = qs.exclude(compliance_nist='').count()
+    
+    compliance = {
+        'pci': pci_count,
+        'gdpr': gdpr_count,
+        'hipaa': hipaa_count,
+        'nist': nist_count
+    }
 
     recent_critical = qs.filter(severity__in=['Critical', 'High']).order_by('-alert_time')[:10]
 
@@ -887,6 +900,7 @@ def _write_pdf_xhtml(base, report, since, now, headers, rows, generated_by=None)
         'low_alerts': low,
         'top_assets': top_assets,
         'mitre_tactics': mitre_tactics,
+        'compliance': compliance,
         'recent_critical': recent_critical,
     }
     

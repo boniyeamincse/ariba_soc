@@ -76,7 +76,7 @@ def wazuh_status(request):
         'agents': agents,
         'agents_error': agents_error,
         'can_edit_wazuh_config': request.user.analyst_profile.role in CONFIG_EDIT_ROLES,
-    }))
+    })
 
 
 @login_required

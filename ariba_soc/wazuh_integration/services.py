@@ -49,265 +49,21 @@ class ManagerClient:
     def get_headers(self):
         if not self.token:
             self.authenticate()
-        return {
-            'Authorization': f'Bearer {self.token}',
-            'Content-Type': 'application/json',
-        }
-
-    def _request(self, method, url, **kwargs):
-        for attempt in range(2):
-            if not self.token:
-                self.authenticate()
-            kwargs['headers'] = kwargs.get('headers', {})
-            kwargs['headers'].update(self.get_headers())
-            response = self.session.request(method, url, **kwargs)
-            if response.status_code == 401 and attempt == 0:
-                self.token = None
-                continue
-            response.raise_for_status()
-            return response
-
-    def fetch_agents(self):
-        try:
-            response = self._request('GET', f'{self.base_url}/agents', params={'limit': 500, 'sort': '-id'}, timeout=self.timeout)
-            return response.json()
-        except Exception as e:
-            logger.error(f'Failed to fetch agents: {e}')
-            return {'data': {'items': []}}
-
-    def get_manager_status(self):
-        try:
-            response = self._request('GET', f'{self.base_url}/manager/status', timeout=self.timeout)
-            return response.json()
-        except Exception as e:
-            logger.error(f'Failed to get manager status: {e}')
-            return {'error': str(e)}
-
-    def execute_active_response(self, command, agent_id, arguments=None, custom=False):
-        """
-        Executes an Active Response command on the specified agent via Wazuh API.
-        Args:
-            command (str): Command name (e.g. 'firewall-drop', 'host-deny', 'disable-account', 'restart-wazuh')
-            agent_id (str): Wazuh Agent ID (e.g. '001' or 'all')
-            arguments (list): List of command arguments, e.g. ['-', '192.168.1.50']
-            custom (bool): True if using a custom command
-        Returns:
-            dict: {'success': bool, 'message': str, 'raw': dict}
-        """
-        if arguments is None:
-            arguments = []
-
-        payload = {
-            'command': command,
-            'custom': custom,
-            'arguments': arguments,
-        }
-
-        params = {}
-        if agent_id and agent_id != 'all':
-            params['agents_list'] = str(agent_id)
-
-        try:
-            response = self.session.put(
-                f'{self.base_url}/active-response',
-                headers=self.get_headers(),
-                params=params,
-                json=payload,
-                timeout=self.timeout
-            )
-            data = response.json() if response.status_code in [200, 400] else {}
-
-            error_code = data.get('error', 0)
-            affected = data.get('data', {}).get('total_affected_items', 0)
-            failed_items = data.get('data', {}).get('failed_items', [])
-
-            if response.status_code == 200 and error_code == 0 and affected > 0:
-                return {
-                    'success': True,
-                    'message': data.get('message', f'Active Response {command} sent successfully to agent {agent_id}.'),
-                    'raw': data
-                }
-            elif response.status_code == 200 and failed_items:
-                err_detail = failed_items[0].get('error', {}).get('message', data.get('message', 'Failed to execute command on agent.'))
-                return {
-                    'success': False,
-                    'message': f"Wazuh Agent Error: {err_detail}",
-                    'raw': data
-                }
-            else:
-                err_detail = data.get('detail') or data.get('message') or response.text
-                return {
-                    'success': False,
-                    'message': f"Failed to execute Active Response: {err_detail}",
-                    'raw': data
-                }
-        except Exception as e:
-            logger.error(f"Active Response API call failed: {e}")
-            return {
-                'success': False,
-                'message': f"Active response execution error: {str(e)}",
-                'raw': {'error': str(e)}
-            }
-
-
-
-class IndexerClient:
-    def __init__(self, config=None):
-        if config is None:
-            config = WazuhConfiguration.objects.first()
-            if config is None:
-                raise ValueError('No WazuhConfiguration found')
-        self.base_url = config.api_url.rstrip('/')
-        self.username = config.api_username
-        self.password = config.api_password
-        self.index_pattern = config.es_index_pattern or 'wazuh-alerts-*'
-        self.verify_ssl = config.verify_ssl
-        self.timeout = config.timeout
-        self.session = requests.Session()
-        self.session.verify = self.verify_ssl
-        self.session.auth = (self.username, self.password)
-        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20)
-        self.session.mount('https://', adapter)
-
-    def test_connection(self):
-        try:
-            response = self.session.get(
-                f'{self.base_url}/_cluster/health',
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            logger.error(f'Indexer connection test failed: {e}')
-            raise
-
-    def search(self, index_pattern, query_body):
-        try:
-            response = self.session.post(
-                f'{self.base_url}/{index_pattern}/_search',
-                json=query_body,
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            logger.error(f'Indexer search failed: {e}')
-            raise
-
-    def fetch_alerts(self, time_range='1h', max_alerts=5000):
-        try:
-            match = re.fullmatch(r'(\d+)([mhdw])', time_range)
-            if match:
-                amount, unit = int(match.group(1)), match.group(2)
-                delta = {
-                    'm': timedelta(minutes=amount),
-                    'h': timedelta(hours=amount),
-                    'd': timedelta(days=amount),
-                    'w': timedelta(weeks=amount),
-                }[unit]
-                since = (timezone.now() - delta).isoformat()
-            else:
-                since = time_range
-
-            body = {
-                'size': min(max_alerts, 5000),
-                'sort': [{'timestamp': {'order': 'desc'}}],
-                'query': {
-                    'range': {
-                        'timestamp': {'gte': since}
-                    }
-                }
-            }
-            response = self.session.post(
-                f'{self.base_url}/{self.index_pattern}/_search',
-                json=body,
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
-            data = response.json()
-            hits = data.get('hits', {}).get('hits', [])
-            items = [h['_source'] for h in hits]
-            return {'data': {'items': items}}
-        except Exception as e:
-            logger.error(f'Failed to fetch alerts from indexer: {e}')
-            raise
-
-
-def normalize_alert(wazuh_alert):
-    data = wazuh_alert.get('data', wazuh_alert)
-    rule = data.get('rule', {})
-    agent = data.get('agent', {})
-    location = data.get('location', '')
-
-    mitre = {}
-    for group in rule.get('groups', []):
-        if group.startswith('mitre_'):
-            parts = group.split('_', 2)
-            if len(parts) >= 3:
-                mitre[parts[1]] = parts[2]
-
-    alert_data = {
-        'wazuh_alert_id': str(wazuh_alert.get('id', '')),
-        'alert_time': datetime.fromtimestamp(wazuh_alert.get('timestamp', 0)) if isinstance(wazuh_alert.get('timestamp'), (int, float)) else timezone.now(),
-        'event_time': None,
-        'alert_name': rule.get('description', 'Unknown Alert'),
-        'description': rule.get('description', ''),
-        'rule_description': rule.get('description', ''),
-        'severity': map_level_to_severity(rule.get('level', 0)),
-        'severity_score': rule.get('level', 0),
-        'rule_id': str(rule.get('id', '')),
-        'rule_level': rule.get('level', 0),
-        'agent_id': str(agent.get('id', '')),
-        'agent_name': agent.get('name', ''),
-        'agent_ip': agent.get('ip', ''),
-        'hostname': agent.get('name', '') or data.get('system_name', ''),
-        'source_ip': data.get('srcip', '') or data.get('SrcIp', ''),
-        'destination_ip': data.get('dstip', '') or data.get('DstIp', ''),
-        'username': data.get('user', '') or data.get('dstuser', '') or data.get('srcuser', ''),
-        'process_name': data.get('process', {}).get('name', '') if isinstance(data.get('process'), dict) else '',
-        'process_user': '',
-        'command_line': '',
-        'target_file': '',
-        'file_path': '',
-        'file_hash_md5': '',
-        'file_hash_sha1': '',
-        'file_hash_sha256': '',
-        'url': '',
-        'mitre_id': mitre.get('id', ''),
-        'mitre_tactic': mitre.get('tactic', ''),
-        'mitre_technique': mitre.get('technique', ''),
-        'full_log': data.get('full_log', ''),
-        'location': location,
-        'decoder_name': data.get('decoder', {}).get('name', '') if isinstance(data.get('decoder'), dict) else '',
-        'alert_fields': data,
-        'raw_json': wazuh_alert,
-        'source_name': 'Wazuh',
-    }
-    return alert_data
-
-
-def normalize_es_alert(doc, idx=0):
-    timestamp = doc.get('timestamp') or doc.get('@timestamp') or timezone.now()
-    rule = doc.get('rule', {})
-    agent = doc.get('agent', {})
-
-    if isinstance(timestamp, str):
-        try:
-            timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-        except (ValueError, TypeError):
-            timestamp = timezone.now()
-
-    mitre_ids = []
-    if rule.get('mitre', {}).get('id'):
-        mitre_ids = rule['mitre']['id']
-    elif doc.get('input', {}).get('mitre', {}).get('id'):
-        mitre_ids = doc['input']['mitre']['id']
+    
+    mitre_ids = rule.get('mitre', {}).get('id', [])
+    mitre_tactics = rule.get('mitre', {}).get('tactic', [])
+    mitre_techniques = rule.get('mitre', {}).get('technique', [])
+    
+    pci = rule.get('pci_dss', [])
+    gdpr = rule.get('gdpr', [])
+    hipaa = rule.get('hipaa', [])
+    nist = rule.get('nist_800_53', [])
 
     return {
-        'wazuh_alert_id': doc.get('id') or doc.get('_id') or str(idx),
-        'alert_time': timestamp,
-        'event_time': doc.get('system_time') or doc.get('timestamp'),
-        'alert_name': rule.get('description') or doc.get('rule', {}).get('description') or 'Unknown Alert',
+        'wazuh_alert_id': doc.get('id', '') or str(index),
+        'alert_time': timezone.now(),
+        'event_time': None,
+        'alert_name': rule.get('description', 'Unknown Alert'),
         'description': rule.get('description', ''),
         'rule_description': rule.get('description', ''),
         'severity': map_level_to_severity(rule.get('level', 0)),
@@ -331,8 +87,12 @@ def normalize_es_alert(doc, idx=0):
         'file_hash_sha256': '',
         'url': '',
         'mitre_id': ', '.join(mitre_ids) if isinstance(mitre_ids, list) else str(mitre_ids),
-        'mitre_tactic': '',
-        'mitre_technique': '',
+        'mitre_tactic': ', '.join(mitre_tactics) if isinstance(mitre_tactics, list) else str(mitre_tactics),
+        'mitre_technique': ', '.join(mitre_techniques) if isinstance(mitre_techniques, list) else str(mitre_techniques),
+        'compliance_pci': ', '.join(pci) if isinstance(pci, list) else str(pci),
+        'compliance_gdpr': ', '.join(gdpr) if isinstance(gdpr, list) else str(gdpr),
+        'compliance_hipaa': ', '.join(hipaa) if isinstance(hipaa, list) else str(hipaa),
+        'compliance_nist': ', '.join(nist) if isinstance(nist, list) else str(nist),
         'full_log': doc.get('full_log', ''),
         'location': doc.get('location', ''),
         'decoder_name': doc.get('decoder', {}).get('name', '') if isinstance(doc.get('decoder'), dict) else '',
@@ -340,7 +100,6 @@ def normalize_es_alert(doc, idx=0):
         'raw_json': doc,
         'source_name': doc.get('agent', {}).get('name', '') or doc.get('data', {}).get('source_name', '') or 'Wazuh',
     }
-
 
 def map_level_to_severity(level):
     if level >= 12:

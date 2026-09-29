@@ -89,7 +89,7 @@
         </tr>
         {% for tactic in mitre_tactics %}
         <tr>
-            <td>{{ tactic.tactic }}</td>
+            <td>{{ tactic.tactic|default:"Unclassified Tactic" }}</td>
             <td class="text-center">{{ tactic.count }}</td>
         </tr>
         {% empty %}
@@ -97,9 +97,34 @@
         {% endfor %}
     </table>
 
+    <h2>4. Regulatory Compliance Violations</h2>
+    <p>Alerts mapping to standard regulatory frameworks.</p>
+    <table>
+        <tr>
+            <th>Framework</th>
+            <th>Violation Count</th>
+        </tr>
+        <tr>
+            <td><strong>PCI-DSS</strong> (Payment Card Industry)</td>
+            <td class="text-center">{{ compliance.pci }}</td>
+        </tr>
+        <tr>
+            <td><strong>HIPAA</strong> (Healthcare Privacy)</td>
+            <td class="text-center">{{ compliance.hipaa }}</td>
+        </tr>
+        <tr>
+            <td><strong>GDPR</strong> (EU Data Protection)</td>
+            <td class="text-center">{{ compliance.gdpr }}</td>
+        </tr>
+        <tr>
+            <td><strong>NIST 800-53</strong> (Federal Security Controls)</td>
+            <td class="text-center">{{ compliance.nist }}</td>
+        </tr>
+    </table>
+
     <div style="page-break-before: always;"></div>
 
-    <h2>4. Recent Critical Incidents</h2>
+    <h2>5. Recent Critical Incidents</h2>
     <table>
         <tr>
             <th>Time</th>
