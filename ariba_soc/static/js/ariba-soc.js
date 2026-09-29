@@ -178,6 +178,89 @@ document.addEventListener('DOMContentLoaded', function() {
         if (parts.length === 2) return parts.pop().split(';').shift();
     }
 
+    // Global alarm polling and audio playback
+    var alarmBanner = document.getElementById('globalAlarmBanner');
+    var alarmAudio = document.getElementById('globalAlarmAudio');
+    var alarmStopBtn = document.getElementById('globalAlarmStopBtn');
+    var alarmStateUrl = alarmBanner ? alarmBanner.getAttribute('data-state-url') : '';
+    var alarmStopUrl = alarmBanner ? alarmBanner.getAttribute('data-stop-url') : '';
+    var alarmSoundUrl = alarmBanner ? alarmBanner.getAttribute('data-sound-url') : '';
+    var alarmPollingTimer = null;
+    var alarmWasActive = false;
+
+    function applyAlarmState(state) {
+        if (!alarmBanner) return;
+        var active = !!(state && state.active && state.enabled);
+        var soundUrl = state && state.sound_url ? state.sound_url : alarmSoundUrl;
+        var message = state && state.active_message ? state.active_message : 'A monitored alert triggered the alarm state.';
+
+        alarmBanner.classList.toggle('show', active);
+        document.body.classList.toggle('alarm-active', active);
+
+        var alarmMessage = document.getElementById('globalAlarmMessage');
+        if (alarmMessage) {
+            alarmMessage.textContent = message;
+        }
+
+        if (alarmAudio) {
+            if (soundUrl && alarmAudio.getAttribute('src') !== soundUrl) {
+                alarmAudio.setAttribute('src', soundUrl);
+                alarmAudio.load();
+            }
+            if (active) {
+                if (!alarmWasActive) {
+                    alarmAudio.currentTime = 0;
+                    alarmAudio.play().catch(function() {});
+                } else if (alarmAudio.paused) {
+                    alarmAudio.play().catch(function() {});
+                }
+            } else {
+                alarmAudio.pause();
+                alarmAudio.currentTime = 0;
+            }
+        }
+
+        alarmWasActive = active;
+    }
+
+    function refreshAlarmState() {
+        if (!alarmStateUrl) return;
+        fetch(alarmStateUrl, {
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json'
+            }
+        })
+        .then(function(response) { return response.ok ? response.json() : null; })
+        .then(function(data) {
+            if (data) applyAlarmState(data);
+        })
+        .catch(function() {});
+    }
+
+    if (alarmBanner && alarmStateUrl) {
+        refreshAlarmState();
+        alarmPollingTimer = setInterval(refreshAlarmState, 3000);
+    }
+
+    if (alarmStopBtn && alarmStopUrl) {
+        alarmStopBtn.addEventListener('click', function() {
+            fetch(alarmStopUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(function(response) { return response.ok ? response.json() : null; })
+            .then(function(data) {
+                if (data) applyAlarmState(data);
+            })
+            .catch(function() {});
+        });
+    }
+
     // Filter form auto-submit
     document.querySelectorAll('.filter-auto-submit').forEach(function(el) {
         el.addEventListener('change', function() {

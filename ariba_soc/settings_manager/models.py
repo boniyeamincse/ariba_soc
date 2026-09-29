@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, FileExtensionValidator
 from config.fields import EncryptedCharField
 from accounts.models import ROLE_CHOICES
 
@@ -242,6 +242,114 @@ class AuditLogSetting(models.Model):
     def __str__(self):
         return self.action_type
 
+class AlarmSetting(models.Model):
+    SEVERITY_CHOICES = [
+        ('Low', 'Low'),
+        ('Medium', 'Medium'),
+        ('High', 'High'),
+        ('Critical', 'Critical'),
+    ]
+
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, unique=True)
+    is_enabled = models.BooleanField(default=True)
+    description = models.CharField(max_length=255, blank=True)
+    sort_order = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Alarm Setting'
+        verbose_name_plural = 'Alarm Settings'
+        ordering = ['sort_order', 'severity']
+
+    def __str__(self):
+        return f"Alarm for {self.severity}"
+
+    @classmethod
+    def system_enabled(cls):
+        return AlarmSystemSetting.load().is_enabled
+
+    @classmethod
+    def severity_enabled(cls, severity):
+        if not cls.system_enabled():
+            return False
+        try:
+            return cls.objects.get(severity=severity).is_enabled
+        except cls.DoesNotExist:
+            return False
+
+class AlarmSystemSetting(models.Model):
+    is_enabled = models.BooleanField(default=True)
+    sound_file = models.FileField(
+        upload_to='alarm_sounds/',
+        blank=True,
+        null=True,
+        validators=[FileExtensionValidator(['mp3'])],
+    )
+    is_active = models.BooleanField(default=False)
+    active_alert_id = models.IntegerField(null=True, blank=True)
+    active_alert_name = models.CharField(max_length=500, blank=True)
+    active_severity = models.CharField(max_length=20, blank=True)
+    active_message = models.CharField(max_length=255, blank=True)
+    triggered_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Alarm System Setting'
+        verbose_name_plural = 'Alarm System Setting'
+
+    def __str__(self):
+        return 'Alarm System Control'
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    @classmethod
+    def get_sound_url(cls):
+        obj = cls.load()
+        return obj.sound_file.url if obj.sound_file else ''
+
+    @classmethod
+    def activate_for_alert(cls, alert, message=''):
+        from django.utils import timezone
+
+        obj = cls.load()
+        if not obj.is_enabled:
+            return obj
+        obj.is_active = True
+        obj.active_alert_id = alert.id
+        obj.active_alert_name = alert.alert_name
+        obj.active_severity = alert.severity
+        obj.active_message = message or f'Alarm triggered for {alert.alert_name}'
+        obj.triggered_at = timezone.now()
+        obj.acknowledged_at = None
+        obj.save(update_fields=[
+            'is_active', 'active_alert_id', 'active_alert_name', 'active_severity',
+            'active_message', 'triggered_at', 'acknowledged_at', 'updated_at'
+        ])
+        return obj
+
+    @classmethod
+    def stop_alarm(cls):
+        from django.utils import timezone
+
+        obj = cls.load()
+        obj.is_active = False
+        obj.active_alert_id = None
+        obj.active_alert_name = ''
+        obj.active_severity = ''
+        obj.active_message = ''
+        obj.acknowledged_at = timezone.now()
+        obj.save(update_fields=[
+            'is_active', 'active_alert_id', 'active_alert_name', 'active_severity',
+            'active_message', 'acknowledged_at', 'updated_at'
+        ])
+        return obj
+
 class SystemSetting(models.Model):
     key = models.CharField(max_length=100, unique=True)
     value = models.TextField(blank=True)
@@ -261,6 +369,14 @@ class SystemSetting(models.Model):
             return SystemSetting.objects.get(key=key).value
         except SystemSetting.DoesNotExist:
             return default
+
+    @staticmethod
+    def set_setting(key, value, description=''):
+        defaults = {'value': str(value)}
+        if description:
+            defaults['description'] = description
+        obj, _ = SystemSetting.objects.update_or_create(key=key, defaults=defaults)
+        return obj
 
 class IOCEnrichmentSetting(models.Model):
     PROVIDER_CHOICES = [

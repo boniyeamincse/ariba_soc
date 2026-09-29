@@ -328,10 +328,12 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
 
             # Evaluate escalation rules against each, and enrich.
             from alerts.signals import evaluate_auto_escalation
+            from alerts.services import emit_alarm_notification
             from .enrichment_service import EnrichmentService
             new_ids = [a.wazuh_alert_id for a in batch]
             for alert in Alert.objects.filter(wazuh_alert_id__in=new_ids, status='New'):
                 evaluate_auto_escalation(alert)
+                emit_alarm_notification(alert)
                 if EnrichmentService.enrich_alert(alert):
                     alert.save(update_fields=['enrichment_data'])
 

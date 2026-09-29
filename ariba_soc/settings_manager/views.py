@@ -3,12 +3,13 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.contrib.auth.models import User
+from django.http import JsonResponse
 from django.db.models import Q
 from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES, SETTINGS_ALLOWED_ROLES as _FALLBACK_SETTINGS_ROLES
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
-    DashboardSetting, AuditLogSetting, SystemSetting, SettingAuditLog,
+    DashboardSetting, AuditLogSetting, AlarmSetting, AlarmSystemSetting, SystemSetting, SettingAuditLog,
     IOCEnrichmentSetting
 )
 from .forms import (
@@ -16,7 +17,7 @@ from .forms import (
     AlertSourceSettingsForm, SeveritySettingsForm, StatusSettingsForm,
     VerdictSettingsForm, SLASettingsForm, EscalationRuleForm,
     NotificationSettingForm, ReportSettingForm, DashboardSettingForm,
-    AuditLogSettingForm, SystemSettingForm, ResetPasswordForm,
+    AuditLogSettingForm, AlarmSettingForm, AlarmSystemSettingForm, SystemSettingForm, ResetPasswordForm,
     IOCEnrichmentSettingForm
 )
 
@@ -53,6 +54,8 @@ def settings_dashboard(request):
         'verdict_count': VerdictSettings.objects.count(),
         'sla_count': SLASettings.objects.count(),
         'escalation_count': EscalationRule.objects.filter(is_active=True).count(),
+        'alarm_count': AlarmSetting.objects.count(),
+        'alarm_enabled_count': AlarmSetting.objects.filter(is_enabled=True).count(),
         'recent_logs': SettingAuditLog.objects.select_related('user').all()[:10],
     }
     return render(request, 'settings_manager/settings_dashboard.html', ctx)
@@ -690,6 +693,107 @@ def system_edit(request, pk):
         form = SystemSettingForm(instance=obj)
     ctx = {'section': 'system', 'form': form, 'object': obj}
     return render(request, 'settings_manager/system_edit.html', ctx)
+
+def alarm_settings(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    alarms = AlarmSetting.objects.all()
+    alarm_system = AlarmSystemSetting.load()
+    if request.method == 'POST':
+        form = AlarmSystemSettingForm(request.POST, request.FILES, instance=alarm_system)
+        if form.is_valid():
+            form.save()
+            _log_setting_change(
+                request.user,
+                'Updated alarm system configuration',
+                'AlarmSystemSetting',
+                alarm_system.id if alarm_system.id else 1,
+                '',
+                'Updated',
+                request,
+            )
+            messages.success(request, 'Alarm system configuration saved.')
+            return redirect('settings:alarms')
+    else:
+        form = AlarmSystemSettingForm(instance=alarm_system)
+    ctx = {
+        'section': 'alarms',
+        'alarms': alarms,
+        'alarm_master_enabled': AlarmSetting.system_enabled(),
+        'alarm_system_form': form,
+        'alarm_system': alarm_system,
+    }
+    return render(request, 'settings_manager/alarm_settings.html', ctx)
+
+@require_POST
+def alarm_master_toggle(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    alarm_system = AlarmSystemSetting.load()
+    alarm_system.is_enabled = not alarm_system.is_enabled
+    alarm_system.save(update_fields=['is_enabled', 'updated_at'])
+    _log_setting_change(
+        request.user,
+        f'{"Enabled" if alarm_system.is_enabled else "Disabled"} alarm system',
+        'AlarmSystemSetting',
+        alarm_system.id,
+        '',
+        f'Enabled={alarm_system.is_enabled}',
+        request,
+    )
+    messages.success(request, f'Alarm system {"enabled" if alarm_system.is_enabled else "disabled"}.')
+    return redirect('settings:alarms')
+
+@require_POST
+def alarm_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    alarm = get_object_or_404(AlarmSetting, id=pk)
+    alarm.is_enabled = not alarm.is_enabled
+    alarm.save()
+    _log_setting_change(
+        request.user,
+        f'{"Enabled" if alarm.is_enabled else "Disabled"} alarm severity {alarm.severity}',
+        'AlarmSetting',
+        alarm.id,
+        '',
+        f'Enabled={alarm.is_enabled}',
+        request,
+    )
+    messages.success(request, f'{alarm.severity} alarm {"enabled" if alarm.is_enabled else "disabled"}.')
+    return redirect('settings:alarms')
+
+@login_required
+@require_POST
+def alarm_stop(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'auth_required'}, status=403)
+    alarm_system = AlarmSystemSetting.stop_alarm()
+    return JsonResponse({
+        'success': True,
+        'active': alarm_system.is_active,
+        'enabled': alarm_system.is_enabled,
+    })
+
+@login_required
+def alarm_state(request):
+    alarm_system = AlarmSystemSetting.load()
+    data = {
+        'success': True,
+        'enabled': alarm_system.is_enabled,
+        'active': alarm_system.is_active and alarm_system.is_enabled,
+        'active_alert_id': alarm_system.active_alert_id,
+        'active_alert_name': alarm_system.active_alert_name,
+        'active_severity': alarm_system.active_severity,
+        'active_message': alarm_system.active_message,
+        'sound_url': alarm_system.sound_file.url if alarm_system.sound_file else '',
+        'triggered_at': alarm_system.triggered_at.isoformat() if alarm_system.triggered_at else '',
+        'acknowledged_at': alarm_system.acknowledged_at.isoformat() if alarm_system.acknowledged_at else '',
+    }
+    return JsonResponse(data)
 
 @login_required
 def ioc_enrichment_list(request):

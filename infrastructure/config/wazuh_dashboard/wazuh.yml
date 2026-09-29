@@ -1,7 +1,14 @@
 hosts:
-  - 1513629884013:
+  - default:
       url: "https://wazuh.manager"
       port: 55000
       username: wazuh-wui
       password: "WazuhApi@12345"
+      run_as: true
+hosts:
+  - 1513629884013:
+      url: https://wazuh.manager:55000
+      port: 55000
+      username: wazuh-wui
+      password: WazuhApi@12345
       run_as: false

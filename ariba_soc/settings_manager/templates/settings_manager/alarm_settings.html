@@ -1,0 +1,111 @@
+{% extends 'settings_manager/settings_base.html' %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0"><i class="bi bi-bell-fill"></i> Alarm Settings</h4>
+            <p class="settings-page-desc mb-0">Upload an MP3 alarm tone, turn the alarm system on or off, and control which severities generate dashboard alarms.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <form method="post" action="{% url 'settings:alarm_master_toggle' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm {% if alarm_master_enabled %}btn-success{% else %}btn-outline-secondary{% endif %}">
+                    {% if alarm_master_enabled %}
+                    <i class="bi bi-toggle-on"></i> Alarm System On
+                    {% else %}
+                    <i class="bi bi-toggle-off"></i> Alarm System Off
+                    {% endif %}
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="ariba-card p-3 mb-3">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-lg-4">
+                    <label class="form-label small">Alarm Tone MP3</label>
+                    {{ alarm_system_form.sound_file }}
+                    {% if alarm_system.sound_file %}
+                    <div class="small text-muted mt-2">Current file: <a href="{{ alarm_system.sound_file.url }}" target="_blank">{{ alarm_system.sound_file.name }}</a></div>
+                    {% else %}
+                    <div class="small text-muted mt-2">Upload an MP3 file to play when alarm is triggered.</div>
+                    {% endif %}
+                </div>
+                <div class="col-12 col-lg-3">
+                    <div class="form-check mt-3">
+                        {{ alarm_system_form.is_enabled }}
+                        <label class="form-check-label">Enable alarm sound and dashboard flash</label>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-5 text-lg-end">
+                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-save"></i> Save Alarm Config</button>
+                </div>
+            </div>
+        </form>
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3">
+            <div>
+                <h6 class="mb-1">Global Alarm Switch</h6>
+                <div class="text-muted small">When disabled, no severity level will raise a dashboard alarm.</div>
+            </div>
+            <span class="badge {% if alarm_master_enabled %}bg-success{% else %}bg-danger{% endif %}">
+                {% if alarm_master_enabled %}Enabled{% else %}Disabled{% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="ariba-card p-0">
+        <div class="table-responsive">
+            <table class="table ariba-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Description</th>
+                        <th>Sort</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alarm in alarms %}
+                    <tr>
+                        <td>
+                            <span class="severity-badge severity-{{ alarm.severity|lower }}">{{ alarm.severity }}</span>
+                        </td>
+                        <td>{{ alarm.description|default:'Alarm notification for this severity level.' }}</td>
+                        <td>{{ alarm.sort_order }}</td>
+                        <td>
+                            {% if alarm.is_enabled and alarm_master_enabled %}
+                            <span class="badge bg-success">Active</span>
+                            {% elif alarm.is_enabled %}
+                            <span class="badge bg-warning text-dark">Paused</span>
+                            {% else %}
+                            <span class="badge bg-danger">Disabled</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form method="post" action="{% url 'settings:alarm_toggle' alarm.id %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-ariba-outline btn-sm" title="Toggle severity alarm">
+                                    {% if alarm.is_enabled %}
+                                    <i class="bi bi-toggle-on text-success"></i>
+                                    {% else %}
+                                    <i class="bi bi-toggle-off text-danger"></i>
+                                    {% endif %}
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-muted text-center">No alarm settings found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

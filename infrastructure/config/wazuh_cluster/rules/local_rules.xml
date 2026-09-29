@@ -1,0 +1,39 @@
+<group name="local,common_attack,">
+  <rule id="100100" level="10" frequency="5" timeframe="60">
+    <match>Failed password</match>
+    <same_source_ip />
+    <description>Multiple SSH authentication failures from the same source IP</description>
+    <group>attack,bruteforce,ssh,authentication,</group>
+  </rule>
+
+  <rule id="100101" level="9" frequency="5" timeframe="60">
+    <pcre2>(?i)(failed password|authentication failure|login incorrect|invalid user)</pcre2>
+    <same_source_ip />
+    <description>Repeated authentication failures from the same source IP</description>
+    <group>attack,bruteforce,authentication,</group>
+  </rule>
+
+  <rule id="100110" level="8">
+    <pcre2>(?i)sudo:.*(authentication failure|incorrect password|pam_unix\(sudo:auth\): authentication failure)</pcre2>
+    <description>Suspicious sudo authentication failure</description>
+    <group>attack,privilege_escalation,sudo,</group>
+  </rule>
+
+  <rule id="100120" level="12">
+    <pcre2>(?i)(union\s+select|&lt;script|%3cscript|(\.\./|%2e%2e%2f)|(\b(or|and)\b\s+\d=\d)|(;|&amp;&amp;|\|\|)\s*(bash|sh|curl|wget|nc|powershell|cmd\.exe))</pcre2>
+    <description>Suspicious web payload indicating SQL injection, XSS, path traversal, or command injection</description>
+    <group>attack,web,sqli,xss,path_traversal,command_injection,</group>
+  </rule>
+
+  <rule id="100130" level="11">
+    <pcre2>(?i)(powershell\s+.*(-enc|-encodedcommand)|invoke-expression|\biex\b|mimikatz|lsass|rundll32\s+.*https?://|regsvr32\s+.*https?://|mshta\s+.*https?://|certutil\s+.*-urlcache|bitsadmin\s+.*download)</pcre2>
+    <description>Suspicious command execution or credential-dumping tooling detected</description>
+    <group>attack,execution,credential_access,lolbin,</group>
+  </rule>
+
+  <rule id="100140" level="9">
+    <pcre2>(?i)(schtasks\s+/create|sc\s+create|new-service|register-scheduledtask)</pcre2>
+    <description>Suspicious persistence command detected</description>
+    <group>attack,persistence,scheduled_task,service_creation,</group>
+  </rule>
+</group>

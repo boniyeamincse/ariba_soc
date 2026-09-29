@@ -5,7 +5,7 @@ from accounts.models import AnalystProfile, ROLE_CHOICES, TEAM_CHOICES
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
-    DashboardSetting, AuditLogSetting, SystemSetting, IOCEnrichmentSetting
+    DashboardSetting, AuditLogSetting, AlarmSetting, AlarmSystemSetting, SystemSetting, IOCEnrichmentSetting
 )
 
 class UserManagementForm(UserCreationForm):
@@ -218,6 +218,28 @@ class AuditLogSettingForm(forms.ModelForm):
             f.widget.attrs.update({'class': 'form-control form-control-sm'})
         self.fields['log_enabled'].widget.attrs.update({'class': 'form-check-input'})
         self.fields['is_critical'].widget.attrs.update({'class': 'form-check-input'})
+
+class AlarmSettingForm(forms.ModelForm):
+    class Meta:
+        model = AlarmSetting
+        fields = ['severity', 'is_enabled', 'description', 'sort_order']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for f in self.fields.values():
+            f.widget.attrs.update({'class': 'form-control form-control-sm'})
+        self.fields['is_enabled'].widget.attrs.update({'class': 'form-check-input'})
+        self.fields['severity'].widget.attrs.update({'class': 'form-select form-select-sm'})
+
+class AlarmSystemSettingForm(forms.ModelForm):
+    class Meta:
+        model = AlarmSystemSetting
+        fields = ['is_enabled', 'sound_file']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['is_enabled'].widget.attrs.update({'class': 'form-check-input'})
+        self.fields['sound_file'].widget.attrs.update({'class': 'form-control form-control-sm', 'accept': '.mp3,audio/mpeg'})
 
 class SystemSettingForm(forms.ModelForm):
     class Meta:

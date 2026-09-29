@@ -31,6 +31,12 @@ services:
       - SSL_KEY=/etc/ssl/filebeat.key
       - API_USERNAME=${WAZUH_API_USERNAME}
       - API_PASSWORD=${WAZUH_API_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k -s -u \"${WAZUH_API_USERNAME}:${WAZUH_API_PASSWORD}\" -o /dev/null -w \"%{http_code}\" https://localhost:55000/manager/status | grep -Eq '^(200|401)$'"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
     volumes:
       - wazuh_api_configuration:/var/ossec/api/configuration
       - wazuh_etc:/var/ossec/etc
@@ -47,6 +53,11 @@ services:
       - ./config/wazuh_indexer_ssl_certs/wazuh.manager.pem:/etc/ssl/filebeat.pem
       - ./config/wazuh_indexer_ssl_certs/wazuh.manager-key.pem:/etc/ssl/filebeat.key
       - ./config/wazuh_cluster/wazuh_manager.conf:/wazuh-config-mount/etc/ossec.conf
+      - ./config/wazuh_cluster/rules:/var/ossec/etc/rules:ro
+      - ./config/wazuh_cluster/lists/internal_networks:/var/ossec/etc/lists/internal_networks:ro
+      - ./config/wazuh_cluster/lists/suspicious_ports:/var/ossec/etc/lists/suspicious_ports:ro
+      - ./config/wazuh_cluster/lists/network_iocs:/var/ossec/etc/lists/network_iocs:ro
+      - ./config/wazuh_cluster/lists/restricted_servers:/var/ossec/etc/lists/restricted_servers:ro
     networks:
       - soc_network
 
@@ -58,6 +69,12 @@ services:
       - "9200:9200"
     environment:
       - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k -s -u \"${WAZUH_INDEXER_ADMIN_USERNAME}:${WAZUH_INDEXER_ADMIN_PASSWORD}\" -o /dev/null -w \"%{http_code}\" https://localhost:9200/_cluster/health | grep -Eq '^(200|401)$'"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
     ulimits:
       memlock:
         soft: -1
@@ -98,10 +115,12 @@ services:
       - ./config/wazuh_indexer_ssl_certs/root-ca.pem:/usr/share/wazuh-dashboard/certs/root-ca.pem
       - ./config/wazuh_dashboard/opensearch_dashboards.yml:/usr/share/wazuh-dashboard/config/opensearch_dashboards.yml
       - ./config/wazuh_dashboard/wazuh.yml:/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
-      - wazuh-dashboard-config:/usr/share/wazuh-dashboard/data/wazuh/config
       - wazuh-dashboard-custom:/usr/share/wazuh-dashboard/plugins/wazuh/public/assets/custom
     depends_on:
-      - wazuh.indexer
+      wazuh.indexer:
+        condition: service_healthy
+      wazuh.manager:
+        condition: service_healthy
     links:
       - wazuh.indexer:wazuh.indexer
       - wazuh.manager:wazuh.manager
@@ -217,7 +236,6 @@ volumes:
   filebeat_etc:
   filebeat_var:
   wazuh-indexer-data:
-  wazuh-dashboard-config:
   wazuh-dashboard-custom:
   redis_data:
   static_volume:

@@ -1,9 +1,11 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.utils import timezone
-from .models import Alert, AlertSource, AlertComment, AlertAuditLog
+from .models import Alert, AlertSource, AlertComment, AlertAuditLog, Notification
 from accounts.models import AnalystProfile, RolePermission
+from settings_manager.models import AlarmSetting, AlarmSystemSetting
 from wazuh_integration.services import map_level_to_severity, normalize_alert
+from .services import emit_alarm_notification
 
 
 class AlertModelTest(TestCase):
@@ -79,3 +81,52 @@ class WazuhServicesTest(TestCase):
         self.assertEqual(map_level_to_severity(4), 'Medium')
         self.assertEqual(map_level_to_severity(1), 'Low')
         self.assertEqual(map_level_to_severity(0), 'Informational')
+
+
+class AlarmNotificationTest(TestCase):
+    def setUp(self):
+        self.source = AlertSource.objects.create(name='Test', source_type='Wazuh')
+        AlarmSetting.objects.all().delete()
+        for idx, severity in enumerate(['Low', 'Medium', 'High', 'Critical'], start=1):
+            AlarmSetting.objects.create(severity=severity, is_enabled=True, sort_order=idx)
+        alarm_system = AlarmSystemSetting.load()
+        alarm_system.is_enabled = True
+        alarm_system.is_active = False
+        alarm_system.sound_file = None
+        alarm_system.save(update_fields=['is_enabled', 'is_active', 'updated_at'])
+
+        self.user = User.objects.create_user(username='analyst1', password='pass', email='analyst1@example.com')
+        self.profile = self.user.analyst_profile
+        self.profile.role = 'SOC_ENG'
+        self.profile.save()
+
+    def test_emit_alarm_notification_creates_dashboard_notification(self):
+        Alert.objects.bulk_create([
+            Alert(
+                alert_name='Critical Alert',
+                severity='Critical',
+                rule_level=12,
+                alert_time=timezone.now(),
+                source=self.source,
+            )
+        ])
+        alert = Alert.objects.get(alert_name='Critical Alert')
+        created = emit_alarm_notification(alert)
+        self.assertEqual(created, 1)
+        self.assertEqual(Notification.objects.filter(user=self.user).count(), 1)
+
+    def test_emit_alarm_notification_skips_when_severity_disabled(self):
+        AlarmSetting.objects.filter(severity='Critical').update(is_enabled=False)
+        Alert.objects.bulk_create([
+            Alert(
+                alert_name='Muted Critical Alert',
+                severity='Critical',
+                rule_level=12,
+                alert_time=timezone.now(),
+                source=self.source,
+            )
+        ])
+        alert = Alert.objects.get(alert_name='Muted Critical Alert')
+        created = emit_alarm_notification(alert)
+        self.assertEqual(created, 0)
+        self.assertEqual(Notification.objects.count(), 0)

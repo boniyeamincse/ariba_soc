@@ -1,0 +1,114 @@
+<group name="network_recon,local,">
+  <rule id="100046" level="10" frequency="10" timeframe="60">
+    <list field="dstip" lookup="address_match_key">etc/lists/internal_networks</list>
+    <same_srcip />
+    <same_dstip />
+    <different_dstport />
+    <description>Internal Port Scan from the same source to one internal host on multiple ports</description>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+    <group>network,recon,scan,port_scan,internal,</group>
+  </rule>
+
+  <rule id="100047" level="10" frequency="20" timeframe="60">
+    <list field="dstip" lookup="not_address_match_key">etc/lists/internal_networks</list>
+    <same_srcip />
+    <different_dstip />
+    <different_dstport />
+    <description>External Port Scan from one source to many public hosts</description>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+    <group>network,recon,scan,port_scan,external,</group>
+  </rule>
+
+  <rule id="100048" level="8" frequency="15" timeframe="60">
+    <list field="dstip" lookup="address_match_key">etc/lists/internal_networks</list>
+    <same_srcip />
+    <different_dstip />
+    <description>One Source to Many Internal Hosts</description>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+    <group>network,recon,scan,host_sweep,internal,</group>
+  </rule>
+
+  <rule id="100049" level="7" frequency="8" timeframe="120">
+    <list field="dstport" lookup="match_key">etc/lists/suspicious_ports</list>
+    <same_srcip />
+    <same_dstip />
+    <different_dstport />
+    <description>One Host touching many unusual destination ports</description>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+    <group>network,recon,scan,unusual_ports,</group>
+  </rule>
+
+  <rule id="100050" level="9">
+    <pcre2>(?i)(?:[a-z0-9]{20,}\.){2,}[a-z]{2,}|(?:[a-z0-9]{12,}-){2,}[a-z0-9]{6,}|[a-z0-9]{32,}\.[a-z]{2,}</pcre2>
+    <description>Suspicious or random-looking DNS domain detected</description>
+    <mitre>
+      <id>T1071.004</id>
+    </mitre>
+    <group>network,dns,recon,dns_tunneling,suspicious_domain,</group>
+  </rule>
+
+  <rule id="100051" level="7" frequency="100" timeframe="60">
+    <dstport>53</dstport>
+    <same_srcip />
+    <same_dstip />
+    <description>High Volume DNS Queries from one source to one resolver</description>
+    <mitre>
+      <id>T1071.004</id>
+    </mitre>
+    <group>network,dns,recon,high_volume,</group>
+  </rule>
+
+  <!-- Populate etc/lists/network_iocs with threat-intel IPs before using this rule in production. -->
+  <rule id="100052" level="15">
+    <list field="dstip" lookup="address_match_key">etc/lists/network_iocs</list>
+    <description>Connection to Known Malicious IOC</description>
+    <mitre>
+      <id>T1071</id>
+      <id>T1105</id>
+    </mitre>
+    <group>network,ioc,malicious,command_and_control,exfiltration,</group>
+  </rule>
+
+  <rule id="100053" level="10" frequency="8" timeframe="120">
+    <list field="dstip" lookup="not_address_match_key">etc/lists/internal_networks</list>
+    <list field="dstport" lookup="match_key">etc/lists/suspicious_ports</list>
+    <same_srcip />
+    <description>Unusual outbound connection to a public host on a suspicious port</description>
+    <mitre>
+      <id>T1071</id>
+      <id>T1046</id>
+    </mitre>
+    <group>network,recon,egress,unusual_outbound,</group>
+  </rule>
+
+  <!-- Populate etc/lists/restricted_servers with protected server IPs. -->
+  <rule id="100054" level="10">
+    <list field="dstip" lookup="address_match_key">etc/lists/restricted_servers</list>
+    <same_srcip />
+    <description>Restricted Server Access detected</description>
+    <mitre>
+      <id>T1021</id>
+    </mitre>
+    <group>network,lateral_movement,restricted_access,</group>
+  </rule>
+
+  <rule id="100055" level="15" frequency="2" timeframe="300">
+    <if_matched_sid>100054</if_matched_sid>
+    <same_srcip />
+    <different_dstip />
+    <same_dstport />
+    <description>Possible lateral movement across multiple restricted servers</description>
+    <mitre>
+      <id>T1021</id>
+    </mitre>
+    <group>network,lateral_movement,restricted_access,</group>
+  </rule>
+</group>

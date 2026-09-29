@@ -82,6 +82,7 @@
                                 </div>
                                 <div class="col-md-3">
                                     <h6 class="dropdown-header px-0 border-bottom pb-2 mb-2"><i class="bi bi-gear"></i> System</h6>
+                                    <a class="dropdown-item ps-0" href="{% url 'settings:alarms' %}"><i class="bi bi-bell-fill"></i> Alarm Settings</a>
                                     <a class="dropdown-item ps-0" href="{% url 'settings:notifications' %}"><i class="bi bi-bell"></i> Notification Settings</a>
                                     <a class="dropdown-item ps-0" href="{% url 'settings:reports' %}"><i class="bi bi-file-earmark-bar-graph"></i> Report Settings</a>
                                     <a class="dropdown-item ps-0" href="{% url 'settings:dashboard' %}"><i class="bi bi-gear-wide-connected"></i> Settings Overview</a>
@@ -151,6 +152,32 @@
             </div>
         </div>
     </nav>
+    <div id="globalAlarmBanner"
+         class="global-alarm-banner {% if alarm_is_active %}show{% endif %}"
+         data-state-url="{% url 'settings:alarm_state' %}"
+         data-stop-url="{% url 'settings:alarm_stop' %}"
+         data-sound-url="{{ alarm_sound_url|default:'' }}">
+        <div class="container-fluid d-flex align-items-center justify-content-between gap-3 py-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-broadcast-pin fs-4"></i>
+                <div>
+                    <div class="fw-semibold">Alarm Active</div>
+                    <div id="globalAlarmMessage" class="small">
+                        {% if alarm_active_message %}{{ alarm_active_message }}{% else %}A monitored alert triggered the alarm state.{% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                {% if alarm_sound_url %}
+                <span class="badge bg-dark text-light">MP3 loaded</span>
+                {% endif %}
+                <button type="button" id="globalAlarmStopBtn" class="btn btn-sm btn-light">
+                    <i class="bi bi-stop-circle"></i> Stop Alarm
+                </button>
+            </div>
+        </div>
+    </div>
+    <audio id="globalAlarmAudio" preload="auto" loop {% if alarm_sound_url %}src="{{ alarm_sound_url }}"{% endif %}></audio>
     <div class="ariba-main-content">
         {% if new_alerts_count > 0 %}
         <div class="alert alert-warning alert-dismissible fade show rounded-0 border-0 mb-0 text-center" role="alert">

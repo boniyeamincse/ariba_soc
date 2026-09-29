@@ -111,6 +111,92 @@ body.ariba-soc-body {
     box-shadow: 0 4px 20px rgba(0,0,0,0.3);
 }
 
+body.alarm-active {
+    animation: alarmViewportPulse 0.9s infinite;
+}
+
+body.alarm-active::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(239, 68, 68, 0.18);
+    pointer-events: none;
+    z-index: 1040;
+    animation: alarmOverlayBlink 0.9s infinite;
+}
+
+body.alarm-active .ariba-navbar,
+body.alarm-active .ariba-card,
+body.alarm-active .ariba-dropdown,
+body.alarm-active .dropdown-menu,
+body.alarm-active .toast,
+body.alarm-active .alert,
+body.alarm-active .table,
+body.alarm-active .modal-content {
+    border-color: rgba(255, 90, 90, 0.8) !important;
+    box-shadow: 0 0 0 1px rgba(255, 90, 90, 0.2), 0 0 24px rgba(255, 0, 0, 0.18) !important;
+}
+
+body.alarm-active .ariba-navbar,
+body.alarm-active .ariba-card,
+body.alarm-active .dropdown-menu,
+body.alarm-active .modal-content {
+    background-color: #2a0d12 !important;
+}
+
+body.alarm-active .ariba-table thead th {
+    background: rgba(84, 12, 19, 0.95) !important;
+    color: #ffe4e4 !important;
+}
+
+body.alarm-active .ariba-table tbody tr:hover {
+    background: rgba(255, 0, 0, 0.12);
+}
+
+.global-alarm-banner {
+    display: none;
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    z-index: 1090;
+    background: linear-gradient(90deg, #7f1d1d, #b91c1c);
+    color: #fff;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+
+.global-alarm-banner.show {
+    display: block;
+    animation: alarmBannerPulse 0.8s infinite;
+}
+
+.global-alarm-banner .btn-light {
+    background: #fff;
+    color: #991b1b;
+    border: 0;
+}
+
+.global-alarm-banner .btn-light:hover {
+    background: #fee2e2;
+    color: #7f1d1d;
+}
+
+@keyframes alarmOverlayBlink {
+    0%, 100% { opacity: 0.12; }
+    50% { opacity: 0.34; }
+}
+
+@keyframes alarmBannerPulse {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.25); }
+}
+
+@keyframes alarmViewportPulse {
+    0%, 100% { background-color: var(--bg-dark); }
+    50% { background-color: #160608; }
+}
+
 .ariba-card-header {
     background: transparent;
     border-bottom: 1px solid var(--border-color);

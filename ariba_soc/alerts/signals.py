@@ -45,3 +45,10 @@ def evaluate_auto_escalation(alert):
 def auto_escalate_alert(sender, instance, created, **kwargs):
     if created:
         evaluate_auto_escalation(instance)
+
+
+@receiver(post_save, sender=Alert)
+def trigger_alarm_notification(sender, instance, created, **kwargs):
+    if created:
+        from .services import emit_alarm_notification
+        emit_alarm_notification(instance)

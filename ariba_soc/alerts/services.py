@@ -3,7 +3,8 @@ from django.contrib.auth.models import User
 from django.core.mail import send_mail
 from django.conf import settings
 from django.urls import reverse
-from settings_manager.models import NotificationSetting
+from django.contrib.auth.models import User
+from settings_manager.models import NotificationSetting, AlarmSetting, AlarmSystemSetting, SystemSetting
 from .models import Alert, AlertComment, AlertAuditLog, Notification
 
 def create_audit_log(alert, user, action, old_value='', new_value='', request=None):
@@ -156,6 +157,37 @@ def _notify_escalation(alert, reason=''):
         pass
 
 
+def _get_alarm_recipients():
+    stored_roles = SystemSetting.get_setting('settings_allowed_roles', '')
+    if stored_roles:
+        roles = [r.strip() for r in stored_roles.split(',') if r.strip()]
+    else:
+        roles = ['SOC_MGR', 'SOC_ENG', 'ADMIN']
+    return User.objects.filter(is_active=True, analyst_profile__role__in=roles).distinct()
+
+
+def emit_alarm_notification(alert):
+    """Create dashboard notifications for alerts when the severity is enabled."""
+    try:
+        if not AlarmSetting.severity_enabled(alert.severity):
+            return 0
+
+        AlarmSystemSetting.activate_for_alert(alert, f'Alarm triggered for {alert.alert_name}')
+        recipients = list(_get_alarm_recipients())
+        if not recipients:
+            return 0
+
+        link = reverse('alerts:detail', args=[alert.id])
+        message = f"Alarm triggered: {alert.alert_name} [{alert.severity}]"
+        created = 0
+        for user in recipients:
+            Notification.objects.create(user=user, message=message, link=link)
+            created += 1
+        return created
+    except Exception:
+        return 0
+
+
 def assign_alert(alert, user, assignee=None, request=None):
     if assignee is None:
         assignee = user
@@ -176,4 +208,3 @@ def assign_alert(alert, user, assignee=None, request=None):
     
     if notify:
         _notify_assignment(alert, assignee, user, request)
-
