@@ -12,12 +12,14 @@ def _get_settings_roles():
 def user_alerts_context(request):
     if not request.user.is_authenticated:
         return {}
-    role = getattr(request.user.analyst_profile, 'role', '')
+    profile = getattr(request.user, 'analyst_profile', None)
+    role = profile.role if profile else ('ADMIN' if request.user.is_superuser else '')
     
     unread_notifs = Notification.objects.filter(user=request.user, is_read=False).order_by('-created_at')[:10]
     alarm_system = AlarmSystemSetting.load()
     
     return {
+        'role': role,
         'my_assigned_count': Alert.objects.filter(assignee=request.user, status__in=['New', 'In Progress', 'Awaiting Action']).count(),
         'new_alerts_count': Alert.objects.filter(status='New').count(),
         'critical_alerts_count': Alert.objects.filter(severity='Critical', status__in=['New', 'In Progress', 'Awaiting Action']).count(),

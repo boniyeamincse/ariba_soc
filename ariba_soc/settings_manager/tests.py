@@ -27,3 +27,33 @@ class AlarmSettingTest(TestCase):
         alarm_system.is_enabled = False
         alarm_system.save(update_fields=['is_enabled', 'updated_at'])
         self.assertFalse(AlarmSetting.severity_enabled('Critical'))
+
+
+class SettingsAccessAndAdminTest(TestCase):
+    def test_check_settings_access_superuser(self):
+        from django.contrib.auth.models import User
+        from .views import _check_settings_access
+        su = User.objects.create_superuser('superadmin', 'su@test.com', 'password')
+        self.assertTrue(_check_settings_access(su))
+
+    def test_check_settings_access_unauthenticated(self):
+        from django.contrib.auth.models import AnonymousUser
+        from .views import _check_settings_access
+        self.assertFalse(_check_settings_access(AnonymousUser()))
+
+    def test_admin_registration(self):
+        from django.contrib import admin
+        from .models import AlarmSetting, AlarmSystemSetting, IOCEnrichmentSetting
+        from incidents.models import Incident, IncidentAlert, IncidentTimeline, IncidentNote
+        from vulnerabilities.models import VulnerabilityCase, VulnerabilityAuditLog
+
+        self.assertIn(AlarmSetting, admin.site._registry)
+        self.assertIn(AlarmSystemSetting, admin.site._registry)
+        self.assertIn(IOCEnrichmentSetting, admin.site._registry)
+        self.assertIn(Incident, admin.site._registry)
+        self.assertIn(IncidentAlert, admin.site._registry)
+        self.assertIn(IncidentTimeline, admin.site._registry)
+        self.assertIn(IncidentNote, admin.site._registry)
+        self.assertIn(VulnerabilityCase, admin.site._registry)
+        self.assertIn(VulnerabilityAuditLog, admin.site._registry)
+

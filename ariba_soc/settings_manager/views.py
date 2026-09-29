@@ -31,7 +31,10 @@ def _get_allowed_roles():
 def _check_settings_access(user):
     if not user.is_authenticated:
         return False
-    role = getattr(user.analyst_profile, 'role', '')
+    if user.is_superuser:
+        return True
+    profile = getattr(user, 'analyst_profile', None)
+    role = profile.role if profile else ''
     return role in _get_allowed_roles()
 
 def _log_setting_change(user, action, model_name, obj_id, old_val, new_val, request):
