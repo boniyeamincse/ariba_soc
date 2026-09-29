@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import timedelta
+from datetime import datetime, timedelta
 from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 from alerts.models import Alert
 from settings_manager.models import ReportSetting
-from reports.services import generate_report
+from reports.services import generate_report, calculate_soc_manager_daily_report
 
 try:
     import openpyxl
@@ -44,21 +44,76 @@ def _apply_export_filters(request):
 
 @login_required
 def reports_home(request):
-    today = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    week_ago = today - timedelta(days=7)
-    month_ago = today - timedelta(days=30)
+    now = timezone.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    range_param = request.GET.get('range', '').strip()
+    custom_from = request.GET.get('date_from', '').strip()
+    custom_to = request.GET.get('date_to', '').strip()
+
+    # Intelligent default: if no range requested, use 'today' if alerts exist today,
+    # otherwise fallback to 'all' or '30d' so SOC Managers see their full alert telemetry!
+    if not range_param:
+        if Alert.objects.filter(alert_time__gte=today_start).exists():
+            range_param = 'today'
+        elif Alert.objects.filter(alert_time__gte=today_start - timedelta(days=7)).exists():
+            range_param = '7d'
+        elif Alert.objects.filter(alert_time__gte=today_start - timedelta(days=30)).exists():
+            range_param = '30d'
+        else:
+            range_param = 'all'
+
+    date_from = None
+    date_to = None
+
+    if range_param == 'today':
+        date_from = today_start
+        date_to = now
+    elif range_param == 'yesterday':
+        yesterday_start = today_start - timedelta(days=1)
+        date_from = yesterday_start
+        date_to = today_start - timedelta(microseconds=1)
+    elif range_param == '7d':
+        date_from = now - timedelta(days=7)
+        date_to = now
+    elif range_param == '30d':
+        date_from = now - timedelta(days=30)
+        date_to = now
+    elif range_param == 'all':
+        date_from = None
+        date_to = None
+    elif range_param == 'custom':
+        if custom_from:
+            try:
+                date_from = timezone.make_aware(datetime.strptime(custom_from, '%Y-%m-%d'))
+            except (ValueError, TypeError):
+                pass
+        if custom_to:
+            try:
+                parsed_to = datetime.strptime(custom_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+                date_to = timezone.make_aware(parsed_to)
+            except (ValueError, TypeError):
+                pass
+
+    report = calculate_soc_manager_daily_report(date_from=date_from, date_to=date_to)
+
+    daily_compat = {
+        'total': report['total_alerts'],
+        'open': report['open_cases'],
+        'closed': report['closed_cases'],
+        'critical': report['critical'],
+        'true_positives': report['true_positives'],
+        'false_positives': report['false_positives'],
+    }
 
     context = {
-        'daily': {
-            'total': Alert.objects.filter(alert_time__gte=today).count(),
-            'open': Alert.objects.filter(status__in=['New', 'In Progress'], alert_time__gte=today).count(),
-            'closed': Alert.objects.filter(status='Closed', alert_time__gte=today).count(),
-            'critical': Alert.objects.filter(severity='Critical', alert_time__gte=today).count(),
-            'true_positives': Alert.objects.filter(verdict='True Positive', alert_time__gte=today).count(),
-            'false_positives': Alert.objects.filter(verdict='False Positive', alert_time__gte=today).count(),
-        },
-        'weekly_total': Alert.objects.filter(alert_time__gte=week_ago).count(),
-        'monthly_total': Alert.objects.filter(alert_time__gte=month_ago).count(),
+        'report': report,
+        'daily': daily_compat,
+        'selected_range': range_param,
+        'custom_from': custom_from,
+        'custom_to': custom_to,
+        'date_from': date_from,
+        'date_to': date_to,
         'HAS_OPENPYXL': HAS_OPENPYXL,
         'report_settings': ReportSetting.objects.order_by('name'),
         'MEDIA_URL': settings.MEDIA_URL,

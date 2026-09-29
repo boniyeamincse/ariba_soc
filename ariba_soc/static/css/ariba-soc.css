@@ -1168,3 +1168,36 @@ textarea.form-control {
         transform: translateX(0);
     }
 }
+
+/* Print optimization for Daily SOC Reports */
+@media print {
+    .ariba-navbar,
+    .btn,
+    .nav-pills,
+    .no-print {
+        display: none !important;
+    }
+    .ariba-main-content {
+        padding-top: 0 !important;
+    }
+    body.ariba-soc-body {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+    }
+    .ariba-card, .kpi-card {
+        border: 1px solid #cccccc !important;
+        box-shadow: none !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        page-break-inside: avoid;
+    }
+    .text-white, .text-light {
+        color: #000000 !important;
+    }
+    .table-dark {
+        --bs-table-bg: #ffffff !important;
+        --bs-table-color: #000000 !important;
+        border-color: #dee2e6 !important;
+    }
+}
+

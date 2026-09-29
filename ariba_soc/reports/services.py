@@ -580,3 +580,252 @@ def calculate_mtta_mttr_analytics(date_from=None, date_to=None, severity=None, a
         'trend_chart_data': trend_chart_data,
         'trend_chart_json': json.dumps(trend_chart_data),
     }
+
+
+def calculate_soc_manager_daily_report(date_from=None, date_to=None):
+    """
+    Computes an executive Daily SOC Report for the SOC Manager:
+    - Daily SOC Report Totals & Breakdown:
+        Total Alerts, Critical, High, Medium, Low, Informational
+        Verdicts: True Positive, False Positive, Benign, Unclassified
+        Cases: Open Cases, Closed Cases, Escalated
+    - Performance Metrics:
+        MTTA (avg, median, display)
+        MTTR (avg, median, display)
+        Alert Volume (total, breakdown)
+        False Positive Rate (FPR %)
+        True Positive Rate (TPR %)
+        SLA Breach count & SLA compliance %
+    - Analyst Workload Leaderboard
+    - Top Detection Rules (Triggers, Severity, FP, FP Rate %, Tune action)
+    - Top Attacked Assets (fixed & resilient, Asset Name, Hostname, IP, Criticality Multiplier, Alert Count, High/Crit Count, Risk Score)
+    """
+    from alerts.models import Alert, Asset
+    from django.contrib.auth.models import User
+    from django.db.models import Count, Q, Max
+
+    base_qs = Alert.objects.all()
+
+    if date_from:
+        base_qs = base_qs.filter(alert_time__gte=date_from)
+    if date_to:
+        base_qs = base_qs.filter(alert_time__lte=date_to)
+
+    qs = base_qs.select_related('assignee', 'assignee__analyst_profile', 'asset')
+    total_alerts = base_qs.count()
+
+    # Severities
+    critical = base_qs.filter(severity='Critical').count()
+    high = base_qs.filter(severity='High').count()
+    medium = base_qs.filter(severity='Medium').count()
+    low = base_qs.filter(severity='Low').count()
+    informational = base_qs.filter(severity='Informational').count()
+
+    # Verdicts
+    true_positives = base_qs.filter(verdict='True Positive').count()
+    false_positives = base_qs.filter(verdict='False Positive').count()
+    benign = base_qs.filter(Q(verdict__in=['Benign Positive', 'Benign']) | Q(verdict='None', severity='Informational')).count()
+    total_classified = true_positives + false_positives + benign
+    unclassified = max(0, total_alerts - total_classified)
+
+    fp_rate = round((false_positives / total_classified) * 100, 1) if total_classified > 0 else 0.0
+    tp_rate = round((true_positives / total_classified) * 100, 1) if total_classified > 0 else 0.0
+
+    # Cases & Workflow Lifecycle
+    open_cases = base_qs.filter(status__in=['New', 'Awaiting Action', 'In Progress', 'Pending', 'Remediation']).count()
+    closed_cases = base_qs.filter(status__in=['Closed', 'Archived']).count()
+    escalated = base_qs.filter(
+        Q(is_escalated=True) |
+        Q(status__startswith='Escalated') |
+        Q(workflow_state__in=['PENDING_L2_ACCEPTANCE', 'IN_PROGRESS_L2', 'PENDING_L3_ACCEPTANCE', 'IN_PROGRESS_L3', 'INCIDENT'])
+    ).count()
+
+    # SLA Performance
+    sla_breached = base_qs.filter(sla_status='Breached').count()
+    sla_within = base_qs.filter(sla_status='Within SLA').count()
+    sla_evaluated = sla_breached + sla_within
+    sla_compliance_rate = round((sla_within / sla_evaluated) * 100, 1) if sla_evaluated > 0 else 100.0
+    sla_breach_rate = round((sla_breached / total_alerts) * 100, 1) if total_alerts > 0 else 0.0
+
+    # MTTA & MTTR Calculation
+    tta_list = []
+    ttr_list = []
+    alerts_for_metrics = list(base_qs.only(
+        'alert_time', 'acknowledged_at', 'accepted_at', 'assigned_at',
+        'resolved_at', 'closed_at', 'status', 'status_updated_at'
+    ))
+
+    for a in alerts_for_metrics:
+        ack_time = a.acknowledged_at or a.accepted_at or a.assigned_at
+        if ack_time and a.alert_time and ack_time >= a.alert_time:
+            tta_list.append((ack_time - a.alert_time).total_seconds() / 60.0)
+
+        is_closed = a.status in ['Closed', 'Archived'] or a.closed_at or a.resolved_at
+        if is_closed and a.alert_time:
+            res_time = a.closed_at or a.resolved_at or getattr(a, 'status_updated_at', None)
+            if res_time and res_time >= a.alert_time:
+                ttr_list.append((res_time - a.alert_time).total_seconds() / 60.0)
+
+    avg_mtta = sum(tta_list) / len(tta_list) if tta_list else None
+    median_mtta = statistics.median(tta_list) if tta_list else None
+    avg_mttr = sum(ttr_list) / len(ttr_list) if ttr_list else None
+    median_mttr = statistics.median(ttr_list) if ttr_list else None
+
+    # Top Detection Rules
+    top_rules_raw = (
+        qs.values('rule_id', 'alert_name', 'severity')
+        .annotate(
+            total=Count('id'),
+            fp_count=Count('id', filter=Q(verdict='False Positive')),
+            tp_count=Count('id', filter=Q(verdict='True Positive')),
+        )
+        .order_by('-total')[:10]
+    )
+    top_detection_rules = []
+    for r in top_rules_raw:
+        r_tot = r['total']
+        r_fp = r['fp_count']
+        top_detection_rules.append({
+            'rule_id': r['rule_id'] or 'N/A',
+            'alert_name': r['alert_name'],
+            'severity': r['severity'],
+            'total': r_tot,
+            'fp_count': r_fp,
+            'fp_rate': round((r_fp / r_tot) * 100, 1) if r_tot > 0 else 0.0,
+            'tp_count': r['tp_count'],
+        })
+
+    # Top Attacked Assets (Fixed: gracefully resolves assets, fallback hostnames, IPs, and criticality)
+    top_assets_raw = (
+        qs.values(
+            'hostname', 'agent_name', 'destination_ip',
+            'asset_id', 'asset__name', 'asset__criticality',
+            'asset__ip_address', 'asset__criticality_multiplier'
+        )
+        .annotate(
+            total=Count('id'),
+            critical_count=Count('id', filter=Q(severity='Critical')),
+            high_count=Count('id', filter=Q(severity='High')),
+            med_count=Count('id', filter=Q(severity='Medium')),
+            low_count=Count('id', filter=Q(severity='Low')),
+            max_risk=Max('risk_score')
+        )
+        .order_by('-total')[:10]
+    )
+    top_attacked_assets = []
+    for a in top_assets_raw:
+        asset_id = a.get('asset_id')
+        hostname = a.get('hostname') or a.get('agent_name') or 'Unknown Asset'
+        name = a.get('asset__name') or hostname
+        ip_addr = a.get('asset__ip_address') or a.get('destination_ip') or '—'
+        criticality = a.get('asset__criticality') or 'MEDIUM'
+        multiplier = a.get('asset__criticality_multiplier') or 1.0
+
+        # Dynamic fallback lookup in Asset directory if asset_id is None
+        if not asset_id and hostname and hostname != 'Unknown Asset':
+            found_asset = Asset.objects.filter(Q(hostname__iexact=hostname) | Q(name__iexact=hostname)).first()
+            if found_asset:
+                asset_id = found_asset.id
+                name = found_asset.name
+                criticality = found_asset.criticality
+                multiplier = found_asset.criticality_multiplier
+                if not ip_addr or ip_addr == '—':
+                    ip_addr = found_asset.ip_address or '—'
+
+        top_attacked_assets.append({
+            'asset_id': asset_id,
+            'name': name,
+            'hostname': hostname,
+            'ip_address': ip_addr,
+            'criticality': criticality,
+            'multiplier': multiplier,
+            'total': a['total'],
+            'critical_count': a['critical_count'],
+            'high_count': a['high_count'],
+            'med_count': a['med_count'],
+            'low_count': a['low_count'],
+            'max_risk': round(a['max_risk'] or 0.0, 1),
+        })
+
+    # Analyst Workload Leaderboard
+    analysts_workload = []
+    active_users = User.objects.filter(is_active=True).select_related('analyst_profile').order_by('username')
+    for u in active_users:
+        u_alerts = base_qs.filter(assignee=u)
+        assigned = u_alerts.count()
+        if assigned == 0:
+            continue
+        in_prog = u_alerts.filter(status__in=['In Progress', 'Awaiting Action', 'Pending', 'Remediation']).count()
+        closed = u_alerts.filter(status__in=['Closed', 'Archived']).count()
+        u_esc = u_alerts.filter(Q(is_escalated=True) | Q(status__startswith='Escalated')).count()
+        u_breached = u_alerts.filter(sla_status='Breached').count()
+
+        u_tta = []
+        for al in u_alerts.only('alert_time', 'acknowledged_at'):
+            if al.acknowledged_at and al.alert_time and al.acknowledged_at >= al.alert_time:
+                u_tta.append((al.acknowledged_at - al.alert_time).total_seconds() / 60.0)
+        avg_mtta_u = sum(u_tta) / len(u_tta) if u_tta else None
+
+        role_label = getattr(u.analyst_profile, 'get_role_display', lambda: 'Analyst')() if hasattr(u, 'analyst_profile') else 'Analyst'
+        sla_adherence = round(((assigned - u_breached) / assigned) * 100, 1) if assigned > 0 else 100.0
+
+        analysts_workload.append({
+            'user': u,
+            'username': u.username,
+            'full_name': u.get_full_name() or u.username,
+            'role': role_label,
+            'assigned': assigned,
+            'in_progress': in_prog,
+            'closed': closed,
+            'escalated': u_esc,
+            'breached': u_breached,
+            'avg_mtta_display': format_duration_minutes(avg_mtta_u),
+            'sla_adherence': sla_adherence,
+        })
+
+    unassigned_count = base_qs.filter(assignee__isnull=True).count()
+    if unassigned_count > 0:
+        unassigned_in_prog = base_qs.filter(assignee__isnull=True, status__in=['In Progress', 'Awaiting Action']).count()
+        analysts_workload.append({
+            'user': None,
+            'username': 'Unassigned Queue',
+            'full_name': 'Unassigned Triage Queue',
+            'role': 'Queue Pool',
+            'assigned': unassigned_count,
+            'in_progress': unassigned_in_prog,
+            'closed': base_qs.filter(assignee__isnull=True, status__in=['Closed', 'Archived']).count(),
+            'escalated': base_qs.filter(assignee__isnull=True, is_escalated=True).count(),
+            'breached': base_qs.filter(assignee__isnull=True, sla_status='Breached').count(),
+            'avg_mtta_display': 'N/A',
+            'sla_adherence': 0.0,
+        })
+
+    return {
+        'total_alerts': total_alerts,
+        'critical': critical,
+        'high': high,
+        'medium': medium,
+        'low': low,
+        'informational': informational,
+        'true_positives': true_positives,
+        'false_positives': false_positives,
+        'benign': benign,
+        'unclassified': unclassified,
+        'total_classified': total_classified,
+        'fp_rate': fp_rate,
+        'tp_rate': tp_rate,
+        'open_cases': open_cases,
+        'closed_cases': closed_cases,
+        'escalated': escalated,
+        'sla_breached': sla_breached,
+        'sla_within': sla_within,
+        'sla_compliance_rate': sla_compliance_rate,
+        'sla_breach_rate': sla_breach_rate,
+        'avg_mtta_display': format_duration_minutes(avg_mtta),
+        'median_mtta_display': format_duration_minutes(median_mtta),
+        'avg_mttr_display': format_duration_minutes(avg_mttr),
+        'median_mttr_display': format_duration_minutes(median_mttr),
+        'top_detection_rules': top_detection_rules,
+        'top_attacked_assets': top_attacked_assets,
+        'analysts_workload': analysts_workload,
+    }

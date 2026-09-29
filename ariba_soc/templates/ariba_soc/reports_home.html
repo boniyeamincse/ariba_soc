@@ -1,101 +1,473 @@
 {% extends 'base.html' %}
+{% load humanize %}
 
 {% block content %}
 <div class="container-fluid py-3">
+    <!-- Header & Actions -->
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h4 class="m-0"><i class="bi bi-file-text"></i> Reports</h4>
-        <div class="d-flex gap-2">
-            <a href="{% url 'reports:mtta_mttr' %}" class="btn btn-ariba-primary btn-sm"><i class="bi bi-speedometer2"></i> MTTA / MTTR Analytics</a>
-            <a href="{% url 'reports:export_csv' %}" class="btn btn-ariba-outline btn-sm export-btn"><i class="bi bi-filetype-csv"></i> CSV</a>
+        <div>
+            <h4 class="m-0 text-white"><i class="bi bi-file-earmark-bar-graph text-info me-2"></i> Daily SOC Report</h4>
+            <small class="text-secondary">
+                Executive SOC Manager Briefing, Performance Metrics &amp; Operational Posture &bull; 
+                Range: <span class="badge bg-primary-subtle text-primary border border-primary text-uppercase">{{ selected_range }}</span>
+                {% if date_from %}({{ date_from|date:"M d, Y H:i" }} &ndash; {{ date_to|date:"M d, Y H:i" }}){% else %}(All Recorded History){% endif %}
+            </small>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <button onclick="window.print()" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-printer me-1"></i> Print / PDF
+            </button>
+            <a href="{% url 'reports:mtta_mttr' %}" class="btn btn-ariba-primary btn-sm">
+                <i class="bi bi-speedometer2 me-1"></i> MTTA / MTTR Analytics
+            </a>
+            <a href="{% url 'reports:export_csv' %}" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-filetype-csv me-1"></i> CSV
+            </a>
             {% if HAS_OPENPYXL %}
-            <a href="{% url 'reports:export_excel' %}" class="btn btn-ariba-outline btn-sm export-btn"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+            <a href="{% url 'reports:export_excel' %}" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-file-earmark-excel me-1"></i> Excel
+            </a>
             {% endif %}
         </div>
     </div>
 
+    <!-- Time Window Selector Bar -->
+    <div class="ariba-card p-3 mb-4 no-print">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-1 flex-wrap">
+                <span class="text-secondary small me-2"><i class="bi bi-calendar-event me-1"></i> Reporting Period:</span>
+                <a href="?range=today" class="btn btn-sm {% if selected_range == 'today' %}btn-primary{% else %}btn-ariba-outline{% endif %}">
+                    Today (Daily)
+                </a>
+                <a href="?range=yesterday" class="btn btn-sm {% if selected_range == 'yesterday' %}btn-primary{% else %}btn-ariba-outline{% endif %}">
+                    Yesterday
+                </a>
+                <a href="?range=7d" class="btn btn-sm {% if selected_range == '7d' %}btn-primary{% else %}btn-ariba-outline{% endif %}">
+                    Last 7 Days
+                </a>
+                <a href="?range=30d" class="btn btn-sm {% if selected_range == '30d' %}btn-primary{% else %}btn-ariba-outline{% endif %}">
+                    Last 30 Days
+                </a>
+                <a href="?range=all" class="btn btn-sm {% if selected_range == 'all' %}btn-primary{% else %}btn-ariba-outline{% endif %}">
+                    All Time
+                </a>
+                <button class="btn btn-sm {% if selected_range == 'custom' %}btn-primary{% else %}btn-ariba-outline{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#customRangeCollapse">
+                    <i class="bi bi-sliders"></i> Custom Range
+                </button>
+            </div>
+            <div class="text-secondary small">
+                <i class="bi bi-clock me-1"></i> Last updated: {% now "M d, Y H:i" %}
+            </div>
+        </div>
+
+        <!-- Custom Date Range Collapse -->
+        <div class="collapse {% if selected_range == 'custom' %}show{% endif %} mt-3 pt-3 border-top border-secondary" id="customRangeCollapse">
+            <form method="get" class="row g-2 align-items-center">
+                <input type="hidden" name="range" value="custom">
+                <div class="col-auto">
+                    <label class="small text-secondary me-2">From:</label>
+                    <input type="date" name="date_from" value="{{ custom_from }}" class="form-control form-control-sm bg-dark text-white border-secondary d-inline-block w-auto" required>
+                </div>
+                <div class="col-auto">
+                    <label class="small text-secondary me-2">To:</label>
+                    <input type="date" name="date_to" value="{{ custom_to }}" class="form-control form-control-sm bg-dark text-white border-secondary d-inline-block w-auto" required>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-filter"></i> Apply Custom Window</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Daily SOC Report Executive Summary (Requested 3-Column Layout) -->
     <div class="row g-3 mb-4">
-        <div class="col-12">
-            <div class="ariba-card p-3">
-                <h5 class="mb-3">Daily SOC Report</h5>
-                <div class="row g-3">
-                    <div class="col-md-3">
-                        <div class="kpi-card text-center">
-                            <div class="kpi-label">Total Today</div>
-                            <div class="kpi-value" style="color: var(--accent-blue);">{{ daily.total }}</div>
-                        </div>
+        <!-- 1. Total Alerts & Severities -->
+        <div class="col-lg-4">
+            <div class="ariba-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center border-bottom border-secondary pb-2 mb-3">
+                    <h6 class="m-0 text-white font-monospace"><i class="bi bi-bell text-primary me-2"></i> TOTAL ALERTS</h6>
+                    <span class="fs-4 fw-bold text-white font-monospace">{{ report.total_alerts|intcomma }}</span>
+                </div>
+                <div class="d-flex flex-column gap-2">
+                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary border-opacity-25">
+                        <span class="text-secondary"><span class="badge bg-danger me-2" style="width: 12px; height: 12px; padding: 0;">&nbsp;</span> Critical</span>
+                        <span class="fw-bold text-danger font-monospace fs-6">{{ report.critical|intcomma }}</span>
                     </div>
-                    <div class="col-md-3">
-                        <div class="kpi-card text-center">
-                            <div class="kpi-label">Open</div>
-                            <div class="kpi-value" style="color: var(--severity-medium);">{{ daily.open }}</div>
-                        </div>
+                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary border-opacity-25">
+                        <span class="text-secondary"><span class="badge bg-warning me-2" style="width: 12px; height: 12px; padding: 0;">&nbsp;</span> High</span>
+                        <span class="fw-bold text-warning font-monospace fs-6">{{ report.high|intcomma }}</span>
                     </div>
-                    <div class="col-md-3">
-                        <div class="kpi-card text-center">
-                            <div class="kpi-label">Closed</div>
-                            <div class="kpi-value" style="color: var(--severity-low);">{{ daily.closed }}</div>
-                        </div>
+                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary border-opacity-25">
+                        <span class="text-secondary"><span class="badge bg-info me-2" style="width: 12px; height: 12px; padding: 0;">&nbsp;</span> Medium</span>
+                        <span class="fw-bold text-info font-monospace fs-6">{{ report.medium|intcomma }}</span>
                     </div>
-                    <div class="col-md-3">
-                        <div class="kpi-card text-center">
-                            <div class="kpi-label">Critical</div>
-                            <div class="kpi-value" style="color: var(--severity-critical);">{{ daily.critical }}</div>
-                        </div>
+                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary border-opacity-25">
+                        <span class="text-secondary"><span class="badge bg-success me-2" style="width: 12px; height: 12px; padding: 0;">&nbsp;</span> Low</span>
+                        <span class="fw-bold text-success font-monospace fs-6">{{ report.low|intcomma }}</span>
                     </div>
-                    <div class="col-md-3">
-                        <div class="kpi-card text-center">
-                            <div class="kpi-label">True Positives</div>
-                            <div class="kpi-value" style="color: var(--severity-critical);">{{ daily.true_positives }}</div>
-                        </div>
+                    <div class="d-flex justify-content-between align-items-center py-1">
+                        <span class="text-secondary"><span class="badge bg-secondary me-2" style="width: 12px; height: 12px; padding: 0;">&nbsp;</span> Informational</span>
+                        <span class="fw-bold text-secondary font-monospace fs-6">{{ report.informational|intcomma }}</span>
                     </div>
-                    <div class="col-md-3">
-                        <div class="kpi-card text-center">
-                            <div class="kpi-label">False Positives</div>
-                            <div class="kpi-value" style="color: var(--severity-low);">{{ daily.false_positives }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Verdicts & Classification -->
+        <div class="col-lg-4">
+            <div class="ariba-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center border-bottom border-secondary pb-2 mb-3">
+                    <h6 class="m-0 text-white font-monospace"><i class="bi bi-check2-circle text-success me-2"></i> TRIAGE VERDICTS</h6>
+                    <span class="fs-4 fw-bold text-info font-monospace">{{ report.total_classified|intcomma }} <small class="fs-6 text-secondary fw-normal">classified</small></span>
+                </div>
+                <div class="d-flex flex-column gap-2">
+                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary border-opacity-25">
+                        <div>
+                            <span class="text-secondary"><i class="bi bi-shield-fill-exclamation text-danger me-2"></i> True Positive</span>
+                            <small class="text-muted ms-1">({{ report.tp_rate }}%)</small>
                         </div>
+                        <span class="fw-bold text-danger font-monospace fs-6">{{ report.true_positives|intcomma }}</span>
                     </div>
-                    <div class="col-md-3">
-                        <div class="kpi-card text-center">
-                            <div class="kpi-label">Weekly Total</div>
-                            <div class="kpi-value">{{ weekly_total }}</div>
+                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary border-opacity-25">
+                        <div>
+                            <span class="text-secondary"><i class="bi bi-funnel text-warning me-2"></i> False Positive</span>
+                            <small class="text-muted ms-1">({{ report.fp_rate }}%)</small>
                         </div>
+                        <span class="fw-bold text-warning font-monospace fs-6">{{ report.false_positives|intcomma }}</span>
                     </div>
-                    <div class="col-md-3">
-                        <div class="kpi-card text-center">
-                            <div class="kpi-label">Monthly Total</div>
-                            <div class="kpi-value">{{ monthly_total }}</div>
-                        </div>
+                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary border-opacity-25">
+                        <span class="text-secondary"><i class="bi bi-shield-check text-success me-2"></i> Benign</span>
+                        <span class="fw-bold text-success font-monospace fs-6">{{ report.benign|intcomma }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center py-1">
+                        <span class="text-secondary"><i class="bi bi-hourglass-split text-secondary me-2"></i> Unclassified / Pending</span>
+                        <span class="fw-bold text-secondary font-monospace fs-6">{{ report.unclassified|intcomma }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Cases & Workflow Lifecycle -->
+        <div class="col-lg-4">
+            <div class="ariba-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center border-bottom border-secondary pb-2 mb-3">
+                    <h6 class="m-0 text-white font-monospace"><i class="bi bi-kanban text-warning me-2"></i> CASES &amp; WORKFLOW</h6>
+                    <span class="fs-4 fw-bold text-warning font-monospace">{{ report.open_cases|intcomma }} <small class="fs-6 text-secondary fw-normal">active</small></span>
+                </div>
+                <div class="d-flex flex-column gap-2">
+                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary border-opacity-25">
+                        <span class="text-secondary"><i class="bi bi-inbox text-warning me-2"></i> Open Cases</span>
+                        <span class="fw-bold text-warning font-monospace fs-6">{{ report.open_cases|intcomma }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary border-opacity-25">
+                        <span class="text-secondary"><i class="bi bi-check-circle text-success me-2"></i> Closed Cases</span>
+                        <span class="fw-bold text-success font-monospace fs-6">{{ report.closed_cases|intcomma }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary border-opacity-25">
+                        <span class="text-secondary"><i class="bi bi-arrow-up-circle text-danger me-2"></i> Escalated</span>
+                        <span class="fw-bold text-danger font-monospace fs-6">{{ report.escalated|intcomma }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center py-1">
+                        <span class="text-secondary"><i class="bi bi-shield-shaded text-info me-2"></i> SLA Adherence</span>
+                        <span class="fw-bold text-info font-monospace fs-6">{{ report.sla_compliance_rate }}%</span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Core SOC Performance Metrics (The 6 KPIs) -->
+    <h5 class="text-white mb-3"><i class="bi bi-speedometer2 text-info me-2"></i> SOC Performance Metrics</h5>
+    <div class="row g-3 mb-4">
+        <div class="col-md-2 col-sm-4 col-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="kpi-label small text-secondary">MTTA (Mean Ack)</span>
+                    <i class="bi bi-stopwatch text-info"></i>
+                </div>
+                <div class="kpi-value text-info font-monospace fs-4">{{ report.avg_mtta_display }}</div>
+                <small class="text-muted" style="font-size: 0.72rem;">Median: {{ report.median_mtta_display }}</small>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-4 col-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="kpi-label small text-secondary">MTTR (Mean Resolve)</span>
+                    <i class="bi bi-check2-circle text-success"></i>
+                </div>
+                <div class="kpi-value text-success font-monospace fs-4">{{ report.avg_mttr_display }}</div>
+                <small class="text-muted" style="font-size: 0.72rem;">Median: {{ report.median_mttr_display }}</small>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-4 col-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="kpi-label small text-secondary">Alert Volume</span>
+                    <i class="bi bi-bar-chart-line text-primary"></i>
+                </div>
+                <div class="kpi-value text-primary font-monospace fs-4">{{ report.total_alerts|intcomma }}</div>
+                <small class="text-muted" style="font-size: 0.72rem;">Total Events in Period</small>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-4 col-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="kpi-label small text-secondary">FP Rate (FPR)</span>
+                    <i class="bi bi-funnel text-warning"></i>
+                </div>
+                <div class="kpi-value text-warning font-monospace fs-4">{{ report.fp_rate }}%</div>
+                <small class="text-muted" style="font-size: 0.72rem;">{{ report.false_positives }} False Positives</small>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-4 col-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="kpi-label small text-secondary">TP Rate (TPR)</span>
+                    <i class="bi bi-shield-check text-danger"></i>
+                </div>
+                <div class="kpi-value text-danger font-monospace fs-4">{{ report.tp_rate }}%</div>
+                <small class="text-muted" style="font-size: 0.72rem;">{{ report.true_positives }} Real Incidents</small>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-4 col-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="kpi-label small text-secondary">SLA Breaches</span>
+                    <i class="bi bi-exclamation-triangle text-danger"></i>
+                </div>
+                <div class="kpi-value {% if report.sla_breached > 0 %}text-danger{% else %}text-success{% endif %} font-monospace fs-4">{{ report.sla_breached }}</div>
+                <small class="text-muted" style="font-size: 0.72rem;">{{ report.sla_compliance_rate }}% Compliance</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Analytics Tables Row 1: Analyst Workload & Top Detection Rules -->
+    <div class="row g-3 mb-4">
+        <!-- Analyst Workload Leaderboard -->
+        <div class="col-lg-6">
+            <div class="ariba-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="m-0 text-white"><i class="bi bi-people text-info me-2"></i> Analyst Workload</h5>
+                    <span class="badge bg-secondary">{{ report.analysts_workload|length }} Members</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-dark table-sm align-middle mb-0">
+                        <thead>
+                            <tr class="text-secondary small">
+                                <th>Analyst</th>
+                                <th>Role</th>
+                                <th class="text-center">Assigned</th>
+                                <th class="text-center">In Prog</th>
+                                <th class="text-center">Closed</th>
+                                <th class="text-center">Avg MTTA</th>
+                                <th class="text-center">SLA %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in report.analysts_workload %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-person-circle text-primary"></i>
+                                        <span class="fw-semibold text-white">{{ a.full_name }}</span>
+                                    </div>
+                                </td>
+                                <td><span class="badge bg-secondary-subtle text-secondary border border-secondary">{{ a.role }}</span></td>
+                                <td class="text-center font-monospace">{{ a.assigned }}</td>
+                                <td class="text-center font-monospace text-warning">{{ a.in_progress }}</td>
+                                <td class="text-center font-monospace text-success">{{ a.closed }}</td>
+                                <td class="text-center font-monospace text-info">{{ a.avg_mtta_display }}</td>
+                                <td class="text-center">
+                                    <span class="badge {% if a.sla_adherence >= 90 %}bg-success{% elif a.sla_adherence >= 70 %}bg-warning text-dark{% else %}bg-danger{% endif %} font-monospace">
+                                        {{ a.sla_adherence }}%
+                                    </span>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-secondary py-3">No analyst workload recorded for this timeframe.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Detection Rules -->
+        <div class="col-lg-6">
+            <div class="ariba-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="m-0 text-white"><i class="bi bi-lightning-charge text-danger me-2"></i> Top Detection Rules</h5>
+                    <a href="{% url 'settings:suppression_rules' %}" class="btn btn-ariba-outline btn-sm">
+                        <i class="bi bi-funnel me-1"></i> Tuning &amp; Suppression
+                    </a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-dark table-sm align-middle mb-0">
+                        <thead>
+                            <tr class="text-secondary small">
+                                <th>Rule ID</th>
+                                <th>Signature / Alert Name</th>
+                                <th>Sev</th>
+                                <th class="text-center">Triggers</th>
+                                <th class="text-center">FP %</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in report.top_detection_rules %}
+                            <tr>
+                                <td class="font-monospace text-info small">#{{ r.rule_id }}</td>
+                                <td>
+                                    <div class="text-truncate text-white" style="max-width: 220px;" title="{{ r.alert_name }}">
+                                        {{ r.alert_name }}
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if r.severity == 'Critical' %}<span class="badge bg-danger">Crit</span>
+                                    {% elif r.severity == 'High' %}<span class="badge bg-warning text-dark">High</span>
+                                    {% elif r.severity == 'Medium' %}<span class="badge bg-info text-dark">Med</span>
+                                    {% else %}<span class="badge bg-secondary">Low</span>{% endif %}
+                                </td>
+                                <td class="text-center font-monospace fw-bold text-white">{{ r.total }}</td>
+                                <td class="text-center font-monospace {% if r.fp_rate > 50 %}text-danger fw-bold{% elif r.fp_rate > 20 %}text-warning{% else %}text-secondary{% endif %}">
+                                    {{ r.fp_rate }}%
+                                </td>
+                                <td class="text-end">
+                                    <a href="{% url 'settings:suppression_rule_create' %}?rule_id={{ r.rule_id }}" class="btn btn-ariba-outline btn-xs py-0 px-1 text-warning" title="Create False Positive Suppression Rule">
+                                        <i class="bi bi-funnel"></i> Tune
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-secondary py-3">No detection rules triggered in this period.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Analytics Row 2: Top Attacked Assets (Fixed) -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="ariba-card p-3">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <div>
+                        <h5 class="m-0 text-white"><i class="bi bi-hdd-network text-warning me-2"></i> Top Attacked Assets</h5>
+                        <small class="text-secondary">Target hosts, endpoint agents, and critical infrastructure receiving high alert velocity</small>
+                    </div>
+                    <a href="{% url 'alerts:assets_list' %}" class="btn btn-ariba-outline btn-sm text-info">
+                        <i class="bi bi-folder2-open me-1"></i> Asset Directory &amp; Risk Multipliers
+                    </a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-dark table-sm align-middle mb-0">
+                        <thead>
+                            <tr class="text-secondary small">
+                                <th>Target Asset / Hostname</th>
+                                <th>IP Address</th>
+                                <th>Criticality Multiplier</th>
+                                <th class="text-center">Total Alerts</th>
+                                <th class="text-center">Critical &amp; High</th>
+                                <th class="text-center">Max Dynamic Risk</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in report.top_attacked_assets %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-hdd-rack text-primary fs-5"></i>
+                                        <div>
+                                            <div class="fw-semibold text-white">{{ a.name }}</div>
+                                            <small class="text-secondary font-monospace">{{ a.hostname }}</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="font-monospace text-secondary">{{ a.ip_address }}</td>
+                                <td>
+                                    {% if a.criticality == 'CRITICAL' %}
+                                    <span class="badge bg-danger-subtle text-danger border border-danger">CRITICAL (2.0x)</span>
+                                    {% elif a.criticality == 'HIGH' %}
+                                    <span class="badge bg-warning-subtle text-warning border border-warning">HIGH (1.5x)</span>
+                                    {% elif a.criticality == 'LOW' %}
+                                    <span class="badge bg-success-subtle text-success border border-success">LOW (0.8x)</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary">MEDIUM (1.0x)</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center font-monospace fw-bold fs-6 text-white">{{ a.total }}</td>
+                                <td class="text-center font-monospace">
+                                    {% if a.critical_count > 0 or a.high_count > 0 %}
+                                    <span class="badge bg-danger">{{ a.critical_count|add:a.high_count }}</span>
+                                    {% else %}
+                                    <span class="text-secondary">0</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center font-monospace">
+                                    <span class="fw-bold {% if a.max_risk >= 75 %}text-danger{% elif a.max_risk >= 50 %}text-warning{% else %}text-info{% endif %}">
+                                        {{ a.max_risk }} / 100
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    {% if a.asset_id %}
+                                    <a href="{% url 'alerts:asset_edit' a.asset_id %}" class="btn btn-ariba-outline btn-xs text-info py-0 px-2">
+                                        <i class="bi bi-pencil-square"></i> Edit Asset
+                                    </a>
+                                    {% else %}
+                                    <a href="{% url 'alerts:asset_create' %}" class="btn btn-ariba-outline btn-xs text-warning py-0 px-2">
+                                        <i class="bi bi-plus-circle"></i> Register
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-secondary py-3">No asset telemetry recorded in this timeframe.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scheduled Reports & Automations -->
     <div class="row g-3">
         <div class="col-12">
             <div class="ariba-card p-3">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="m-0">Scheduled Reports</h5>
-                    <a href="{% url 'settings:reports' %}" class="btn btn-ariba-outline btn-sm"><i class="bi bi-gear"></i> Manage</a>
+                    <div>
+                        <h5 class="m-0 text-white"><i class="bi bi-clock-history text-primary me-2"></i> Scheduled Automated Reports</h5>
+                        <small class="text-secondary">Automated PDF, CSV, and Excel reports generated on cron schedules</small>
+                    </div>
+                    <a href="{% url 'settings:reports' %}" class="btn btn-ariba-outline btn-sm"><i class="bi bi-gear me-1"></i> Configure Schedules</a>
                 </div>
                 {% if report_settings %}
                 <div class="table-responsive">
                     <table class="table table-dark table-sm align-middle mb-0">
                         <thead>
-                            <tr>
+                            <tr class="text-secondary small">
                                 <th>Name</th>
                                 <th>Type</th>
                                 <th>Schedule</th>
                                 <th>Format</th>
                                 <th>Last Generated</th>
                                 <th>Active</th>
-                                <th></th>
+                                <th class="text-end">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for report in report_settings %}
                             <tr>
-                                <td>{{ report.name }}</td>
+                                <td class="fw-semibold text-white">{{ report.name }}</td>
                                 <td>{{ report.get_report_type_display }}</td>
                                 <td>{{ report.get_schedule_display }}</td>
                                 <td>{{ report.get_export_format_display }}</td>
@@ -106,7 +478,9 @@
                                 </td>
                                 <td class="text-end">
                                     {% if report.last_report_file %}
-                                    <a href="{{ MEDIA_URL }}{{ report.last_report_file }}" class="btn btn-ariba-outline btn-sm" target="_blank"><i class="bi bi-download"></i> Download</a>
+                                    <a href="{{ MEDIA_URL }}{{ report.last_report_file }}" class="btn btn-ariba-outline btn-sm me-1" target="_blank">
+                                        <i class="bi bi-download"></i> Download
+                                    </a>
                                     {% endif %}
                                     <form method="post" action="{% url 'reports:generate_now' report.pk %}" class="d-inline">
                                         {% csrf_token %}
@@ -119,7 +493,7 @@
                     </table>
                 </div>
                 {% else %}
-                <p class="text-secondary mb-0">No scheduled reports configured yet. <a href="{% url 'settings:reports' %}">Add one</a> to get daily/weekly/monthly/yearly PDF, CSV, or Excel reports.</p>
+                <p class="text-secondary mb-0">No scheduled reports configured yet. <a href="{% url 'settings:reports' %}">Add one</a> to get automated daily, weekly, or monthly PDF, CSV, and Excel executive reports.</p>
                 {% endif %}
             </div>
         </div>
