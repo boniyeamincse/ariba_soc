@@ -51,6 +51,19 @@ def wazuh_status(request):
     manager_config = WazuhManagerConfig.objects.first()
     sync_logs = WazuhSyncLog.objects.all()[:20]
 
+    # Fetch live agents
+    agents = []
+    agents_error = None
+    try:
+        if manager_config:
+            client = ManagerClient(manager_config)
+            response = client.fetch_agents()
+            agents = response.get('data', {}).get('affected_items', [])
+            if not agents and 'data' in response and 'items' in response['data']:
+                agents = response['data']['items']
+    except Exception as e:
+        agents_error = f"Failed to fetch agents: {str(e)}"
+
     form = WazuhConfigurationForm(instance=config) if config else WazuhConfigurationForm()
     manager_form = WazuhManagerConfigForm(instance=manager_config) if manager_config else WazuhManagerConfigForm()
 
@@ -60,8 +73,10 @@ def wazuh_status(request):
         'sync_logs': sync_logs,
         'form': form,
         'manager_form': manager_form,
+        'agents': agents,
+        'agents_error': agents_error,
         'can_edit_wazuh_config': request.user.analyst_profile.role in CONFIG_EDIT_ROLES,
-    })
+    }))
 
 
 @login_required
