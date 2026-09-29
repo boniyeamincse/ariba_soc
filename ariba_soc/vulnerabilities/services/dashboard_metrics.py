@@ -73,7 +73,7 @@ def get_inventory(filters=None, page=1, page_size=50):
 
 def get_affected_assets():
     from django.db.models import Count, Max
-    assets = VulnerabilityCase.objects.values('agent_id').annotate(
+    assets = VulnerabilityCase.objects.values('agent_id', 'agent_name').annotate(
         vuln_count=Count('id'),
         max_cvss=Max('cvss_score'),
         critical_count=Count('id', filter=Q(priority='CRITICAL')),

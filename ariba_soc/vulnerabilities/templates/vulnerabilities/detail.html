@@ -26,7 +26,7 @@
                             <p><strong>CVSS:</strong> {{ case.cvss_score|default:"-" }}</p>
                         </div>
                         <div class="col-md-6">
-                            <p><strong>Agent:</strong> {{ case.agent_id }}</p>
+                            <p><strong>Agent:</strong> {{ case.agent_name|default:case.agent_id }} <span class="text-muted">(ID: {{ case.agent_id }})</span></p>
                             <p><strong>Status:</strong> <span class="badge bg-info">{{ case.get_status_display }}</span></p>
                             <p><strong>Owner:</strong> {{ case.owner.username|default:"Unassigned" }}</p>
                             <p><strong>Due:</strong> {% if case.due_at %}{{ case.due_at|date:"d M Y H:i" }}{% else %}-{% endif %}</p>
@@ -36,7 +36,13 @@
                     <p class="mt-2"><strong>Description:</strong><br>{{ case.description }}</p>
                     {% endif %}
                     {% if case.reference_url %}
-                    <p><strong>Reference:</strong> <a href="{{ case.reference_url }}" target="_blank">{{ case.reference_url }}</a></p>
+                    <p><strong>References:</strong>
+                        {% for ref_url in case.reference_list %}
+                        <br><a href="{{ ref_url }}" target="_blank" rel="noopener noreferrer" class="text-info text-break"><i class="fas fa-external-link-alt me-1"></i>{{ ref_url }}</a>
+                        {% empty %}
+                        <br><a href="{{ case.reference_url }}" target="_blank" rel="noopener noreferrer" class="text-info text-break"><i class="fas fa-external-link-alt me-1"></i>{{ case.reference_url }}</a>
+                        {% endfor %}
+                    </p>
                     {% endif %}
                 </div>
             </div>

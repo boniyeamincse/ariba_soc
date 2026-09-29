@@ -49,7 +49,7 @@
                         <td>{{ item.cvss_score|default:"-" }}</td>
                         <td><span class="badge bg-{% if item.status == 'NEW' %}primary{% elif item.status == 'RESOLVED' %}success{% elif item.status == 'RISK_ACCEPTED' %}secondary{% else %}info{% endif %}">{{ item.status }}</span></td>
                         <td>{{ item.owner.username|default:"-" }}</td>
-                        <td>{{ item.agent_id }}</td>
+                        <td>{{ item.agent_name|default:item.agent_id }}</td>
                         <td>{% if item.due_at %}{{ item.due_at|date:"d M Y" }}{% else %}-{% endif %}</td>
                         <td><a href="{% url 'vulnerabilities:detail' key=item.vulnerability_key %}" class="btn btn-sm btn-outline-primary">View</a></td>
                     </tr>

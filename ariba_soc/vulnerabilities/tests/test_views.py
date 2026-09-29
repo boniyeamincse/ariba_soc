@@ -238,3 +238,81 @@ class DashboardMetricsTests(TestCase):
         self.assertEqual(data['total'], 1)
         data = get_inventory({'status': 'RESOLVED'})
         self.assertEqual(data['total'], 0)
+
+
+class WazuhVulnerabilityReaderTests(TestCase):
+    def setUp(self):
+        from vulnerabilities.services.wazuh_reader import WazuhVulnerabilityReader
+        self.reader = WazuhVulnerabilityReader()
+
+    def test_normalize_wazuh_4_9_doc(self):
+        source = {
+            'agent': {'id': '001', 'name': 'kalitest'},
+            'host': {'os': {'full': 'Kali GNU/Linux 2026.3'}},
+            'package': {'name': 'openclaw', 'version': '2026.2.19-2'},
+            'vulnerability': {
+                'id': 'CVE-2026-33579',
+                'severity': 'Critical',
+                'score': {'base': 9.9, 'version': '3.1'},
+                'detected_at': '2026-09-29T05:25:50.349Z',
+                'reference': 'https://github.com/openclaw/openclaw, https://vulncheck.com',
+                'description': 'Privilege escalation vulnerability in openclaw.',
+            }
+        }
+        normalized = self.reader._normalize_vulnerability(source)
+        self.assertEqual(normalized['cve_id'], 'CVE-2026-33579')
+        self.assertEqual(normalized['cvss_score'], 9.9)
+        self.assertEqual(normalized['severity'], 'Critical')
+        self.assertEqual(normalized['agent_name'], 'kalitest')
+        self.assertEqual(normalized['os'], 'Kali GNU/Linux 2026.3')
+        self.assertEqual(normalized['package_name'], 'openclaw')
+        self.assertEqual(normalized['installed_version'], '2026.2.19-2')
+
+    def test_build_query_sort_clauses(self):
+        query = self.reader._build_query({'severity': 'High'}, 50, 0)
+        sort_fields = [list(item.keys())[0] for item in query['sort']]
+        self.assertIn('vulnerability.score.base', sort_fields)
+        self.assertIn('vulnerability.detected_at', sort_fields)
+
+    def test_model_reference_properties(self):
+        case = VulnerabilityCase.objects.create(
+            vulnerability_key='CVE-2026-9999::001::testpkg',
+            agent_id='001',
+            cve_id='CVE-2026-9999',
+            reference_url='https://example.com/advisory1, https://example.com/advisory2',
+        )
+        self.assertEqual(case.primary_reference_url, 'https://example.com/advisory1')
+        self.assertEqual(len(case.reference_list), 2)
+        self.assertIn('https://example.com/advisory2', case.reference_list)
+
+
+class SyncCommandTests(TestCase):
+    def test_management_command_output(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from unittest.mock import patch
+
+        fake_vuln = {
+            'cve_id': 'CVE-2026-1000',
+            'severity': 'High',
+            'cvss_score': 8.5,
+            'package_name': 'testpkg',
+            'installed_version': '1.0.0',
+            'agent_id': '001',
+            'agent_name': 'kalitest',
+            'reference': 'https://example.com',
+            'description': 'Test vulnerability',
+        }
+        with patch('vulnerabilities.services.wazuh_reader.WazuhVulnerabilityReader.fetch_vulnerabilities') as mock_fetch:
+            mock_fetch.return_value = {
+                'success': True,
+                'total': 1,
+                'returned': 1,
+                'vulnerabilities': [fake_vuln],
+            }
+            out = StringIO()
+            call_command('sync_wazuh_vulnerabilities', size=10, stdout=out)
+            output = out.getvalue()
+            self.assertIn('Sync complete', output)
+            self.assertEqual(VulnerabilityCase.objects.filter(cve_id='CVE-2026-1000').count(), 1)
+
