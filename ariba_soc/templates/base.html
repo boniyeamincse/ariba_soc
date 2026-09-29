@@ -24,44 +24,130 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     {% with role=user.analyst_profile.role %}
-                    {% if role != 'MONITOR' %}
-                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:table' %}"><i class="bi bi-table"></i> Alerts</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:board' %}"><i class="bi bi-kanban"></i> Board</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:my_alerts' %}"><i class="bi bi-person-check"></i> My Alerts {% if my_assigned_count %}<span class="badge bg-danger ms-1">{{ my_assigned_count }}</span>{% endif %}</a></li>
-                    {% endif %}
-
                     {% if role == 'MONITOR' %}
-                    <li class="nav-item"><a class="nav-link" href="{% url 'monitor:wallboard' %}"><i class="bi bi-display"></i> Wallboard</a></li>
-                    {% elif role == 'L1' or role == 'VIEWER' %}
-                    <li class="nav-item"><a class="nav-link" href="{% url 'dashboard:l1' %}"><i class="bi bi-graph-up"></i> Dashboard</a></li>
-                    {% elif role == 'L2' %}
-                    <li class="nav-item"><a class="nav-link" href="{% url 'dashboard:l2' %}"><i class="bi bi-graph-up"></i> Dashboard</a></li>
-                    {% elif role == 'L3' or role == 'SOC_ENG' %}
-                    <li class="nav-item"><a class="nav-link" href="{% url 'dashboard:l3' %}"><i class="bi bi-graph-up"></i> Dashboard</a></li>
-                    {% elif role == 'SOC_MGR' or role == 'ADMIN' %}
-                    <li class="nav-item"><a class="nav-link" href="{% url 'dashboard:manager' %}"><i class="bi bi-graph-up"></i> Dashboard</a></li>
-                    {% endif %}
-
-                    {% if role != 'MONITOR' %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.app_name == 'monitor' and request.resolver_match.url_name == 'wallboard' %}active{% endif %}" href="{% url 'monitor:wallboard' %}">
+                            <i class="bi bi-display"></i> Wallboard
+                        </a>
+                    </li>
+                    {% else %}
+                    <!-- Dashboards Dropdown -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-file-text"></i> Reports</a>
-                        <ul class="dropdown-menu ariba-dropdown">
-                            <li><a class="dropdown-item" href="{% url 'reports:home' %}"><i class="bi bi-file-earmark-text"></i> Scheduled Reports</a></li>
-                            <li><a class="dropdown-item" href="{% url 'reports:mtta_mttr' %}"><i class="bi bi-speedometer2"></i> MTTA / MTTR Analytics</a></li>
+                        <a class="nav-link dropdown-toggle {% if request.resolver_match.app_name == 'dashboard' or request.resolver_match.app_name == 'monitor' %}active{% endif %}" href="#" data-bs-toggle="dropdown" id="dashboardsDropdown" role="button" aria-expanded="false">
+                            <i class="bi bi-speedometer2"></i> Dashboards
+                        </a>
+                        <ul class="dropdown-menu ariba-dropdown" aria-labelledby="dashboardsDropdown">
+                            <li><h6 class="dropdown-header text-muted text-uppercase small fw-bold"><i class="bi bi-grid-1x2 me-1"></i> Operations Cockpits</h6></li>
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.app_name == 'dashboard' and request.resolver_match.url_name == 'home' %}active{% endif %}" href="{% url 'dashboard:home' %}">
+                                    <i class="bi bi-activity text-info me-2"></i> Executive Overview
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.app_name == 'monitor' and request.resolver_match.url_name == 'wallboard' %}active{% endif %}" href="{% url 'monitor:wallboard' %}">
+                                    <i class="bi bi-display text-primary me-2"></i> Live Wallboard
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header text-muted text-uppercase small fw-bold"><i class="bi bi-layers me-1"></i> SOC Analyst Tiers</h6></li>
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.app_name == 'dashboard' and request.resolver_match.url_name == 'l1' %}active{% endif %}" href="{% url 'dashboard:l1' %}">
+                                    <span class="badge bg-primary-subtle text-primary border border-primary me-2">T1</span> Tier 1 Triage Queue
+                                </a>
+                            </li>
+                            {% if role in 'L2,L3,SOC_ENG,SOC_MGR,ADMIN' or user.is_superuser %}
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.app_name == 'dashboard' and request.resolver_match.url_name == 'l2' %}active{% endif %}" href="{% url 'dashboard:l2' %}">
+                                    <span class="badge bg-warning-subtle text-warning border border-warning me-2">T2</span> Tier 2 Investigation
+                                </a>
+                            </li>
+                            {% endif %}
+                            {% if role in 'L3,SOC_ENG,SOC_MGR,ADMIN' or user.is_superuser %}
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.app_name == 'dashboard' and request.resolver_match.url_name == 'l3' %}active{% endif %}" href="{% url 'dashboard:l3' %}">
+                                    <span class="badge bg-danger-subtle text-danger border border-danger me-2">T3</span> Tier 3 Advanced Threats
+                                </a>
+                            </li>
+                            {% endif %}
+                            {% if role in 'SOC_MGR,ADMIN' or user.is_superuser %}
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.app_name == 'dashboard' and request.resolver_match.url_name == 'manager' %}active{% endif %}" href="{% url 'dashboard:manager' %}">
+                                    <span class="badge bg-info-subtle text-info border border-info me-2">MGR</span> SOC Manager
+                                </a>
+                            </li>
+                            {% endif %}
                         </ul>
                     </li>
-                    {% if role != 'VIEWER' and role != 'MONITOR' %}
-                    <li class="nav-item"><a class="nav-link" href="{% url 'hunting:live_search' %}"><i class="bi bi-crosshair"></i> Threat Hunting</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'vulnerabilities:overview' %}"><i class="bi bi-shield-exclamation"></i> Vulnerabilities</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'alerts:assets_list' %}"><i class="bi bi-hdd-network"></i> Assets</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'incidents:list' %}"><i class="bi bi-exclamation-triangle"></i> Incidents</a></li>
+
+                    <!-- Alerts Menu Items -->
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.app_name == 'alerts' and request.resolver_match.url_name == 'table' %}active{% endif %}" href="{% url 'alerts:table' %}">
+                            <i class="bi bi-table"></i> Alerts
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.app_name == 'alerts' and request.resolver_match.url_name == 'board' %}active{% endif %}" href="{% url 'alerts:board' %}">
+                            <i class="bi bi-kanban"></i> Board
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.app_name == 'alerts' and request.resolver_match.url_name == 'my_alerts' %}active{% endif %}" href="{% url 'alerts:my_alerts' %}">
+                            <i class="bi bi-person-check"></i> My Alerts {% if my_assigned_count %}<span class="badge bg-danger ms-1">{{ my_assigned_count }}</span>{% endif %}
+                        </a>
+                    </li>
+
+                    <!-- Reports Dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.resolver_match.app_name == 'reports' %}active{% endif %}" href="#" data-bs-toggle="dropdown" id="reportsDropdown">
+                            <i class="bi bi-file-text"></i> Reports
+                        </a>
+                        <ul class="dropdown-menu ariba-dropdown" aria-labelledby="reportsDropdown">
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.app_name == 'reports' and request.resolver_match.url_name == 'home' %}active{% endif %}" href="{% url 'reports:home' %}">
+                                    <i class="bi bi-file-earmark-text me-2"></i> Scheduled Reports
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.app_name == 'reports' and request.resolver_match.url_name == 'mtta_mttr' %}active{% endif %}" href="{% url 'reports:mtta_mttr' %}">
+                                    <i class="bi bi-speedometer2 text-info me-2"></i> MTTA / MTTR Analytics
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
+                    {% if role != 'VIEWER' %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.app_name == 'hunting' %}active{% endif %}" href="{% url 'hunting:live_search' %}">
+                            <i class="bi bi-crosshair"></i> Threat Hunting
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.app_name == 'vulnerabilities' %}active{% endif %}" href="{% url 'vulnerabilities:overview' %}">
+                            <i class="bi bi-shield-exclamation"></i> Vulnerabilities
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.app_name == 'alerts' and request.resolver_match.url_name == 'assets_list' %}active{% endif %}" href="{% url 'alerts:assets_list' %}">
+                            <i class="bi bi-hdd-network"></i> Assets
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.app_name == 'incidents' %}active{% endif %}" href="{% url 'incidents:list' %}">
+                            <i class="bi bi-exclamation-triangle"></i> Incidents
+                        </a>
+                    </li>
                     {% endif %}
-                    <li class="nav-item"><a class="nav-link" href="{% url 'audit:list' %}"><i class="bi bi-journal-text"></i> Audit Logs</a></li>
+
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.app_name == 'audit' %}active{% endif %}" href="{% url 'audit:list' %}">
+                            <i class="bi bi-journal-text"></i> Audit Logs
+                        </a>
+                    </li>
                     {% endif %}
 
                     {% if role in settings_roles %}
                     <li class="nav-item dropdown dropdown-mega">
-                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.resolver_match.app_name == 'settings' %}active{% endif %}" href="#" data-bs-toggle="dropdown">
                             <i class="bi bi-gear"></i> Settings
                         </a>
                         <div class="dropdown-menu ariba-dropdown dropdown-mega-menu p-3">
@@ -107,9 +193,6 @@
                             </div>
                         </div>
                     </li>
-                    {% endif %}
-                    {% if role != 'MONITOR' %}
-                    <li class="nav-item"><a class="nav-link" href="{% url 'monitor:wallboard' %}" target="_blank"><i class="bi bi-display"></i> Wallboard</a></li>
                     {% endif %}
                     {% endwith %}
                 </ul>
