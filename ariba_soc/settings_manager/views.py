@@ -1326,3 +1326,51 @@ def suppression_rule_delete(request, pk):
 
 
 
+
+from django.http import JsonResponse
+import json
+from alerts.models import Alert
+from django.utils import timezone
+from datetime import timedelta
+
+def suppression_simulate(request):
+    if not _check_settings_access(request.user):
+        return JsonResponse({'status': 'error', 'message': 'Access denied'}, status=403)
+    
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            # Create an in-memory rule instance
+            rule = AlertSuppressionRule(
+                rule_id=data.get('rule_id', ''),
+                source_ip=data.get('source_ip', ''),
+                destination_ip=data.get('destination_ip', ''),
+                hostname=data.get('hostname', ''),
+                agent_id=data.get('agent_id', ''),
+                username=data.get('username', ''),
+                is_regex=data.get('is_regex', False),
+                is_active=True
+            )
+            
+            # Fetch alerts from last 30 days (limit to 10000 for performance)
+            thirty_days_ago = timezone.now() - timedelta(days=30)
+            recent_alerts = Alert.objects.filter(timestamp__gte=thirty_days_ago).values(
+                'rule_id', 'source_ip', 'destination_ip', 'hostname', 'agent_id', 'username'
+            )[:10000]
+            
+            match_count = 0
+            for alert_data in recent_alerts:
+                if rule.matches(alert_data):
+                    match_count += 1
+            
+            total_checked = len(recent_alerts)
+            return JsonResponse({
+                'status': 'success',
+                'match_count': match_count,
+                'total_checked': total_checked,
+                'days': 30
+            })
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=405)

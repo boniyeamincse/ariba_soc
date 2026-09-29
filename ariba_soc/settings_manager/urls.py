@@ -57,6 +57,7 @@ urlpatterns = [
     path('aggregation/', views.aggregation_settings, name='aggregation'),
     path('aggregation/toggle/', views.aggregation_toggle, name='aggregation_toggle'),
     path('suppression/', views.suppression_rules, name='suppression_rules'),
+    path('suppression/simulate/', views.suppression_simulate, name='suppression_simulate'),
     path('suppression/create/', views.suppression_rule_create, name='suppression_rule_create'),
     path('suppression/<int:pk>/edit/', views.suppression_rule_edit, name='suppression_rule_edit'),
     path('suppression/<int:pk>/toggle/', views.suppression_rule_toggle, name='suppression_rule_toggle'),

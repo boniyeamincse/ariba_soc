@@ -208,15 +208,21 @@
                                 <label class="form-check-label fw-bold ms-2">Rule Active</label>
                             </div>
                         </div>
-                        <div class="col-12">
+                        <div class="col-12 mt-2">
                             <label class="form-label small fw-bold">Justification / Reason</label>
                             {{ form.reason }}
                         </div>
                     </div>
+                    <div id="simulateResultBox" class="alert alert-info mt-3 mb-0 d-none small"></div>
                 </div>
-                <div class="modal-footer border-top">
-                    <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-check-lg"></i> Save & Activate</button>
+                <div class="modal-footer border-top d-flex justify-content-between">
+                    <div>
+                        <button type="button" class="btn btn-ariba-outline btn-sm text-info border-info" onclick="simulateRule(this)"><i class="bi bi-play-circle"></i> Run Simulation</button>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-check-lg"></i> Save Rule</button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -233,4 +239,55 @@
     });
 </script>
 {% endif %}
+<script>
+function simulateRule(btn) {
+    const form = btn.closest('form');
+    const resultBox = document.getElementById('simulateResultBox');
+    
+    // Gather form data
+    const data = {
+        rule_id: form.querySelector('[name=rule_id]').value,
+        source_ip: form.querySelector('[name=source_ip]').value,
+        destination_ip: form.querySelector('[name=destination_ip]').value,
+        hostname: form.querySelector('[name=hostname]').value,
+        agent_id: form.querySelector('[name=agent_id]').value,
+        username: form.querySelector('[name=username]').value,
+        is_regex: form.querySelector('[name=is_regex]').checked
+    };
+    
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Simulating...';
+    btn.disabled = true;
+    resultBox.classList.add('d-none');
+    
+    fetch('{% url "settings:suppression_simulate" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+        resultBox.classList.remove('d-none');
+        if(res.status === 'success') {
+            resultBox.className = 'alert alert-info mt-3 mb-0 small';
+            resultBox.innerHTML = `<i class="bi bi-info-circle-fill"></i> <strong>Simulation Complete:</strong> This rule would have dropped <strong>${res.match_count}</strong> alerts out of ${res.total_checked} checked over the last ${res.days} days.`;
+        } else {
+            resultBox.className = 'alert alert-danger mt-3 mb-0 small';
+            resultBox.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i> Error: ${res.message}`;
+        }
+    })
+    .catch(err => {
+        resultBox.classList.remove('d-none');
+        resultBox.className = 'alert alert-danger mt-3 mb-0 small';
+        resultBox.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i> Error: ${err.message}`;
+    })
+    .finally(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+}
+</script>
 {% endblock %}
