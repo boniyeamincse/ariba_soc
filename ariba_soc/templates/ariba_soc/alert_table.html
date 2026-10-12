@@ -25,7 +25,8 @@
                     <option value="verdict">Change Verdict</option>
                     <option value="close">Close</option>
                     <option value="archive">Archive</option>
-                    <option value="assign">Assign</option>
+                    <option value="assign">Assign Analyst</option>
+                    <option value="assign_team">Assign SOC Team</option>
                 </select>
                 <select name="value" class="form-select form-select-sm" style="width:auto; display:none;" id="bulkValueSelect">
                 </select>
@@ -33,6 +34,12 @@
                     <option value="">Select user...</option>
                     {% for u in users %}
                     <option value="{{ u.id }}">{{ u.username }}</option>
+                    {% endfor %}
+                </select>
+                <select name="value" class="form-select form-select-sm" style="width:auto; display:none;" id="bulkTeamSelect">
+                    <option value="">Select SOC Team...</option>
+                    {% for t in soc_teams %}
+                    <option value="{{ t.id }}">{{ t.name }} ({{ t.get_tier_display }})</option>
                     {% endfor %}
                 </select>
                 <button type="submit" class="btn btn-ariba-primary btn-sm" id="bulkApplyBtn">Apply</button>
@@ -54,6 +61,7 @@
                         <th><a href="?sort={% if current_filters.sort == 'severity' %}-{% endif %}severity" class="text-decoration-none text-secondary">Severity</a></th>
                         <th><a href="?sort={% if current_filters.sort == 'status' %}-{% endif %}status" class="text-decoration-none text-secondary">Status</a></th>
                         <th class="d-none d-lg-table-cell"><a href="?sort={% if current_filters.sort == 'verdict' %}-{% endif %}verdict" class="text-decoration-none text-secondary">Verdict</a></th>
+                        <th class="d-none d-lg-table-cell">Team</th>
                         <th class="d-none d-lg-table-cell">Assignee</th>
                         <th class="d-none d-lg-table-cell">Source</th>
                         <th class="d-none d-lg-table-cell">Host</th>
@@ -80,6 +88,19 @@
                         <td>{% include 'ariba_soc/_status_pill.html' with status=alert.status %}</td>
                         <td class="d-none d-lg-table-cell">{% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}</td>
                         <td class="d-none d-lg-table-cell">
+                            {% if alert.assigned_team %}
+                            <a href="{% url 'settings:team_edit' alert.assigned_team.id %}" class="text-decoration-none">
+                                <span class="badge border" style="background: rgba(30, 41, 59, 0.75); border-color: rgba(59, 130, 246, 0.3) !important; color: #93c5fd; font-size: 0.72rem;" title="Shift: {{ alert.assigned_team.get_shift_type_display }}">
+                                    <i class="bi bi-diagram-3-fill me-1 text-primary"></i>{{ alert.assigned_team.name|truncatechars:18 }}
+                                </span>
+                            </a>
+                            {% elif alert.current_owner_team %}
+                            <span class="badge bg-dark border border-secondary text-secondary" style="font-size: 0.72rem;">{{ alert.current_owner_team }}</span>
+                            {% else %}
+                            <span class="text-muted small">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="d-none d-lg-table-cell">
                             {% if alert.assignee %}
                             <span class="badge bg-info bg-opacity-25 text-info">{{ alert.assignee.username }}</span>
                             {% else %}
@@ -103,6 +124,7 @@
                                 data-alert-id="{{ alert.id }}"
                                 data-alert-name="{{ alert.alert_name|escapejs }}"
                                 data-assignee-id="{{ alert.assignee_id|default:'' }}"
+                                data-assigned-team-id="{{ alert.assigned_team_id|default:'' }}"
                                 data-status="{{ alert.status }}"
                                 data-severity="{{ alert.severity }}"
                                 data-verdict="{{ alert.verdict }}"
@@ -112,13 +134,13 @@
                         </td>
                     </tr>
                     <tr class="d-none expanded-detail" id="detail-{{ alert.id }}">
-                        <td colspan="12" class="p-3">
+                        <td colspan="13" class="p-3">
                             {% include 'ariba_soc/_alert_expanded.html' with alert=alert %}
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="12" class="text-center py-5">
+                        <td colspan="13" class="text-center py-5">
                             <i class="bi bi-inbox" style="font-size: 3rem; color: var(--text-muted);"></i>
                             <p class="mt-2 text-muted">No alerts found</p>
                         </td>
@@ -158,10 +180,10 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.addEventListener('click', function() {
             var alertId = this.getAttribute('data-alert-id');
             document.getElementById('editAlertForm').action = "{% url 'alerts:edit' 0 %}".replace('/0/', '/' + alertId + '/');
-            ['assignee','status','severity','verdict','priority'].forEach(function(field) {
+            ['assignee','assigned_team','status','severity','verdict','priority'].forEach(function(field) {
                 var el = document.getElementById('id_' + field);
-                var val = btn.getAttribute('data-' + field.replace('_','-'));
-                if (el && val) el.value = val;
+                var val = btn.getAttribute('data-' + field.replace('_','-') + '-id') || btn.getAttribute('data-' + field.replace('_','-'));
+                if (el) el.value = val || '';
             });
         });
     });
@@ -175,6 +197,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var bulkActionSelect = document.getElementById('bulkActionSelect');
     var bulkValueSelect = document.getElementById('bulkValueSelect');
     var bulkAssigneeSelect = document.getElementById('bulkAssigneeSelect');
+    var bulkTeamSelect = document.getElementById('bulkTeamSelect');
 
     function updateBulkBar() {
         var checked = document.querySelectorAll('.alert-checkbox:checked');
@@ -202,6 +225,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var val = this.value;
         bulkValueSelect.style.display = 'none';
         bulkAssigneeSelect.style.display = 'none';
+        if (bulkTeamSelect) bulkTeamSelect.style.display = 'none';
         bulkValueSelect.innerHTML = '';
         if (val === 'status') {
             bulkValueSelect.style.display = 'inline-block';
@@ -220,6 +244,8 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         } else if (val === 'assign') {
             bulkAssigneeSelect.style.display = 'inline-block';
+        } else if (val === 'assign_team' && bulkTeamSelect) {
+            bulkTeamSelect.style.display = 'inline-block';
         }
     });
 

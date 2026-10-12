@@ -9,7 +9,7 @@
                 {% csrf_token %}
                 <div class="modal-body">
                     <div class="row g-3">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label text-secondary small">Assignee</label>
                             <select name="assignee" id="id_assignee" class="form-select">
                                 <option value="">Unassigned</option>
@@ -18,7 +18,16 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
+                            <label class="form-label text-secondary small">SOC Team</label>
+                            <select name="assigned_team" id="id_assigned_team" class="form-select">
+                                <option value="">Unassigned Team</option>
+                                {% for t in soc_teams %}
+                                <option value="{{ t.id }}">{{ t.name }} ({{ t.get_tier_display }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
                             <label class="form-label text-secondary small">Priority</label>
                             <select name="priority" id="id_priority" class="form-select">
                                 <option value="Low">Low</option>
