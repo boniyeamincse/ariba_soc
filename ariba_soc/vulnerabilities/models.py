@@ -38,6 +38,7 @@ ALLOWED_TRANSITIONS = {
 class VulnerabilityCase(models.Model):
     vulnerability_key = models.CharField(max_length=255, unique=True)
     agent_id = models.CharField(max_length=50)
+    agent_name = models.CharField(max_length=255, blank=True)
     cve_id = models.CharField(max_length=50, db_index=True)
     package_name = models.CharField(max_length=255, blank=True)
     installed_version = models.CharField(max_length=100, blank=True)
@@ -62,7 +63,7 @@ class VulnerabilityCase(models.Model):
     cvss_score = models.FloatField(null=True, blank=True)
     severity = models.CharField(max_length=20, blank=True)
     description = models.TextField(blank=True)
-    reference_url = models.URLField(blank=True)
+    reference_url = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -83,6 +84,19 @@ class VulnerabilityCase(models.Model):
 
     def can_transition_to(self, new_status):
         return new_status in ALLOWED_TRANSITIONS.get(self.status, [])
+
+    @property
+    def primary_reference_url(self):
+        if not self.reference_url:
+            return ''
+        parts = [u.strip() for u in self.reference_url.split(',') if u.strip()]
+        return parts[0] if parts else ''
+
+    @property
+    def reference_list(self):
+        if not self.reference_url:
+            return []
+        return [u.strip() for u in self.reference_url.split(',') if u.strip()]
 
 
 class VulnerabilityAuditLog(models.Model):

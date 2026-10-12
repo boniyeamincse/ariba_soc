@@ -24,4 +24,11 @@ urlpatterns = [
     path('api/alerts/', views.alerts_api, name='alerts_api'),
     path('api/alerts/<int:alert_id>/move/', views.alert_move_api, name='alert_move_api'),
     path('notifications/read/', views.mark_notifications_read, name='mark_notifications_read'),
+    # Asset Directory (Phase 5)
+    path('assets/', views.asset_directory, name='assets_list'),
+    path('assets/create/', views.asset_create, name='asset_create'),
+    path('assets/<int:asset_id>/edit/', views.asset_edit, name='asset_edit'),
+    path('assets/<int:asset_id>/delete/', views.asset_delete, name='asset_delete'),
+    path('assets/sync-wazuh/', views.asset_sync_wazuh, name='asset_sync_wazuh'),
+    path('assets/recalculate-risk/', views.recalculate_all_alerts_risk, name='recalculate_risk'),
 ]

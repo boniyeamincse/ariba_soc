@@ -157,15 +157,18 @@ def false_positive_view(request, key):
 def sync_from_wazuh(request):
     if request.method == 'POST':
         reader = WazuhVulnerabilityReader()
-        result = reader.fetch_vulnerabilities(size=200)
+        result = reader.fetch_vulnerabilities(size=1000)
         if result.get('success'):
             from .services.normalizer import sync_vulnerability_from_indexer
             created = 0
+            updated = 0
             for vuln in result.get('vulnerabilities', []):
                 _, was_created = sync_vulnerability_from_indexer(vuln, request.user)
                 if was_created:
                     created += 1
-            messages.success(request, f'Synced {len(result["vulnerabilities"])} vulnerabilities ({created} new)')
+                else:
+                    updated += 1
+            messages.success(request, f'Synced {len(result["vulnerabilities"])} vulnerabilities ({created} new, {updated} updated)')
         else:
             messages.error(request, result.get('message', 'Sync failed'))
     return redirect('vulnerabilities:overview')

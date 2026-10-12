@@ -1,6 +1,13 @@
 <div class="kanban-card {% if alert.severity == 'Critical' %}critical-card{% elif alert.severity == 'High' %}high-card{% elif alert.severity == 'Medium' %}medium-card{% else %}low-card{% endif %}"
-     data-alert-id="{{ alert.id }}" draggable="true">
-    <div class="kanban-card-title">{{ alert.alert_name|truncatechars:60 }}</div>
+     data-alert-id="{{ alert.id }}" data-severity="{{ alert.severity }}" data-assignee-id="{{ alert.assignee_id|default:'' }}" draggable="true">
+    <div class="kanban-card-title">
+        {{ alert.alert_name|truncatechars:60 }}
+        {% if alert.event_count > 1 %}
+        <span class="badge bg-secondary bg-opacity-75 text-info ms-1" style="font-size: 0.7rem;" title="Aggregated {{ alert.event_count }} events">
+            <i class="bi bi-layers-half"></i> {{ alert.event_count }}
+        </span>
+        {% endif %}
+    </div>
     <div class="d-flex justify-content-between align-items-center mt-1">
         <div class="kanban-card-meta">
             {% include 'ariba_soc/_severity_badge.html' with severity=alert.severity %}

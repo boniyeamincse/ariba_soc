@@ -1,22 +1,64 @@
 import csv
 import io
-from datetime import timedelta
+import os
+from datetime import datetime, timedelta
 from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import HttpResponse
+from django.http import Http404, FileResponse, HttpResponse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from accounts.decorators import permission_required
 from alerts.models import Alert
 from settings_manager.models import ReportSetting
-from reports.services import generate_report
+from reports.services import generate_report, calculate_soc_manager_daily_report
 
 try:
     import openpyxl
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
+
+
+_REPORT_CONTENT_TYPES = {
+    '.pdf': 'application/pdf',
+    '.csv': 'text/csv',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.xls': 'application/vnd.ms-excel',
+}
+
+
+@login_required
+@permission_required('can_view_reports')
+def report_download(request, pk):
+    """Role-gated download of a generated report file.
+
+    Replaces the old direct /media/reports/ link that nginx served without
+    authentication. Access requires the caller's role to hold can_view_reports.
+    """
+    report = get_object_or_404(ReportSetting, pk=pk)
+    if not report.last_report_file:
+        raise Http404('No report has been generated for this setting yet.')
+
+    media_root = os.path.realpath(settings.MEDIA_ROOT)
+    reports_root = os.path.realpath(os.path.join(media_root, 'reports'))
+    filepath = os.path.realpath(os.path.join(media_root, report.last_report_file))
+
+    # Path-traversal guard: the resolved file must live under MEDIA_ROOT/reports/.
+    if not (filepath == reports_root or filepath.startswith(reports_root + os.sep)):
+        raise Http404('Invalid report path.')
+    if not os.path.isfile(filepath):
+        raise Http404('Report file not found.')
+
+    ext = os.path.splitext(filepath)[1].lower()
+    content_type = _REPORT_CONTENT_TYPES.get(ext, 'application/octet-stream')
+    return FileResponse(
+        open(filepath, 'rb'),
+        as_attachment=True,
+        filename=os.path.basename(filepath),
+        content_type=content_type,
+    )
 
 
 def _apply_export_filters(request):
@@ -44,21 +86,76 @@ def _apply_export_filters(request):
 
 @login_required
 def reports_home(request):
-    today = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    week_ago = today - timedelta(days=7)
-    month_ago = today - timedelta(days=30)
+    now = timezone.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    range_param = request.GET.get('range', '').strip()
+    custom_from = request.GET.get('date_from', '').strip()
+    custom_to = request.GET.get('date_to', '').strip()
+
+    # Intelligent default: if no range requested, use 'today' if alerts exist today,
+    # otherwise fallback to 'all' or '30d' so SOC Managers see their full alert telemetry!
+    if not range_param:
+        if Alert.objects.filter(alert_time__gte=today_start).exists():
+            range_param = 'today'
+        elif Alert.objects.filter(alert_time__gte=today_start - timedelta(days=7)).exists():
+            range_param = '7d'
+        elif Alert.objects.filter(alert_time__gte=today_start - timedelta(days=30)).exists():
+            range_param = '30d'
+        else:
+            range_param = 'all'
+
+    date_from = None
+    date_to = None
+
+    if range_param == 'today':
+        date_from = today_start
+        date_to = now
+    elif range_param == 'yesterday':
+        yesterday_start = today_start - timedelta(days=1)
+        date_from = yesterday_start
+        date_to = today_start - timedelta(microseconds=1)
+    elif range_param == '7d':
+        date_from = now - timedelta(days=7)
+        date_to = now
+    elif range_param == '30d':
+        date_from = now - timedelta(days=30)
+        date_to = now
+    elif range_param == 'all':
+        date_from = None
+        date_to = None
+    elif range_param == 'custom':
+        if custom_from:
+            try:
+                date_from = timezone.make_aware(datetime.strptime(custom_from, '%Y-%m-%d'))
+            except (ValueError, TypeError):
+                pass
+        if custom_to:
+            try:
+                parsed_to = datetime.strptime(custom_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+                date_to = timezone.make_aware(parsed_to)
+            except (ValueError, TypeError):
+                pass
+
+    report = calculate_soc_manager_daily_report(date_from=date_from, date_to=date_to)
+
+    daily_compat = {
+        'total': report['total_alerts'],
+        'open': report['open_cases'],
+        'closed': report['closed_cases'],
+        'critical': report['critical'],
+        'true_positives': report['true_positives'],
+        'false_positives': report['false_positives'],
+    }
 
     context = {
-        'daily': {
-            'total': Alert.objects.filter(alert_time__gte=today).count(),
-            'open': Alert.objects.filter(status__in=['New', 'In Progress'], alert_time__gte=today).count(),
-            'closed': Alert.objects.filter(status='Closed', alert_time__gte=today).count(),
-            'critical': Alert.objects.filter(severity='Critical', alert_time__gte=today).count(),
-            'true_positives': Alert.objects.filter(verdict='True Positive', alert_time__gte=today).count(),
-            'false_positives': Alert.objects.filter(verdict='False Positive', alert_time__gte=today).count(),
-        },
-        'weekly_total': Alert.objects.filter(alert_time__gte=week_ago).count(),
-        'monthly_total': Alert.objects.filter(alert_time__gte=month_ago).count(),
+        'report': report,
+        'daily': daily_compat,
+        'selected_range': range_param,
+        'custom_from': custom_from,
+        'custom_to': custom_to,
+        'date_from': date_from,
+        'date_to': date_to,
         'HAS_OPENPYXL': HAS_OPENPYXL,
         'report_settings': ReportSetting.objects.order_by('name'),
         'MEDIA_URL': settings.MEDIA_URL,
@@ -119,3 +216,144 @@ def export_excel(request):
     response = HttpResponse(output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = 'attachment; filename="ariba_alerts_export.xlsx"'
     return response
+
+
+# ---------------------------------------------------------------------------
+# MTTA / MTTR Analytics Views (Phase 4)
+# ---------------------------------------------------------------------------
+from datetime import datetime
+from django.contrib.auth.models import User
+from reports.services import calculate_mtta_mttr_analytics
+
+
+def _parse_mtta_filters(request):
+    range_param = request.GET.get('range', '30d')
+    severity = request.GET.get('severity', 'All')
+    assignee = request.GET.get('assignee', 'All')
+    custom_from = request.GET.get('date_from', '').strip()
+    custom_to = request.GET.get('date_to', '').strip()
+
+    now = timezone.now()
+    date_from = None
+    date_to = None
+
+    if range_param == '24h':
+        date_from = now - timedelta(hours=24)
+        date_to = now
+    elif range_param == '7d':
+        date_from = now - timedelta(days=7)
+        date_to = now
+    elif range_param == '30d':
+        date_from = now - timedelta(days=30)
+        date_to = now
+    elif range_param == '90d':
+        date_from = now - timedelta(days=90)
+        date_to = now
+    elif range_param == 'all':
+        date_from = None
+        date_to = None
+    elif range_param == 'custom':
+        if custom_from:
+            try:
+                date_from = timezone.make_aware(datetime.strptime(custom_from, '%Y-%m-%d'))
+            except (ValueError, TypeError):
+                pass
+        if custom_to:
+            try:
+                parsed_to = datetime.strptime(custom_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+                date_to = timezone.make_aware(parsed_to)
+            except (ValueError, TypeError):
+                pass
+
+    return {
+        'range': range_param,
+        'severity': severity,
+        'assignee': assignee,
+        'date_from': date_from,
+        'date_to': date_to,
+        'custom_from': custom_from,
+        'custom_to': custom_to,
+    }
+
+
+@login_required
+def mtta_mttr_analytics(request):
+    filters = _parse_mtta_filters(request)
+    metrics = calculate_mtta_mttr_analytics(
+        date_from=filters['date_from'],
+        date_to=filters['date_to'],
+        severity=filters['severity'],
+        assignee_id=filters['assignee'],
+    )
+    analysts = User.objects.filter(is_active=True).select_related('analyst_profile').order_by('username')
+    context = {
+        'metrics': metrics,
+        'selected_range': filters['range'],
+        'selected_severity': filters['severity'],
+        'selected_assignee': filters['assignee'],
+        'custom_from': filters['custom_from'],
+        'custom_to': filters['custom_to'],
+        'analysts': analysts,
+        'severities': ['Critical', 'High', 'Medium', 'Low', 'Informational'],
+    }
+    return render(request, 'ariba_soc/mtta_mttr_analytics.html', context)
+
+
+@login_required
+def export_mtta_mttr_csv(request):
+    filters = _parse_mtta_filters(request)
+    metrics = calculate_mtta_mttr_analytics(
+        date_from=filters['date_from'],
+        date_to=filters['date_to'],
+        severity=filters['severity'],
+        assignee_id=filters['assignee'],
+    )
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="ariba_mtta_mttr_sla_analytics.csv"'
+    writer = csv.writer(response)
+
+    writer.writerow(['ARIBA SOC — MTTA / MTTR & SLA PERFORMANCE REPORT'])
+    writer.writerow(['Generated on', timezone.now().strftime('%Y-%m-%d %H:%M:%S UTC')])
+    writer.writerow(['Range Filter', filters['range']])
+    writer.writerow(['Severity Filter', filters['severity']])
+    writer.writerow(['Assignee Filter', filters['assignee']])
+    writer.writerow([])
+
+    writer.writerow(['--- EXECUTIVE METRICS ---'])
+    writer.writerow(['Metric', 'Value'])
+    writer.writerow(['Total Alerts', metrics['total_alerts']])
+    writer.writerow(['Total Acknowledged', metrics['total_acknowledged']])
+    writer.writerow(['Total Resolved', metrics['total_resolved']])
+    writer.writerow(['Avg MTTA (Mean Time to Acknowledge)', metrics['avg_mtta_display']])
+    writer.writerow(['Median MTTA', metrics['median_mtta_display']])
+    writer.writerow(['Avg MTTR (Mean Time to Resolve)', metrics['avg_mttr_display']])
+    writer.writerow(['Median MTTR', metrics['median_mttr_display']])
+    writer.writerow(['SLA Compliance Rate', f"{metrics['sla_compliance_rate']}%"])
+    writer.writerow(['Total SLA Breaches', metrics['total_breached']])
+    writer.writerow([])
+
+    writer.writerow(['--- SEVERITY PERFORMANCE BREAKDOWN ---'])
+    writer.writerow(['Severity', 'Total Alerts', 'Avg MTTA', 'Median MTTA', 'Target Ack', 'Ack SLA %', 'Avg MTTR', 'Median MTTR', 'Target Resolve', 'Resolve SLA %', 'Breaches', 'Overall SLA Compliance %'])
+    for s in metrics['severity_breakdown']:
+        writer.writerow([
+            s['severity'], s['total'], s['avg_mtta_display'], s['median_mtta_display'],
+            s['ack_target_display'], f"{s['ack_compliance_pct']}%",
+            s['avg_mttr_display'], s['median_mttr_display'],
+            s['res_target_display'], f"{s['res_compliance_pct']}%",
+            s['breached'], f"{s['sla_compliance_pct']}%",
+        ])
+    writer.writerow([])
+
+    writer.writerow(['--- ANALYST PERFORMANCE LEADERBOARD ---'])
+    writer.writerow(['Analyst', 'Role', 'Assigned', 'In Progress', 'Resolved', 'Avg MTTA', 'Median MTTA', 'Avg MTTR', 'Median MTTR', 'Breaches', 'SLA Adherence %', 'TP Rate %'])
+    for a in metrics['analysts_breakdown']:
+        writer.writerow([
+            a['full_name'] or a['username'], a['role'], a['assigned'],
+            a['in_progress'], a['resolved'], a['avg_mtta_display'],
+            a['median_mtta_display'], a['avg_mttr_display'],
+            a['median_mttr_display'], a['breached'],
+            f"{a['sla_adherence_pct']}%", f"{a['tp_rate']}%",
+        ])
+
+    return response
+

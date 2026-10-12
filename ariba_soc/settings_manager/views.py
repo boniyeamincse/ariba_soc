@@ -3,21 +3,24 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.contrib.auth.models import User
-from django.db.models import Q
-from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES, SETTINGS_ALLOWED_ROLES as _FALLBACK_SETTINGS_ROLES
+from django.http import JsonResponse
+from django.db.models import Q, Sum, Count
+from django.core.paginator import Paginator
+from alerts.models import AlertAuditLog
+from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES, SETTINGS_ALLOWED_ROLES as _FALLBACK_SETTINGS_ROLES, SocTeam
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
-    DashboardSetting, AuditLogSetting, SystemSetting, SettingAuditLog,
-    IOCEnrichmentSetting
+    DashboardSetting, AuditLogSetting, AlarmSetting, AlarmSystemSetting, SystemSetting, SettingAuditLog,
+    IOCEnrichmentSetting, AlertAggregationSetting, AlertSuppressionRule
 )
 from .forms import (
-    UserManagementForm, UserEditForm, AnalystProfileForm,
+    UserManagementForm, UserEditForm, AnalystProfileForm, SocTeamForm,
     AlertSourceSettingsForm, SeveritySettingsForm, StatusSettingsForm,
     VerdictSettingsForm, SLASettingsForm, EscalationRuleForm,
     NotificationSettingForm, ReportSettingForm, DashboardSettingForm,
-    AuditLogSettingForm, SystemSettingForm, ResetPasswordForm,
-    IOCEnrichmentSettingForm
+    AuditLogSettingForm, AlarmSettingForm, AlarmSystemSettingForm, SystemSettingForm, ResetPasswordForm,
+    IOCEnrichmentSettingForm, AlertAggregationSettingForm, AlertSuppressionRuleForm
 )
 
 def _get_allowed_roles():
@@ -30,7 +33,10 @@ def _get_allowed_roles():
 def _check_settings_access(user):
     if not user.is_authenticated:
         return False
-    role = getattr(user.analyst_profile, 'role', '')
+    if user.is_superuser:
+        return True
+    profile = getattr(user, 'analyst_profile', None)
+    role = profile.role if profile else ''
     return role in _get_allowed_roles()
 
 def _log_setting_change(user, action, model_name, obj_id, old_val, new_val, request):
@@ -53,6 +59,10 @@ def settings_dashboard(request):
         'verdict_count': VerdictSettings.objects.count(),
         'sla_count': SLASettings.objects.count(),
         'escalation_count': EscalationRule.objects.filter(is_active=True).count(),
+        'alarm_count': AlarmSetting.objects.count(),
+        'alarm_enabled_count': AlarmSetting.objects.filter(is_enabled=True).count(),
+        'agg_setting': AlertAggregationSetting.load(),
+        'suppression_count': AlertSuppressionRule.objects.filter(is_active=True).count(),
         'recent_logs': SettingAuditLog.objects.select_related('user').all()[:10],
     }
     return render(request, 'settings_manager/settings_dashboard.html', ctx)
@@ -61,10 +71,30 @@ def user_management(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
         return redirect('alerts:table')
+
     search = request.GET.get('search', '')
-    users = User.objects.select_related('analyst_profile').all()
+    role_filter = request.GET.get('role', '')
+    team_filter = request.GET.get('team', '')
+    status_filter = request.GET.get('status', '')
+
+    users = User.objects.select_related('analyst_profile').all().order_by('username')
+
     if search:
-        users = users.filter(Q(username__icontains=search) | Q(first_name__icontains=search) | Q(last_name__icontains=search) | Q(email__icontains=search))
+        users = users.filter(
+            Q(username__icontains=search) |
+            Q(first_name__icontains=search) |
+            Q(last_name__icontains=search) |
+            Q(email__icontains=search)
+        )
+    if role_filter:
+        users = users.filter(analyst_profile__role=role_filter)
+    if team_filter:
+        users = users.filter(analyst_profile__team=team_filter)
+    if status_filter == 'active':
+        users = users.filter(analyst_profile__is_active=True)
+    elif status_filter == 'inactive':
+        users = users.filter(analyst_profile__is_active=False)
+
     if request.method == 'POST' and 'create' in request.POST:
         form = UserManagementForm(request.POST)
         if form.is_valid():
@@ -74,8 +104,140 @@ def user_management(request):
             return redirect('settings:user_management')
     else:
         form = UserManagementForm()
-    ctx = {'section': 'users', 'users': users, 'form': form, 'search': search}
+
+    from accounts.models import TEAM_CHOICES
+    total_users = User.objects.count()
+    active_users = User.objects.filter(analyst_profile__is_active=True).count()
+    inactive_users = total_users - active_users
+    role_counts = {r[0]: {'label': r[1], 'count': User.objects.filter(analyst_profile__role=r[0]).count()} for r in ROLE_CHOICES}
+
+    ctx = {
+        'section': 'users',
+        'users': users,
+        'form': form,
+        'search': search,
+        'role_filter': role_filter,
+        'team_filter': team_filter,
+        'status_filter': status_filter,
+        'role_choices': ROLE_CHOICES,
+        'team_choices': TEAM_CHOICES,
+        'total_users': total_users,
+        'active_users': active_users,
+        'inactive_users': inactive_users,
+        'role_counts': role_counts,
+    }
     return render(request, 'settings_manager/user_management.html', ctx)
+
+
+@require_POST
+def user_delete(request, user_id):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    user = get_object_or_404(User, id=user_id)
+    if user == request.user:
+        messages.error(request, 'You cannot delete your own account.')
+        return redirect('settings:user_management')
+    if user.is_superuser and User.objects.filter(is_superuser=True).count() <= 1:
+        messages.error(request, 'Cannot delete the only admin account.')
+        return redirect('settings:user_management')
+    username = user.username
+    _log_setting_change(request.user, f'Deleted user {username}', 'User', user.id, username, 'Deleted', request)
+    user.delete()
+    messages.success(request, f'User "{username}" permanently deleted.')
+    return redirect('settings:user_management')
+
+
+@require_POST
+def user_bulk_action(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    action = request.POST.get('action', '')
+    user_ids = request.POST.getlist('user_ids')
+    if not user_ids:
+        messages.warning(request, 'No users selected.')
+        return redirect('settings:user_management')
+
+    users_qs = User.objects.filter(id__in=user_ids).exclude(id=request.user.id).select_related('analyst_profile')
+    count = 0
+
+    if action == 'activate':
+        for u in users_qs:
+            profile = getattr(u, 'analyst_profile', None)
+            if profile and not profile.is_active:
+                profile.is_active = True
+                profile.save()
+                u.is_active = True
+                u.save()
+                count += 1
+        messages.success(request, f'Activated {count} user(s).')
+    elif action == 'deactivate':
+        for u in users_qs:
+            if u.is_superuser and User.objects.filter(is_superuser=True).count() <= 1:
+                continue
+            profile = getattr(u, 'analyst_profile', None)
+            if profile and profile.is_active:
+                profile.is_active = False
+                profile.save()
+                u.is_active = False
+                u.save()
+                count += 1
+        messages.success(request, f'Deactivated {count} user(s).')
+    elif action == 'delete':
+        for u in users_qs:
+            if u.is_superuser and User.objects.filter(is_superuser=True).count() <= 1:
+                continue
+            _log_setting_change(request.user, f'Bulk deleted user {u.username}', 'User', u.id, u.username, 'Deleted', request)
+            u.delete()
+            count += 1
+        messages.success(request, f'Deleted {count} user(s).')
+    elif action.startswith('role:'):
+        new_role = action.split(':', 1)[1]
+        valid_roles = [r[0] for r in ROLE_CHOICES]
+        if new_role in valid_roles:
+            for u in users_qs:
+                profile = getattr(u, 'analyst_profile', None)
+                if profile:
+                    old_role = profile.role
+                    profile.role = new_role
+                    profile.save()
+                    _log_setting_change(request.user, f'Bulk role change {u.username}: {old_role} -> {new_role}', 'User', u.id, old_role, new_role, request)
+                    count += 1
+            messages.success(request, f'Updated role to {new_role} for {count} user(s).')
+        else:
+            messages.error(request, 'Invalid role specified.')
+    else:
+        messages.error(request, 'Unknown bulk action.')
+
+    return redirect('settings:user_management')
+
+
+def user_export_csv(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    import csv
+    from django.http import HttpResponse
+    from django.utils.timezone import localtime
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="soc_users_export.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['Username', 'First Name', 'Last Name', 'Email', 'Role', 'Team', 'Phone', 'Designation', 'Active', 'Superuser', 'Last Login', 'Date Joined'])
+    for u in User.objects.select_related('analyst_profile').all().order_by('username'):
+        p = getattr(u, 'analyst_profile', None)
+        writer.writerow([
+            u.username, u.first_name, u.last_name, u.email,
+            getattr(p, 'role', ''), getattr(p, 'team', ''),
+            getattr(p, 'phone', ''), getattr(p, 'designation', ''),
+            'Yes' if getattr(p, 'is_active', True) else 'No',
+            'Yes' if u.is_superuser else 'No',
+            localtime(u.last_login).strftime('%Y-%m-%d %H:%M') if u.last_login else '',
+            localtime(u.date_joined).strftime('%Y-%m-%d %H:%M') if u.date_joined else '',
+        ])
+    _log_setting_change(request.user, 'Exported user list as CSV', 'User', 0, '', 'CSV Export', request)
+    return response
+
 
 def user_edit(request, user_id):
     if not _check_settings_access(request.user):
@@ -83,9 +245,9 @@ def user_edit(request, user_id):
         return redirect('alerts:table')
     user = get_object_or_404(User.objects.select_related('analyst_profile'), id=user_id)
     if request.method == 'POST':
-        form = UserEditForm(request.POST, instance=user)
+        form = UserEditForm(request.POST, request.FILES, instance=user)
         if form.is_valid():
-            form.save()
+            form.save(files=request.FILES)
             _log_setting_change(request.user, f'Edited user {user.username}', 'User', user.id, '', 'Updated', request)
             messages.success(request, 'User updated.')
             return redirect('settings:user_management')
@@ -93,6 +255,7 @@ def user_edit(request, user_id):
         form = UserEditForm(instance=user)
     ctx = {'section': 'users', 'form': form, 'edit_user': user}
     return render(request, 'settings_manager/user_edit.html', ctx)
+
 
 @require_POST
 def user_toggle_active(request, user_id):
@@ -131,41 +294,224 @@ def user_reset_password(request, user_id):
     ctx = {'section': 'users', 'form': form, 'edit_user': user}
     return render(request, 'settings_manager/user_reset_password.html', ctx)
 
+
+def team_management(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+
+    search = request.GET.get('search', '').strip()
+    tier_filter = request.GET.get('tier', '').strip()
+    shift_filter = request.GET.get('shift', '').strip()
+    status_filter = request.GET.get('status', '').strip()
+
+    teams = SocTeam.objects.select_related('lead').prefetch_related('members__user').all()
+
+    if search:
+        teams = teams.filter(
+            Q(name__icontains=search) |
+            Q(description__icontains=search) |
+            Q(lead__username__icontains=search)
+        )
+    if tier_filter:
+        teams = teams.filter(tier=tier_filter)
+    if shift_filter:
+        teams = teams.filter(shift_type=shift_filter)
+    if status_filter == 'active':
+        teams = teams.filter(is_active=True)
+    elif status_filter == 'inactive':
+        teams = teams.filter(is_active=False)
+
+    if request.method == 'POST' and 'create_team' in request.POST:
+        form = SocTeamForm(request.POST)
+        if form.is_valid():
+            from django.utils.text import slugify
+            team = form.save(commit=False)
+            base_slug = slugify(team.name)
+            slug = base_slug
+            counter = 1
+            while SocTeam.objects.filter(slug=slug).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            team.slug = slug
+            team.save()
+
+            member_ids = request.POST.getlist('members')
+            if member_ids:
+                AnalystProfile.objects.filter(user_id__in=member_ids).update(soc_team=team, team=team.tier)
+
+            _log_setting_change(request.user, f'Created SOC Team {team.name}', 'SocTeam', team.id, '', 'Created', request)
+            messages.success(request, f'SOC Team "{team.name}" created successfully.')
+            return redirect('settings:team_management')
+    else:
+        form = SocTeamForm()
+
+    total_teams = SocTeam.objects.count()
+    active_teams = SocTeam.objects.filter(is_active=True).count()
+    assigned_analysts = AnalystProfile.objects.filter(soc_team__isnull=False).count()
+    unassigned_analysts = AnalystProfile.objects.filter(soc_team__isnull=True).count()
+    all_users = User.objects.filter(is_active=True).order_by('username')
+
+    ctx = {
+        'section': 'teams',
+        'teams': teams,
+        'form': form,
+        'all_users': all_users,
+        'search': search,
+        'tier_filter': tier_filter,
+        'shift_filter': shift_filter,
+        'status_filter': status_filter,
+        'tier_choices': SocTeam.TIER_CHOICES,
+        'shift_choices': SocTeam.SHIFT_CHOICES,
+        'total_teams': total_teams,
+        'active_teams': active_teams,
+        'assigned_analysts': assigned_analysts,
+        'unassigned_analysts': unassigned_analysts,
+    }
+    return render(request, 'settings_manager/team_management.html', ctx)
+
+
+def team_edit(request, team_id):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+
+    team = get_object_or_404(SocTeam, id=team_id)
+    if request.method == 'POST':
+        form = SocTeamForm(request.POST, instance=team)
+        if form.is_valid():
+            team = form.save()
+            member_ids = [int(i) for i in request.POST.getlist('members') if i.isdigit()]
+            AnalystProfile.objects.filter(user_id__in=member_ids).update(soc_team=team, team=team.tier)
+            AnalystProfile.objects.filter(soc_team=team).exclude(user_id__in=member_ids).update(soc_team=None)
+
+            _log_setting_change(request.user, f'Updated SOC Team {team.name}', 'SocTeam', team.id, '', 'Updated', request)
+            messages.success(request, f'SOC Team "{team.name}" updated.')
+            return redirect('settings:team_management')
+    else:
+        form = SocTeamForm(instance=team)
+
+    all_users = User.objects.filter(is_active=True).order_by('username')
+    current_member_ids = list(team.members.values_list('user_id', flat=True))
+
+    ctx = {
+        'section': 'teams',
+        'team': team,
+        'form': form,
+        'all_users': all_users,
+        'current_member_ids': current_member_ids,
+    }
+    return render(request, 'settings_manager/team_edit.html', ctx)
+
+
+@require_POST
+def team_toggle(request, team_id):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    team = get_object_or_404(SocTeam, id=team_id)
+    team.is_active = not team.is_active
+    team.save(update_fields=['is_active', 'updated_at'])
+    status_str = "activated" if team.is_active else "deactivated"
+    _log_setting_change(request.user, f'Toggled SOC Team {team.name} to {status_str}', 'SocTeam', team.id, '', status_str, request)
+    messages.success(request, f'SOC Team "{team.name}" {status_str}.')
+    return redirect('settings:team_management')
+
+
+@require_POST
+def team_delete(request, team_id):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    team = get_object_or_404(SocTeam, id=team_id)
+    team_name = team.name
+    AnalystProfile.objects.filter(soc_team=team).update(soc_team=None)
+    team.delete()
+    _log_setting_change(request.user, f'Deleted SOC Team {team_name}', 'SocTeam', team_id, team_name, 'Deleted', request)
+    messages.success(request, f'SOC Team "{team_name}" deleted.')
+    return redirect('settings:team_management')
+
+
 def role_permission(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
         return redirect('alerts:table')
+
+    # All permissions shown in the matrix, grouped by category
+    PERMISSION_GROUPS = [
+        ('Alert Triage', [
+            ('View Alerts', 'can_view_alerts'),
+            ('Assign to Self', 'can_assign_self'),
+            ('Assign to Others', 'can_assign_others'),
+            ('Reassign', 'can_reassign'),
+            ('Change Status', 'can_change_status'),
+            ('Change Severity', 'can_change_severity'),
+            ('Change Verdict', 'can_change_verdict'),
+            ('Close Alert', 'can_close_alert'),
+            ('Escalate Alert', 'can_escalate_alert'),
+            ('Archive', 'can_archive'),
+        ]),
+        ('Incidents', [
+            ('View Incidents', 'can_view_incidents'),
+            ('Create Incident', 'can_create_incident'),
+            ('Mark Alert as Incident', 'can_mark_incident'),
+            ('Assign Incident', 'can_assign_incident'),
+            ('Manage Incident', 'can_manage_incident'),
+            ('Close Incident', 'can_close_incident'),
+            ('Reopen Incident', 'can_reopen_incident'),
+            ('Link Alerts to Incident', 'can_link_incident_alerts'),
+        ]),
+        ('Remediation', [
+            ('Add Remediation', 'can_add_remediation'),
+        ]),
+        ('Threat Hunting', [
+            ('Basic Hunting', 'can_use_basic_hunting'),
+            ('Advanced Hunting', 'can_use_advanced_hunting'),
+        ]),
+        ('Reports', [
+            ('View Reports', 'can_view_reports'),
+            ('Export Reports', 'can_export_reports'),
+        ]),
+        ('Administration', [
+            ('Manage Users', 'can_manage_users'),
+            ('Manage Wazuh', 'can_manage_wazuh'),
+            ('View Audit Logs', 'can_view_audit_logs'),
+        ]),
+    ]
+
+    # Flat list of all permission field names shown in the UI
+    ALL_UI_FIELDS = [pf for _, perms in PERMISSION_GROUPS for _, pf in perms]
+
     roles = RolePermission.objects.all()
+    role_map = {rp.role: rp for rp in roles}
+
     if request.method == 'POST':
         for role_choice, _ in ROLE_CHOICES:
-            rp, _ = RolePermission.objects.get_or_create(role=role_choice[0] if isinstance(role_choice, tuple) else role_choice)
-            for field in [f.name for f in RolePermission._meta.get_fields() if f.name.startswith('can_')]:
+            rc = role_choice if not isinstance(role_choice, tuple) else role_choice[0]
+            rp, _ = RolePermission.objects.get_or_create(role=rc)
+            # Only update the fields that are rendered in the UI — never touch hidden fields
+            for field in ALL_UI_FIELDS:
                 val = request.POST.get(f'{rp.role}_{field}') == 'on'
                 setattr(rp, field, val)
             rp.save()
         _log_setting_change(request.user, 'Updated role permissions', 'RolePermission', 0, '', 'Updated', request)
-        messages.success(request, 'Permissions updated.')
+        messages.success(request, 'Permissions saved.')
         return redirect('settings:role_permission')
-    PERMISSION_FIELDS = [
-        ('View Alerts', 'can_view_alerts'),
-        ('Assign to Self', 'can_assign_self'),
-        ('Assign to Others', 'can_assign_others'),
-        ('Change Status', 'can_change_status'),
-        ('Change Severity', 'can_change_severity'),
-        ('Change Verdict', 'can_change_verdict'),
-        ('Close Alert', 'can_close_alert'),
-        ('Escalate Alert', 'can_escalate_alert'),
-        ('View Reports', 'can_view_reports'),
-        ('Manage Users', 'can_manage_users'),
-        ('Manage Wazuh', 'can_manage_wazuh'),
-        ('View Audit Logs', 'can_view_audit_logs'),
-        ('Archive', 'can_archive'),
-        ('Reassign', 'can_reassign'),
-        ('Add Remediation', 'can_add_remediation'),
-        ('Mark as Incident', 'can_mark_incident'),
-        ('Export Reports', 'can_export_reports'),
-    ]
-    ctx = {'section': 'roles', 'roles': roles, 'role_choices': ROLE_CHOICES, 'permissions': PERMISSION_FIELDS}
+
+    # Count users per role for column header
+    role_user_counts = {}
+    for rc, label in ROLE_CHOICES:
+        role_user_counts[rc] = User.objects.filter(analyst_profile__role=rc).count()
+
+    ctx = {
+        'section': 'roles',
+        'roles': roles,
+        'role_map': role_map,
+        'role_choices': ROLE_CHOICES,
+        'permission_groups': PERMISSION_GROUPS,
+        'all_ui_fields': ALL_UI_FIELDS,
+        'role_user_counts': role_user_counts,
+    }
     return render(request, 'settings_manager/role_permission.html', ctx)
 
 def analyst_profile_list(request):
@@ -173,7 +519,7 @@ def analyst_profile_list(request):
         messages.error(request, 'Access denied.')
         return redirect('alerts:table')
     search = request.GET.get('search', '')
-    profiles = AnalystProfile.objects.select_related('user').all()
+    profiles = AnalystProfile.objects.select_related('user', 'soc_team').all()
     if search:
         profiles = profiles.filter(Q(user__username__icontains=search) | Q(user__first_name__icontains=search) | Q(designation__icontains=search))
     if request.method == 'POST' and 'update' in request.POST:
@@ -187,52 +533,15 @@ def analyst_profile_list(request):
             return redirect('settings:analyst_profile')
     else:
         form = AnalystProfileForm()
-    ctx = {'section': 'analysts', 'profiles': profiles, 'form': form, 'search': search}
+    teams = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
+    ctx = {'section': 'analysts', 'profiles': profiles, 'form': form, 'search': search, 'teams': teams}
     return render(request, 'settings_manager/analyst_profile.html', ctx)
 
 def wazuh_api_settings(request):
-    if not _check_settings_access(request.user):
-        messages.error(request, 'Access denied.')
-        return redirect('alerts:table')
-    config = None
-    try:
-        from wazuh_integration.models import WazuhConfiguration
-        config = WazuhConfiguration.objects.first()
-    except Exception:
-        pass
-    if request.method == 'POST':
-        from wazuh_integration.forms import WazuhConfigurationForm
-        form = WazuhConfigurationForm(request.POST, instance=config)
-        if form.is_valid():
-            form.save()
-            _log_setting_change(request.user, 'Updated Wazuh API settings', 'WazuhConfiguration', config.id if config else 0, '', 'Updated', request)
-            messages.success(request, 'Wazuh API settings saved.')
-            return redirect('settings:wazuh_api')
-    else:
-        from wazuh_integration.forms import WazuhConfigurationForm
-        form = WazuhConfigurationForm(instance=config)
-    ctx = {'section': 'wazuh_api', 'form': form, 'config': config}
-    return render(request, 'settings_manager/wazuh_api_settings.html', ctx)
+    return redirect('wazuh_integration:status')
 
 def alert_source_settings(request):
-    if not _check_settings_access(request.user):
-        messages.error(request, 'Access denied.')
-        return redirect('alerts:table')
-    search = request.GET.get('search', '')
-    sources = AlertSourceSettings.objects.all()
-    if search:
-        sources = sources.filter(name__icontains=search)
-    if request.method == 'POST':
-        form = AlertSourceSettingsForm(request.POST)
-        if form.is_valid():
-            form.save()
-            _log_setting_change(request.user, 'Created alert source', 'AlertSourceSettings', 0, '', form.cleaned_data['name'], request)
-            messages.success(request, 'Source created.')
-            return redirect('settings:alert_sources')
-    else:
-        form = AlertSourceSettingsForm()
-    ctx = {'section': 'sources', 'sources': sources, 'form': form, 'search': search}
-    return render(request, 'settings_manager/alert_source_settings.html', ctx)
+    return redirect('wazuh_integration:status')
 
 def alert_source_edit(request, pk):
     if not _check_settings_access(request.user):
@@ -261,6 +570,18 @@ def alert_source_toggle(request, pk):
     obj.save()
     _log_setting_change(request.user, f'{"Activated" if obj.is_active else "Deactivated"} source {obj.name}', 'AlertSourceSettings', obj.id, '', f'Active={obj.is_active}', request)
     messages.success(request, f'Source {"activated" if obj.is_active else "deactivated"}.')
+    return redirect('settings:alert_sources')
+
+@require_POST
+def alert_source_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    obj = get_object_or_404(AlertSourceSettings, id=pk)
+    name = obj.name
+    _log_setting_change(request.user, f'Deleted alert source {name}', 'AlertSourceSettings', obj.id, name, 'Deleted', request)
+    obj.delete()
+    messages.success(request, f'Alert Source "{name}" permanently deleted.')
     return redirect('settings:alert_sources')
 
 def severity_settings(request):
@@ -308,6 +629,18 @@ def severity_toggle(request, pk):
     messages.success(request, f'Severity {"activated" if obj.is_active else "deactivated"}.')
     return redirect('settings:severities')
 
+@require_POST
+def severity_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    obj = get_object_or_404(SeveritySettings, id=pk)
+    name = obj.name
+    _log_setting_change(request.user, f'Deleted severity {name}', 'SeveritySettings', obj.id, name, 'Deleted', request)
+    obj.delete()
+    messages.success(request, f'Severity "{name}" permanently deleted.')
+    return redirect('settings:severities')
+
 def status_settings(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -351,6 +684,18 @@ def status_toggle(request, pk):
     obj.is_active = not obj.is_active
     obj.save()
     messages.success(request, f'Status {"activated" if obj.is_active else "deactivated"}.')
+    return redirect('settings:statuses')
+
+@require_POST
+def status_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    obj = get_object_or_404(StatusSettings, id=pk)
+    name = obj.name
+    _log_setting_change(request.user, f'Deleted status {name}', 'StatusSettings', obj.id, name, 'Deleted', request)
+    obj.delete()
+    messages.success(request, f'Status "{name}" permanently deleted.')
     return redirect('settings:statuses')
 
 def verdict_settings(request):
@@ -398,6 +743,18 @@ def verdict_toggle(request, pk):
     messages.success(request, f'Verdict {"activated" if obj.is_active else "deactivated"}.')
     return redirect('settings:verdicts')
 
+@require_POST
+def verdict_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    obj = get_object_or_404(VerdictSettings, id=pk)
+    name = obj.name
+    _log_setting_change(request.user, f'Deleted verdict {name}', 'VerdictSettings', obj.id, name, 'Deleted', request)
+    obj.delete()
+    messages.success(request, f'Verdict "{name}" permanently deleted.')
+    return redirect('settings:verdicts')
+
 def sla_settings(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -443,6 +800,18 @@ def sla_toggle(request, pk):
     messages.success(request, f'SLA {"activated" if obj.is_active else "deactivated"}.')
     return redirect('settings:sla')
 
+@require_POST
+def sla_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    obj = get_object_or_404(SLASettings, id=pk)
+    name = str(obj.severity)
+    _log_setting_change(request.user, f'Deleted SLA for severity {name}', 'SLASettings', obj.id, name, 'Deleted', request)
+    obj.delete()
+    messages.success(request, f'SLA for "{name}" permanently deleted.')
+    return redirect('settings:sla')
+
 def escalation_settings(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -486,6 +855,18 @@ def escalation_toggle(request, pk):
     obj.is_active = not obj.is_active
     obj.save()
     messages.success(request, f'Rule {"activated" if obj.is_active else "deactivated"}.')
+    return redirect('settings:escalation')
+
+@require_POST
+def escalation_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    obj = get_object_or_404(EscalationRule, id=pk)
+    name = obj.rule_name
+    _log_setting_change(request.user, f'Deleted escalation rule {name}', 'EscalationRule', obj.id, name, 'Deleted', request)
+    obj.delete()
+    messages.success(request, f'Escalation Rule "{name}" permanently deleted.')
     return redirect('settings:escalation')
 
 def notification_settings(request):
@@ -612,6 +993,48 @@ def dashboard_edit(request, pk):
     ctx = {'section': 'dashboard', 'form': form, 'object': obj}
     return render(request, 'settings_manager/dashboard_edit.html', ctx)
 
+def audit_log_list(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    
+    log_type = request.GET.get('type', 'alerts')
+    search_q = request.GET.get('q', '').strip()
+    page = request.GET.get('page', 1)
+
+    if log_type == 'settings':
+        qs = SettingAuditLog.objects.select_related('user').all().order_by('-created_at')
+        if search_q:
+            qs = qs.filter(
+                Q(action__icontains=search_q) |
+                Q(model_name__icontains=search_q) |
+                Q(user__username__icontains=search_q) |
+                Q(ip_address__icontains=search_q)
+            )
+    else:
+        qs = AlertAuditLog.objects.select_related('user', 'alert').all().order_by('-created_at')
+        if search_q:
+            qs = qs.filter(
+                Q(action__icontains=search_q) |
+                Q(alert__alert_name__icontains=search_q) |
+                Q(user__username__icontains=search_q) |
+                Q(old_value__icontains=search_q) |
+                Q(new_value__icontains=search_q) |
+                Q(ip_address__icontains=search_q)
+            )
+
+    paginator = Paginator(qs, 50)
+    logs_page = paginator.get_page(page)
+
+    ctx = {
+        'section': 'audit',
+        'log_type': log_type,
+        'logs': logs_page,
+        'search_q': search_q,
+        'total_logs': qs.count(),
+    }
+    return render(request, 'settings_manager/audit_logs.html', ctx)
+
 def audit_log_settings(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -691,6 +1114,107 @@ def system_edit(request, pk):
     ctx = {'section': 'system', 'form': form, 'object': obj}
     return render(request, 'settings_manager/system_edit.html', ctx)
 
+def alarm_settings(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    alarms = AlarmSetting.objects.all()
+    alarm_system = AlarmSystemSetting.load()
+    if request.method == 'POST':
+        form = AlarmSystemSettingForm(request.POST, request.FILES, instance=alarm_system)
+        if form.is_valid():
+            form.save()
+            _log_setting_change(
+                request.user,
+                'Updated alarm system configuration',
+                'AlarmSystemSetting',
+                alarm_system.id if alarm_system.id else 1,
+                '',
+                'Updated',
+                request,
+            )
+            messages.success(request, 'Alarm system configuration saved.')
+            return redirect('settings:alarms')
+    else:
+        form = AlarmSystemSettingForm(instance=alarm_system)
+    ctx = {
+        'section': 'alarms',
+        'alarms': alarms,
+        'alarm_master_enabled': AlarmSetting.system_enabled(),
+        'alarm_system_form': form,
+        'alarm_system': alarm_system,
+    }
+    return render(request, 'settings_manager/alarm_settings.html', ctx)
+
+@require_POST
+def alarm_master_toggle(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    alarm_system = AlarmSystemSetting.load()
+    alarm_system.is_enabled = not alarm_system.is_enabled
+    alarm_system.save(update_fields=['is_enabled', 'updated_at'])
+    _log_setting_change(
+        request.user,
+        f'{"Enabled" if alarm_system.is_enabled else "Disabled"} alarm system',
+        'AlarmSystemSetting',
+        alarm_system.id,
+        '',
+        f'Enabled={alarm_system.is_enabled}',
+        request,
+    )
+    messages.success(request, f'Alarm system {"enabled" if alarm_system.is_enabled else "disabled"}.')
+    return redirect('settings:alarms')
+
+@require_POST
+def alarm_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    alarm = get_object_or_404(AlarmSetting, id=pk)
+    alarm.is_enabled = not alarm.is_enabled
+    alarm.save()
+    _log_setting_change(
+        request.user,
+        f'{"Enabled" if alarm.is_enabled else "Disabled"} alarm severity {alarm.severity}',
+        'AlarmSetting',
+        alarm.id,
+        '',
+        f'Enabled={alarm.is_enabled}',
+        request,
+    )
+    messages.success(request, f'{alarm.severity} alarm {"enabled" if alarm.is_enabled else "disabled"}.')
+    return redirect('settings:alarms')
+
+@login_required
+@require_POST
+def alarm_stop(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'auth_required'}, status=403)
+    alarm_system = AlarmSystemSetting.stop_alarm()
+    return JsonResponse({
+        'success': True,
+        'active': alarm_system.is_active,
+        'enabled': alarm_system.is_enabled,
+    })
+
+@login_required
+def alarm_state(request):
+    alarm_system = AlarmSystemSetting.load()
+    data = {
+        'success': True,
+        'enabled': alarm_system.is_enabled,
+        'active': alarm_system.is_active and alarm_system.is_enabled,
+        'active_alert_id': alarm_system.active_alert_id,
+        'active_alert_name': alarm_system.active_alert_name,
+        'active_severity': alarm_system.active_severity,
+        'active_message': alarm_system.active_message,
+        'sound_url': alarm_system.sound_file.url if alarm_system.sound_file else '',
+        'triggered_at': alarm_system.triggered_at.isoformat() if alarm_system.triggered_at else '',
+        'acknowledged_at': alarm_system.acknowledged_at.isoformat() if alarm_system.acknowledged_at else '',
+    }
+    return JsonResponse(data)
+
 @login_required
 def ioc_enrichment_list(request):
     profile = getattr(request.user, 'analyst_profile', None)
@@ -739,3 +1263,306 @@ def ioc_enrichment_update(request, pk):
         
     ctx = {'section': 'ioc_enrichment', 'form': form, 'edit_mode': True, 'edit_obj': setting, 'title': 'Edit IOC Enrichment Setting'}
     return render(request, 'settings_manager/ioc_enrichment.html', ctx)
+
+
+def aggregation_settings(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    agg_setting = AlertAggregationSetting.load()
+    if request.method == 'POST':
+        form = AlertAggregationSettingForm(request.POST, instance=agg_setting)
+        if form.is_valid():
+            form.save()
+            _log_setting_change(
+                request.user,
+                'Updated alert aggregation configuration',
+                'AlertAggregationSetting',
+                agg_setting.id if agg_setting.id else 1,
+                '',
+                'Updated',
+                request,
+            )
+            messages.success(request, 'Alert aggregation configuration saved successfully.')
+            return redirect('settings:aggregation')
+    else:
+        form = AlertAggregationSettingForm(instance=agg_setting)
+
+    from alerts.models import Alert
+    total_alerts = Alert.objects.count()
+    aggregated_alerts = Alert.objects.filter(event_count__gt=1).count()
+    total_events_saved = (
+        Alert.objects.filter(event_count__gt=1).aggregate(
+            saved=Sum('event_count') - Count('id')
+        )['saved'] or 0
+    ) if aggregated_alerts > 0 else 0
+
+    ctx = {
+        'section': 'aggregation',
+        'form': form,
+        'agg_setting': agg_setting,
+        'total_alerts': total_alerts,
+        'aggregated_alerts': aggregated_alerts,
+        'total_events_saved': total_events_saved,
+    }
+    return render(request, 'settings_manager/aggregation_settings.html', ctx)
+
+
+@require_POST
+def aggregation_toggle(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    agg_setting = AlertAggregationSetting.load()
+    agg_setting.is_enabled = not agg_setting.is_enabled
+    agg_setting.save(update_fields=['is_enabled', 'updated_at'])
+    _log_setting_change(
+        request.user,
+        f'{"Enabled" if agg_setting.is_enabled else "Disabled"} alert aggregation',
+        'AlertAggregationSetting',
+        agg_setting.id,
+        '',
+        f'Enabled={agg_setting.is_enabled}',
+        request,
+    )
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'status': 'ok', 'is_enabled': agg_setting.is_enabled})
+    messages.success(request, f'Alert aggregation {"enabled" if agg_setting.is_enabled else "disabled"}.')
+    return redirect('settings:aggregation')
+
+
+def suppression_rules(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+
+    rules = AlertSuppressionRule.objects.select_related('created_by').all()
+    total_suppressed = rules.aggregate(total=Sum('match_count'))['total'] or 0
+
+    if request.method == 'POST':
+        form = AlertSuppressionRuleForm(request.POST)
+        if form.is_valid():
+            rule = form.save(commit=False)
+            rule.created_by = request.user
+            rule.save()
+            _log_setting_change(
+                request.user,
+                f'Created suppression rule {rule.name}',
+                'AlertSuppressionRule',
+                rule.id,
+                '',
+                f'Action={rule.action}',
+                request,
+            )
+            messages.success(request, f'Suppression rule "{rule.name}" created successfully.')
+            return redirect('settings:suppression_rules')
+    else:
+        initial_data = {}
+        for param in ['rule_id', 'source_ip', 'destination_ip', 'hostname', 'agent_id', 'username', 'name']:
+            if param in request.GET:
+                initial_data[param] = request.GET[param]
+        form = AlertSuppressionRuleForm(initial=initial_data)
+
+    ctx = {
+        'section': 'suppression',
+        'rules': rules,
+        'form': form,
+        'total_rules': rules.count(),
+        'active_rules': rules.filter(is_active=True).count(),
+        'total_suppressed': total_suppressed,
+    }
+    return render(request, 'settings_manager/suppression_rules.html', ctx)
+
+
+def suppression_rule_create(request):
+    """Direct endpoint to create a suppression rule (e.g. from 1-click modal on Alert Detail)."""
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+
+    if request.method == 'POST':
+        form = AlertSuppressionRuleForm(request.POST)
+        if form.is_valid():
+            rule = form.save(commit=False)
+            rule.created_by = request.user
+            rule.save()
+            _log_setting_change(
+                request.user,
+                f'Created suppression rule {rule.name}',
+                'AlertSuppressionRule',
+                rule.id,
+                '',
+                f'Action={rule.action}',
+                request,
+            )
+            messages.success(request, f'Suppression rule "{rule.name}" activated.')
+            next_url = request.POST.get('next') or request.GET.get('next')
+            if next_url:
+                return redirect(next_url)
+            return redirect('settings:suppression_rules')
+        else:
+            messages.error(request, 'Failed to create suppression rule. Please check required fields.')
+            next_url = request.POST.get('next') or request.GET.get('next')
+            if next_url:
+                return redirect(next_url)
+    return redirect('settings:suppression_rules')
+
+
+def suppression_rule_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    rule = get_object_or_404(AlertSuppressionRule, id=pk)
+    if request.method == 'POST':
+        form = AlertSuppressionRuleForm(request.POST, instance=rule)
+        if form.is_valid():
+            form.save()
+            _log_setting_change(
+                request.user,
+                f'Edited suppression rule {rule.name}',
+                'AlertSuppressionRule',
+                rule.id,
+                '',
+                'Updated',
+                request,
+            )
+            messages.success(request, f'Suppression rule "{rule.name}" updated.')
+            return redirect('settings:suppression_rules')
+    else:
+        form = AlertSuppressionRuleForm(instance=rule)
+    ctx = {'section': 'suppression', 'form': form, 'rule': rule}
+    return render(request, 'settings_manager/suppression_rule_edit.html', ctx)
+
+
+@require_POST
+def suppression_rule_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    rule = get_object_or_404(AlertSuppressionRule, id=pk)
+    rule.is_active = not rule.is_active
+    rule.save(update_fields=['is_active', 'updated_at'])
+    _log_setting_change(
+        request.user,
+        f'{"Activated" if rule.is_active else "Deactivated"} suppression rule {rule.name}',
+        'AlertSuppressionRule',
+        rule.id,
+        '',
+        f'Active={rule.is_active}',
+        request,
+    )
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'status': 'ok', 'is_active': rule.is_active})
+    messages.success(request, f'Rule "{rule.name}" {"activated" if rule.is_active else "deactivated"}.')
+    return redirect('settings:suppression_rules')
+
+
+@require_POST
+def suppression_rule_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    rule = get_object_or_404(AlertSuppressionRule, id=pk)
+    name = rule.name
+    rule.delete()
+    _log_setting_change(request.user, f'Deleted suppression rule {name}', 'AlertSuppressionRule', pk, '', 'Deleted', request)
+    messages.success(request, f'Suppression rule "{name}" deleted.')
+    return redirect('settings:suppression_rules')
+
+
+
+
+from django.http import JsonResponse
+import json
+from alerts.models import Alert
+from django.utils import timezone
+from datetime import timedelta
+
+def suppression_simulate(request):
+    if not _check_settings_access(request.user):
+        return JsonResponse({'status': 'error', 'message': 'Access denied'}, status=403)
+    
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            # Create an in-memory rule instance
+            rule = AlertSuppressionRule(
+                rule_id=data.get('rule_id', ''),
+                source_ip=data.get('source_ip', ''),
+                destination_ip=data.get('destination_ip', ''),
+                hostname=data.get('hostname', ''),
+                agent_id=data.get('agent_id', ''),
+                username=data.get('username', ''),
+                is_regex=data.get('is_regex', False),
+                is_active=True
+            )
+            
+            # Fetch alerts from last 30 days (limit to 10000 for performance)
+            thirty_days_ago = timezone.now() - timedelta(days=30)
+            recent_alerts = Alert.objects.filter(timestamp__gte=thirty_days_ago).values(
+                'rule_id', 'source_ip', 'destination_ip', 'hostname', 'agent_id', 'username'
+            )[:10000]
+            
+            match_count = 0
+            for alert_data in recent_alerts:
+                if rule.matches(alert_data):
+                    match_count += 1
+            
+            total_checked = len(recent_alerts)
+            return JsonResponse({
+                'status': 'success',
+                'match_count': match_count,
+                'total_checked': total_checked,
+                'days': 30
+            })
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=405)
+
+from django.http import JsonResponse
+import requests
+
+def test_ioc_enrichment_api(request, pk):
+    if not _check_settings_access(request.user):
+        return JsonResponse({'status': 'error', 'message': 'Access denied'}, status=403)
+        
+    try:
+        setting = IOCEnrichmentSetting.objects.get(pk=pk)
+        if not setting.api_key:
+            return JsonResponse({'status': 'error', 'message': 'No API key configured.'})
+            
+        provider = setting.provider_name
+        
+        if provider == 'VirusTotal':
+            url = "https://www.virustotal.com/api/v3/files/44d88612fea8a8f36de82e1278abb02f" # test hash
+            headers = {"x-apikey": setting.api_key}
+            r = requests.get(url, headers=headers, timeout=5)
+            if r.status_code == 200:
+                return JsonResponse({'status': 'success', 'message': 'VirusTotal connection successful!'})
+                
+        elif provider == 'IPInfo':
+            url = f"https://ipinfo.io/8.8.8.8/json?token={setting.api_key}"
+            r = requests.get(url, timeout=5)
+            if r.status_code == 200:
+                return JsonResponse({'status': 'success', 'message': 'IPInfo connection successful!'})
+                
+        elif provider == 'AbuseIPDB':
+            url = "https://api.abuseipdb.com/api/v2/check"
+            headers = {'Accept': 'application/json', 'Key': setting.api_key}
+            params = {'ipAddress': '8.8.8.8'}
+            r = requests.get(url, headers=headers, params=params, timeout=5)
+            if r.status_code == 200:
+                return JsonResponse({'status': 'success', 'message': 'AbuseIPDB connection successful!'})
+                
+        elif provider == 'OTX':
+            url = "https://otx.alienvault.com/api/v1/indicators/IPv4/8.8.8.8/general"
+            headers = {'X-OTX-API-KEY': setting.api_key}
+            r = requests.get(url, headers=headers, timeout=5)
+            if r.status_code == 200:
+                return JsonResponse({'status': 'success', 'message': 'AlienVault OTX connection successful!'})
+                
+        return JsonResponse({'status': 'error', 'message': f'API returned status {r.status_code}: {r.text}'})
+        
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})

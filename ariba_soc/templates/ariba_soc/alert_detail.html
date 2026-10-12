@@ -24,6 +24,11 @@
                             {% include 'ariba_soc/_status_pill.html' with status=alert.status %}
                             {% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}
                             <span class="badge bg-dark">{{ alert.priority }} Priority</span>
+                            {% if alert.event_count > 1 %}
+                            <span class="badge bg-info bg-opacity-25 text-info" title="Aggregated {{ alert.event_count }} security events">
+                                <i class="bi bi-layers-half"></i> {{ alert.event_count }} Events Aggregated
+                            </span>
+                            {% endif %}
                         </div>
                     </div>
                     <div class="d-flex gap-1 flex-shrink-0">
@@ -37,6 +42,179 @@
                             <i class="bi bi-pencil"></i> Edit
                         </button>
                         <a href="{% url 'alerts:table' %}" class="btn btn-sm btn-ariba-outline"><i class="bi bi-x-lg"></i></a>
+                    </div>
+                </div>
+
+                <!-- 5 Ws SOC Triage Cockpit -->
+                <div class="p-3 mb-4 rounded" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(59, 130, 246, 0.25); border-left: 4px solid var(--accent-blue);">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="text-uppercase fw-bold text-info" style="font-size: 0.8rem; letter-spacing: 0.08em;">
+                            <i class="bi bi-shield-check me-1"></i> SOC Analyst Triage Checklist (5 Ws)
+                        </span>
+                        <span class="badge bg-secondary bg-opacity-50 text-light" style="font-size: 0.7rem;">
+                            SLA: {{ alert.sla_status|default:'Standard' }}
+                        </span>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- 1. What happened? -->
+                        <div class="col-md-4">
+                            <div class="p-2 h-100 rounded" style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.05);">
+                                <div class="text-secondary small fw-bold mb-1">
+                                    <span class="badge bg-primary bg-opacity-25 text-info me-1">1</span> WHAT HAPPENED?
+                                </div>
+                                <div class="small fw-semibold text-light text-truncate" title="{{ alert.alert_name }}">
+                                    {{ alert.alert_name }}
+                                </div>
+                                <div class="small text-muted mt-1">
+                                    <i class="bi bi-hash"></i> Rule {{ alert.rule_id|default:'N/A' }} (Level {{ alert.rule_level }})
+                                </div>
+                                {% if alert.mitre_technique %}
+                                <div class="mt-1">
+                                    <span class="badge bg-dark text-info border border-secondary" style="font-size: 0.7rem;">
+                                        {{ alert.mitre_tactic|default:'MITRE' }}: {{ alert.mitre_technique }}
+                                    </span>
+                                </div>
+                                {% endif %}
+                                {% if alert.risk_score %}
+                                <div class="mt-1 small">
+                                    <span class="text-secondary">Dynamic Risk Score:</span>
+                                    <span class="fw-bold {% if alert.risk_score >= 80 %}text-danger{% elif alert.risk_score >= 60 %}text-warning{% else %}text-info{% endif %}">
+                                        {{ alert.risk_score }}/100
+                                    </span>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- 2. Where did it happen? -->
+                        <div class="col-md-4">
+                            <div class="p-2 h-100 rounded" style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.05);">
+                                <div class="text-secondary small fw-bold mb-1">
+                                    <span class="badge bg-primary bg-opacity-25 text-info me-1">2</span> WHERE DID IT HAPPEN?
+                                </div>
+                                <div class="small fw-semibold text-light text-truncate" title="{{ alert.hostname|default:alert.agent_name|default:'Unknown Host' }}">
+                                    <i class="bi bi-hdd-network text-info me-1"></i> {{ alert.hostname|default:alert.agent_name|default:'Unknown Host' }}
+                                </div>
+                                <div class="small text-muted mt-1">
+                                    Agent ID: <code class="text-light">{{ alert.agent_id|default:'—' }}</code>
+                                </div>
+                                <div class="small text-muted mt-1">
+                                    Dest IP: <code class="text-info">{{ alert.destination_ip|default:'Internal / Local' }}</code>
+                                </div>
+                                {% if alert.asset %}
+                                <div class="mt-2 pt-2 border-top border-secondary border-opacity-25">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="small text-secondary">Asset Tier:</span>
+                                        {% if alert.asset.criticality == 'CRITICAL' %}
+                                        <span class="badge bg-danger"><i class="bi bi-shield-fill-exclamation"></i> MISSION-CRITICAL ({{ alert.asset.criticality_multiplier }}x)</span>
+                                        {% elif alert.asset.criticality == 'HIGH' %}
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill"></i> HIGH IMPACT ({{ alert.asset.criticality_multiplier }}x)</span>
+                                        {% elif alert.asset.criticality == 'MEDIUM' %}
+                                        <span class="badge bg-primary">Medium ({{ alert.asset.criticality_multiplier }}x)</span>
+                                        {% else %}
+                                        <span class="badge bg-success">Low ({{ alert.asset.criticality_multiplier }}x)</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="small text-muted mt-1">
+                                        <a href="{% url 'alerts:assets_list' %}?search={{ alert.asset.hostname }}" class="text-info text-decoration-none fw-semibold">
+                                            {{ alert.asset.name }}
+                                        </a> ({{ alert.asset.get_asset_type_display }} &bull; {{ alert.asset.get_environment_display }})
+                                    </div>
+                                </div>
+                                {% elif alert.asset_criticality %}
+                                <div class="mt-2 pt-1 border-top border-secondary border-opacity-25">
+                                    <span class="badge bg-warning text-dark">{{ alert.asset_criticality }} Asset</span>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- 3. Who / What initiated it? -->
+                        <div class="col-md-4">
+                            <div class="p-2 h-100 rounded" style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.05);">
+                                <div class="text-secondary small fw-bold mb-1">
+                                    <span class="badge bg-primary bg-opacity-25 text-info me-1">3</span> WHO / WHAT INITIATED?
+                                </div>
+                                <div class="small fw-semibold text-light text-truncate" title="{{ alert.username|default:'System / Unknown' }}">
+                                    <i class="bi bi-person text-warning me-1"></i> {{ alert.username|default:'System / Unknown' }}
+                                </div>
+                                <div class="small text-muted mt-1">
+                                    Source IP: <code class="text-warning">{{ alert.source_ip|default:'—' }}</code>
+                                    {% if alert.enrichment_data.IPInfo.country %}
+                                    <span class="badge bg-secondary bg-opacity-50 ms-1">{{ alert.enrichment_data.IPInfo.country }}</span>
+                                    {% endif %}
+                                </div>
+                                {% if alert.process_name %}
+                                <div class="small text-muted mt-1 text-truncate" title="{{ alert.process_name }}">
+                                    Process: <code class="text-light">{{ alert.process_name }}</code>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- 4. Is it malicious? -->
+                        <div class="col-md-6">
+                            <div class="p-2 h-100 rounded" style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.05);">
+                                <div class="text-secondary small fw-bold mb-1">
+                                    <span class="badge bg-primary bg-opacity-25 text-info me-1">4</span> IS IT MALICIOUS?
+                                </div>
+                                <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+                                    {% include 'ariba_soc/_severity_badge.html' with severity=alert.severity %}
+                                    {% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}
+                                    {% if alert.event_count > 1 %}
+                                    <span class="badge bg-info bg-opacity-25 text-info"><i class="bi bi-layers-half"></i> {{ alert.event_count }} Events</span>
+                                    {% endif %}
+                                </div>
+                                <div class="small mt-2">
+                                    {% if alert.enrichment_data.VirusTotal %}
+                                        {% if alert.enrichment_data.VirusTotal.malicious > 0 %}
+                                        <span class="text-danger fw-semibold"><i class="bi bi-exclamation-triangle-fill"></i> VirusTotal: {{ alert.enrichment_data.VirusTotal.malicious }} engines flagged malicious!</span>
+                                        {% else %}
+                                        <span class="text-success"><i class="bi bi-check-circle"></i> VirusTotal: Clean (0 detections)</span>
+                                        {% endif %}
+                                    {% elif alert.severity == 'Critical' or alert.severity == 'High' %}
+                                        <span class="text-warning"><i class="bi bi-shield-exclamation"></i> High-risk signature matching known security violations.</span>
+                                    {% else %}
+                                        <span class="text-muted"><i class="bi bi-info-circle"></i> Low-risk anomaly signature; verify against baseline.</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5. What should we do next? -->
+                        <div class="col-md-6">
+                            <div class="p-2 h-100 rounded" style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.05);">
+                                <div class="text-secondary small fw-bold mb-1">
+                                    <span class="badge bg-primary bg-opacity-25 text-info me-1">5</span> WHAT SHOULD WE DO NEXT?
+                                </div>
+                                <div class="small text-light">
+                                    {% if alert.triage_guide %}
+                                        {{ alert.triage_guide|truncatechars:130 }}
+                                    {% elif alert.severity == 'Critical' or alert.severity == 'High' %}
+                                        Verify authentication source. If unauthorized, isolate host and escalate to Incident Response.
+                                    {% else %}
+                                        Verify user authorization. If legitimate administrative activity, close as False Positive.
+                                    {% endif %}
+                                </div>
+                                <div class="d-flex gap-2 mt-2 flex-wrap">
+                                    {% if alert.status != 'Closed' %}
+                                    <a href="{% url 'incidents:create' %}?alerts={{ alert.id }}" class="btn btn-sm btn-outline-danger" style="font-size:0.75rem;">
+                                        <i class="bi bi-shield-slash"></i> Escalate to Incident
+                                    </a>
+                                    {% endif %}
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#activeResponseModal" style="font-size:0.75rem;">
+                                        <i class="bi bi-shield-fill-exclamation"></i> ⚡ Containment (SOAR)
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#createSuppressionModal" style="font-size:0.75rem;">
+                                        <i class="bi bi-funnel"></i> Tune / Suppress Rule
+                                    </button>
+                                    <a href="#auditTrailSection" class="btn btn-sm btn-ariba-outline" style="font-size:0.75rem;">
+                                        <i class="bi bi-clock-history"></i> Audit Trail
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -58,6 +236,11 @@
                         <h6 class="text-secondary"><i class="bi bi-diagram-2"></i> Technical Details</h6>
                         <table class="table table-sm ariba-table">
                             <tr><td class="detail-label">Alert ID</td><td class="detail-value"><code>{{ alert.wazuh_alert_id|default:alert.id }}</code></td></tr>
+                            <tr><td class="detail-label">Events Aggregated</td><td class="detail-value"><span class="badge bg-secondary text-info"><i class="bi bi-layers-half"></i> {{ alert.event_count }}</span></td></tr>
+                            {% if alert.first_seen_at %}
+                            <tr><td class="detail-label">First Seen</td><td class="detail-value">{{ alert.first_seen_at|date:"M d, Y H:i:s" }}</td></tr>
+                            <tr><td class="detail-label">Last Seen</td><td class="detail-value">{{ alert.last_seen_at|date:"M d, Y H:i:s" }}</td></tr>
+                            {% endif %}
                             <tr><td class="detail-label">Alert Time</td><td class="detail-value">{{ alert.alert_time|date:"M d, Y H:i:s" }}</td></tr>
                             <tr><td class="detail-label">Event Time</td><td class="detail-value">{{ alert.event_time|date:"M d, Y H:i:s"|default:'—' }}</td></tr>
                             <tr><td class="detail-label">Rule ID</td><td class="detail-value">{{ alert.rule_id|default:'—' }} (Level {{ alert.rule_level }})</td></tr>
@@ -113,7 +296,7 @@
                 <hr style="border-color: var(--border-color);">
                 <div class="detail-section">
                     <h6 class="text-secondary"><i class="bi bi-shield-check"></i> Threat Intelligence (Enrichment)</h6>
-                    <div class="row g-3 mt-1">
+                                        <div class="row g-3 mt-1">
                         {% if alert.enrichment_data.VirusTotal %}
                         <div class="col-md-6">
                             <div class="p-3" style="background: rgba(220,38,38,0.1); border-radius: 6px; border-left: 3px solid var(--bs-danger);">
@@ -139,6 +322,38 @@
                                 <div class="mt-2 small text-light">
                                     {{ alert.enrichment_data.IPInfo.city|default:'Unknown City' }}, {{ alert.enrichment_data.IPInfo.country|default:'Unknown Country' }}<br>
                                     <span class="text-muted">{{ alert.enrichment_data.IPInfo.org|default:'Unknown Org' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if alert.enrichment_data.AbuseIPDB %}
+                        <div class="col-md-6">
+                            <div class="p-3" style="background: rgba(234,179,8,0.1); border-radius: 6px; border-left: 3px solid var(--bs-warning);">
+                                <div class="d-flex justify-content-between">
+                                    <strong class="text-warning"><i class="bi bi-exclamation-triangle"></i> AbuseIPDB</strong>
+                                    <small class="text-muted">{{ alert.enrichment_data.AbuseIPDB.timestamp|slice:":10" }}</small>
+                                </div>
+                                <div class="mt-2">
+                                    <span class="badge {% if alert.enrichment_data.AbuseIPDB.abuseConfidenceScore > 50 %}bg-danger{% elif alert.enrichment_data.AbuseIPDB.abuseConfidenceScore > 10 %}bg-warning text-dark{% else %}bg-success{% endif %} rounded-pill">
+                                        Score: {{ alert.enrichment_data.AbuseIPDB.abuseConfidenceScore }}%
+                                    </span>
+                                    <span class="badge bg-secondary rounded-pill">{{ alert.enrichment_data.AbuseIPDB.totalReports }} Reports</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if alert.enrichment_data.OTX %}
+                        <div class="col-md-6">
+                            <div class="p-3" style="background: rgba(168,85,247,0.1); border-radius: 6px; border-left: 3px solid #a855f7;">
+                                <div class="d-flex justify-content-between">
+                                    <strong style="color: #a855f7;"><i class="bi bi-radar"></i> AlienVault OTX</strong>
+                                    <small class="text-muted">{{ alert.enrichment_data.OTX.timestamp|slice:":10" }}</small>
+                                </div>
+                                <div class="mt-2">
+                                    <span class="badge rounded-pill" style="background: #a855f7; color: white;">{{ alert.enrichment_data.OTX.pulse_count }} Pulses</span>
+                                    {% for pulse in alert.enrichment_data.OTX.pulses %}
+                                    <span class="badge bg-secondary rounded-pill text-truncate" style="max-width: 150px;">{{ pulse }}</span>
+                                    {% endfor %}
                                 </div>
                             </div>
                         </div>
@@ -222,6 +437,77 @@
                 </form>
             </div>
 
+            <!-- SOAR Containment Card -->
+            <div class="ariba-card p-3 mb-3 border-danger" style="border-left: 3px solid var(--bs-danger);">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="text-danger m-0"><i class="bi bi-shield-fill-exclamation"></i> ⚡ SOAR Containment</h6>
+                    <a href="{% url 'wazuh_integration:active_response_history' %}" class="small text-muted" title="View SOAR audit log"><i class="bi bi-clock-history"></i> Log</a>
+                </div>
+                <hr style="border-color: var(--border-color);" class="my-2">
+                <p class="small text-muted mb-2">Execute active countermeasures on endpoint <code class="text-info">{{ alert.agent_name|default:alert.hostname|default:'Agent' }}</code>.</p>
+                <div class="d-grid gap-2">
+                    {% if alert.source_ip %}
+                    <form method="post" action="{% url 'wazuh_integration:active_response_execute' %}" onsubmit="return confirm('⚠️ Block attacker IP {{ alert.source_ip }} on agent {{ alert.agent_id|default:'001' }} using firewall-drop?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="command" value="firewall-drop">
+                        <input type="hidden" name="agent_id" value="{{ alert.agent_id|default:'001' }}">
+                        <input type="hidden" name="target_ip" value="{{ alert.source_ip }}">
+                        <input type="hidden" name="alert_id" value="{{ alert.id }}">
+                        <input type="hidden" name="next" value="{{ request.path }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger w-100 text-start">
+                            <i class="bi bi-slash-circle me-1"></i> Block Source IP (<code>{{ alert.source_ip|truncatechars:18 }}</code>)
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    <form method="post" action="{% url 'wazuh_integration:active_response_execute' %}" onsubmit="return confirm('⚠️ Execute TCP host-deny against endpoint for containment?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="command" value="host-deny">
+                        <input type="hidden" name="agent_id" value="{{ alert.agent_id|default:'001' }}">
+                        <input type="hidden" name="target_ip" value="{{ alert.source_ip|default:alert.destination_ip }}">
+                        <input type="hidden" name="alert_id" value="{{ alert.id }}">
+                        <input type="hidden" name="next" value="{{ request.path }}">
+                        <button type="submit" class="btn btn-sm btn-outline-warning w-100 text-start">
+                            <i class="bi bi-shield-x me-1"></i> Host Isolation (<code>host-deny</code>)
+                        </button>
+                    </form>
+
+                    {% if alert.username %}
+                    <form method="post" action="{% url 'wazuh_integration:active_response_execute' %}" onsubmit="return confirm('⚠️ Disable account {{ alert.username }} on target host?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="command" value="disable-account">
+                        <input type="hidden" name="agent_id" value="{{ alert.agent_id|default:'001' }}">
+                        <input type="hidden" name="target_user" value="{{ alert.username }}">
+                        <input type="hidden" name="alert_id" value="{{ alert.id }}">
+                        <input type="hidden" name="next" value="{{ request.path }}">
+                        <button type="submit" class="btn btn-sm btn-outline-info w-100 text-start">
+                            <i class="bi bi-person-x me-1"></i> Disable User (<code>{{ alert.username|truncatechars:15 }}</code>)
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    <button type="button" class="btn btn-sm btn-ariba-outline text-start" data-bs-toggle="modal" data-bs-target="#activeResponseModal">
+                        <i class="bi bi-gear me-1"></i> Custom Response...
+                    </button>
+                </div>
+
+                {% if alert.active_responses.exists %}
+                <div class="mt-3 pt-2 border-top">
+                    <small class="text-secondary fw-bold d-block mb-1">Recent Actions on this Alert:</small>
+                    {% for ar in alert.active_responses.all|slice:":3" %}
+                    <div class="d-flex justify-content-between align-items-center mb-1 small">
+                        <span><code class="text-info">{{ ar.command }}</code></span>
+                        {% if ar.status == 'SUCCESS' %}
+                        <span class="badge bg-success bg-opacity-25 text-success">OK</span>
+                        {% else %}
+                        <span class="badge bg-danger bg-opacity-25 text-danger">FAIL</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+
             <div class="ariba-card p-3 mb-3">
                 <h6 class="text-secondary"><i class="bi bi-arrow-right"></i> Actions</h6>
                 <hr style="border-color: var(--border-color);">
@@ -234,6 +520,9 @@
                         data-verdict="{{ alert.verdict }}"
                         data-priority="{{ alert.priority }}">
                         <i class="bi bi-pencil"></i> Edit Alert
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-warning text-start" data-bs-toggle="modal" data-bs-target="#createSuppressionModal">
+                        <i class="bi bi-funnel"></i> Tune / Suppress Rule
                     </button>
                     {% if alert.status != 'Closed' and alert.status != 'Archived' %}
                     <form method="post" action="{% url 'alerts:escalate' alert.id %}">
@@ -299,7 +588,7 @@
                 {% endif %}
             </div>
 
-            <div class="ariba-card p-3 mb-3">
+            <div class="ariba-card p-3 mb-3" id="auditTrailSection">
                 <h6 class="text-secondary"><i class="bi bi-clock-history"></i> Audit Trail</h6>
                 <hr style="border-color: var(--border-color);">
                 <div class="timeline" style="max-height: 300px; overflow-y: auto;">
@@ -319,6 +608,135 @@
                     {% endfor %}
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: 1-Click Suppression Rule -->
+<div class="modal fade" id="createSuppressionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content ariba-card border">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title"><i class="bi bi-funnel text-warning me-2"></i> Create Suppression / Tuning Rule</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{% url 'settings:suppression_rule_create' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <div class="modal-body">
+                    <div class="p-2 mb-3 rounded" style="background: rgba(234, 179, 8, 0.1); border-left: 3px solid var(--bs-warning);">
+                        <small class="text-warning">
+                            <i class="bi bi-info-circle me-1"></i> Pre-populated with IOC parameters from this alert. Customize matching criteria below to silence recurring false positives.
+                        </small>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">Rule Name *</label>
+                            <input type="text" name="name" class="form-control form-control-sm" value="Mute: {{ alert.alert_name|truncatechars:45 }}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Action</label>
+                            <select name="action" class="form-select form-select-sm">
+                                <option value="AUTO_CLOSE" selected>Auto-Close as False Positive</option>
+                                <option value="DROP">Drop Silently (No DB Record)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Rule ID (Match)</label>
+                            <input type="text" name="rule_id" class="form-control form-control-sm" value="{{ alert.rule_id|default:'' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Source IP (Match)</label>
+                            <input type="text" name="source_ip" class="form-control form-control-sm" value="{{ alert.source_ip|default:'' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Destination IP (Match)</label>
+                            <input type="text" name="destination_ip" class="form-control form-control-sm" value="{{ alert.destination_ip|default:'' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Hostname (Match)</label>
+                            <input type="text" name="hostname" class="form-control form-control-sm" value="{{ alert.hostname|default:'' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Agent ID (Match)</label>
+                            <input type="text" name="agent_id" class="form-control form-control-sm" value="{{ alert.agent_id|default:'' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Username (Match)</label>
+                            <input type="text" name="username" class="form-control form-control-sm" value="{{ alert.username|default:'' }}">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">Expiration Window (Optional)</label>
+                            <input type="datetime-local" name="expires_at" class="form-control form-control-sm">
+                            <div class="form-text small">Leave blank for permanent exception rule.</div>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-center mt-4">
+                            <div class="form-check form-switch">
+                                <input type="checkbox" name="is_active" class="form-check-input" id="id_suppress_active" checked>
+                                <label class="form-check-label fw-bold ms-2" for="id_suppress_active">Rule Active</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Justification / Rationale</label>
+                            <textarea name="reason" class="form-control form-control-sm" rows="2" placeholder="e.g. Verified authorized penetration test / maintenance backup activity">Identified as False Positive / Benign during triage of alert #{{ alert.wazuh_alert_id|default:alert.id }}.</textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-shield-check"></i> Create Suppression Rule</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Custom SOAR Active Response -->
+<div class="modal fade" id="activeResponseModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content ariba-card border">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title"><i class="bi bi-shield-fill-exclamation text-danger me-2"></i> ⚡ SOAR Active Response</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{% url 'wazuh_integration:active_response_execute' %}">
+                {% csrf_token %}
+                <input type="hidden" name="alert_id" value="{{ alert.id }}">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <div class="modal-body">
+                    <div class="p-2 mb-3 rounded" style="background: rgba(220, 38, 38, 0.1); border-left: 3px solid var(--bs-danger);">
+                        <small class="text-danger">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Active response commands are executed immediately on the agent endpoint. Ensure target parameters are verified.
+                        </small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Active Response Action *</label>
+                        <select name="command" class="form-select form-select-sm" required id="arCommandSelect">
+                            <option value="firewall-drop" selected>Firewall Drop (Block IP)</option>
+                            <option value="host-deny">Host Deny (TCP Wrappers)</option>
+                            <option value="disable-account">Disable Account</option>
+                            <option value="restart-wazuh">Restart Wazuh Agent</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Target Agent ID *</label>
+                        <input type="text" name="agent_id" class="form-control form-control-sm" value="{{ alert.agent_id|default:'001' }}" required>
+                        <div class="form-text small">Agent: {{ alert.agent_name|default:alert.hostname|default:'Default Agent' }}</div>
+                    </div>
+                    <div class="mb-3" id="arTargetIpGroup">
+                        <label class="form-label small fw-bold">Target IP Address</label>
+                        <input type="text" name="target_ip" class="form-control form-control-sm" value="{{ alert.source_ip|default:'' }}" placeholder="e.g. 192.168.1.50">
+                    </div>
+                    <div class="mb-3" id="arTargetUserGroup">
+                        <label class="form-label small fw-bold">Target Username</label>
+                        <input type="text" name="target_user" class="form-control form-control-sm" value="{{ alert.username|default:'' }}" placeholder="e.g. administrator">
+                    </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-lightning-charge"></i> Execute Containment</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

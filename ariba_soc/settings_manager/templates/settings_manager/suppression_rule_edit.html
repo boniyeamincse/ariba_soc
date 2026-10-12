@@ -1,0 +1,84 @@
+{% extends 'settings_manager/settings_base.html' %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="m-0"><i class="bi bi-pencil-square text-info"></i> Edit Suppression Rule: {{ rule.name }}</h4>
+            <p class="settings-page-desc mb-0">Update matching criteria, actions, or expiration window.</p>
+        </div>
+        <a href="{% url 'settings:suppression_rules' %}" class="btn btn-ariba-outline btn-sm">
+            <i class="bi bi-arrow-left"></i> Back to Rules
+        </a>
+    </div>
+
+    <div class="ariba-card p-4">
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <label class="form-label small fw-bold">Rule Name / Description *</label>
+                    {{ form.name }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Suppression Action</label>
+                    {{ form.action }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Rule ID (Optional)</label>
+                    {{ form.rule_id }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Source IP or CIDR</label>
+                    {{ form.source_ip }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Destination IP or CIDR</label>
+                    {{ form.destination_ip }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Hostname</label>
+                    {{ form.hostname }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Agent ID</label>
+                    {{ form.agent_id }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Username</label>
+                    {{ form.username }}
+                </div>
+                <div class="col-12 mt-2">
+                    <div class="form-check form-switch bg-dark border p-2 rounded">
+                        {{ form.is_regex }}
+                        <label class="form-check-label fw-bold ms-2 text-warning">Enable Regex Matching for Text Fields</label>
+                        <div class="form-text small ms-5">If enabled, Hostname and Username fields evaluate as standard Python Regular Expressions (e.g. ^admin.*$)</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Approval Status</label>
+                    {{ form.status }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Expiration (Optional Maintenance Window)</label>
+                    {{ form.expires_at }}
+                </div>
+                <div class="col-md-4 d-flex align-items-center mt-4">
+                    <div class="form-check form-switch">
+                        {{ form.is_active }}
+                        <label class="form-check-label fw-bold ms-2">Rule Active</label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-bold">Justification / Reason</label>
+                    {{ form.reason }}
+                </div>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                <a href="{% url 'settings:suppression_rules' %}" class="btn btn-ariba-outline btn-sm">Cancel</a>
+                <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-check-lg"></i> Update Rule</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

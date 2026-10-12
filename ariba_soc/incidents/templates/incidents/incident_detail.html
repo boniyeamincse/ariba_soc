@@ -14,17 +14,17 @@
             <i class="fas fa-exclamation-triangle me-2 text-{% if incident.severity == 'CRITICAL' %}danger{% elif incident.severity == 'HIGH' %}warning{% else %}info{% endif %}"></i>
             {{ incident.incident_number }} — {{ incident.title }}
         </h4>
-        <a href="{% url 'incidents:list' %}" class="btn btn-outline-secondary btn-sm">Back</a>
+        <a href="{% url 'incidents:list' %}" class="btn btn-ariba-outline btn-sm">Back</a>
     </div>
 
     <div class="row g-3">
         <div class="col-md-8">
-            <div class="card mb-3">
-                <div class="card-header"><h6 class="mb-0">Incident Details</h6></div>
-                <div class="card-body">
+            <div class="ariba-card p-3 mb-3">
+                <div class="p-2 border-bottom border-secondary d-flex justify-content-between align-items-center"><h6 class="text-info m-0"><i class="bi bi-info-circle"></i> Incident Details</h6></div>
+                <div class="p-2 mt-2">
                     <div class="row">
                         <div class="col-md-6">
-                            <p><strong>Status:</strong> <span class="badge bg-info">{{ incident.get_status_display }}</span></p>
+                            <p><strong>Status:</strong> <span class="badge bg-info bg-opacity-25 text-info border border-info">{{ incident.get_status_display }}</span></p>
                             <p><strong>Severity:</strong> <span class="badge bg-{% if incident.severity == 'CRITICAL' %}danger{% elif incident.severity == 'HIGH' %}warning text-dark{% else %}secondary{% endif %}">{{ incident.severity }}</span></p>
                             <p><strong>Priority:</strong> {{ incident.priority }}</p>
                             <p><strong>Owner:</strong> {{ incident.owner.username|default:"Unassigned" }}</p>
@@ -48,11 +48,11 @@
                 </div>
             </div>
 
-            <div class="card mb-3">
-                <div class="card-header"><h6 class="mb-0">Linked Alerts ({{ linked_alerts|length }})</h6></div>
-                <div class="card-body p-0">
-                    <table class="table table-sm mb-0">
-                        <thead class="table-secondary">
+            <div class="ariba-card p-3 mb-3">
+                <div class="p-2 border-bottom border-secondary d-flex justify-content-between align-items-center"><h6 class="text-info m-0"><i class="bi bi-info-circle"></i> Linked Alerts ({{ linked_alerts|length }})</h6></div>
+                <div class="mt-2 table-responsive">
+                    <table class="table ariba-table table-hover mb-0">
+                        <thead>
                             <tr><th>#</th><th>Alert</th><th>Severity</th><th>Status</th><th>Primary</th><th>Linked by</th></tr>
                         </thead>
                         <tbody>
@@ -62,7 +62,7 @@
                                 <td>{{ la.alert.alert_name|truncatechars:40 }}</td>
                                 <td>{{ la.alert.severity }}</td>
                                 <td>{{ la.alert.workflow_state|default:la.alert.status }}</td>
-                                <td>{% if la.is_primary %}<span class="badge bg-warning text-dark">Primary</span>{% endif %}</td>
+                                <td>{% if la.is_primary %}<span class="badge bg-warning bg-opacity-25 text-warning border border-warning">Primary</span>{% endif %}</td>
                                 <td>{{ la.linked_by.username|default:"-" }}</td>
                             </tr>
                             {% empty %}
@@ -73,20 +73,20 @@
                 </div>
             </div>
 
-            <div class="card mb-3">
-                <div class="card-header"><h6 class="mb-0">Notes</h6></div>
-                <div class="card-body">
+            <div class="ariba-card p-3 mb-3">
+                <div class="p-2 border-bottom border-secondary d-flex justify-content-between align-items-center"><h6 class="text-info m-0"><i class="bi bi-info-circle"></i> Notes</h6></div>
+                <div class="p-2 mt-2">
                     <form method="post" action="{% url 'incidents:notes' incident_number=incident.incident_number %}" class="mb-3">
                         {% csrf_token %}
                         <div class="row g-2">
                             <div class="col-md-3">{{ note_form.note_type }}</div>
                             <div class="col-md-7">{{ note_form.note }}</div>
-                            <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">Add Note</button></div>
+                            <div class="col-md-2"><button type="submit" class="btn btn-ariba-primary w-100">Add Note</button></div>
                         </div>
                     </form>
                     {% for n in notes %}
-                    <div class="border-bottom pb-2 mb-2">
-                        <small class="text-muted">{{ n.created_at|date:"d M Y H:i" }} — {{ n.get_note_type_display }} by {{ n.created_by.username }}</small>
+                    <div class="p-2 mb-2" style="background: rgba(19,26,43,0.5); border-radius: 6px; border-left: 3px solid var(--accent-blue);">
+                        <small class="text-muted"><i class="bi bi-clock"></i> {{ n.created_at|date:"d M Y H:i" }} — {{ n.get_note_type_display }} by {{ n.created_by.username }}</small>
                         <p class="mb-0 mt-1">{{ n.note }}</p>
                     </div>
                     {% empty %}
@@ -97,9 +97,9 @@
         </div>
 
         <div class="col-md-4">
-            <div class="card mb-3">
-                <div class="card-header"><h6 class="mb-0">Actions</h6></div>
-                <div class="card-body">
+            <div class="ariba-card p-3 mb-3">
+                <div class="p-2 border-bottom border-secondary d-flex justify-content-between align-items-center"><h6 class="text-info m-0"><i class="bi bi-info-circle"></i> Actions</h6></div>
+                <div class="p-2 mt-2">
                     <form method="post" action="{% url 'incidents:assign' incident_number=incident.incident_number %}" class="mb-2">
                         {% csrf_token %}
                         <select name="owner" class="form-select form-select-sm mb-1">
@@ -107,7 +107,7 @@
                             {% for u in users %}<option value="{{ u.id }}">{{ u.username }}</option>{% endfor %}
                         </select>
                         <input type="text" name="response_team" class="form-control form-control-sm mb-1" placeholder="Response team" value="{{ incident.response_team }}">
-                        <button type="submit" class="btn btn-primary btn-sm w-100">Assign</button>
+                        <button type="submit" class="btn btn-ariba-primary btn-sm w-100">Assign</button>
                     </form>
 
                     {% for t in allowed_transitions %}
@@ -126,15 +126,15 @@
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-header"><h6 class="mb-0">Timeline</h6></div>
-                <div class="card-body" style="max-height:500px;overflow-y:auto;">
+            <div class="ariba-card p-3">
+                <div class="p-2 border-bottom border-secondary d-flex justify-content-between align-items-center"><h6 class="text-info m-0"><i class="bi bi-info-circle"></i> Timeline</h6></div>
+                <div class="p-2 mt-2" style="max-height:500px;overflow-y:auto;">
                     {% for event in timeline %}
-                    <div class="border-bottom pb-2 mb-2">
-                        <small class="text-muted">{{ event.created_at|date:"d M Y H:i" }}</small>
+                    <div class="p-2 mb-2" style="background: rgba(19,26,43,0.5); border-radius: 6px; border-left: 3px solid var(--accent-blue);">
+                        <small class="text-muted"><i class="bi bi-clock"></i> {{ event.created_at|date:"d M Y H:i" }}</small>
                         <br><strong>{{ event.title }}</strong>
                         <br><small>by {{ event.actor.username|default:"system" }} ({{ event.event_type }})</small>
-                        {% if event.description %}<br><small class="text-muted">{{ event.description|truncatechars:150 }}</small>{% endif %}
+                        {% if event.description %}<br><small class="text-muted"><i class="bi bi-clock"></i> {{ event.description|truncatechars:150 }}</small>{% endif %}
                     </div>
                     {% empty %}
                     <p class="text-muted">No timeline events</p>

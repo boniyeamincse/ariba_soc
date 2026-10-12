@@ -1,0 +1,191 @@
+{% extends 'settings_manager/settings_base.html' %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0"><i class="bi bi-bell-fill"></i> Alarm Settings</h4>
+            <p class="settings-page-desc mb-0">Upload an MP3 alarm tone, turn the alarm system on or off, and control which severities generate dashboard alarms.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <form method="post" action="{% url 'settings:alarm_master_toggle' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm {% if alarm_master_enabled %}btn-success{% else %}btn-outline-secondary{% endif %}">
+                    {% if alarm_master_enabled %}
+                    <i class="bi bi-toggle-on"></i> Alarm System On
+                    {% else %}
+                    <i class="bi bi-toggle-off"></i> Alarm System Off
+                    {% endif %}
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="ariba-card p-3 mb-3">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-5 border-end border-secondary">
+                    <h6 class="text-info"><i class="bi bi-volume-up"></i> Audio Settings</h6>
+                    <div class="mb-3">
+                        {{ alarm_system_form.sound_file }}
+                        {% if alarm_system.sound_file %}
+                        <div class="small text-muted mt-1">
+                            Current file: <a href="{{ alarm_system.sound_file.url }}" target="_blank">{{ alarm_system.sound_file.name }}</a>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small d-flex justify-content-between">Volume <span id="volVal">{{ alarm_system.volume }}%</span></label>
+                        {{ alarm_system_form.volume }}
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <h6 class="text-info"><i class="bi bi-sliders"></i> Master Controls</h6>
+                    
+                    <div class="form-check form-switch mb-2">
+                        {{ alarm_system_form.is_enabled }}
+                        <label class="form-check-label">Enable Global Alarms</label>
+                    </div>
+                    <div class="form-check form-switch mb-2 ms-4">
+                        {{ alarm_system_form.enable_audio }}
+                        <label class="form-check-label">Play Audio (MP3)</label>
+                    </div>
+                    <div class="form-check form-switch mb-4 ms-4">
+                        {{ alarm_system_form.enable_visual }}
+                        <label class="form-check-label">Flash Dashboard Red (Visual)</label>
+                    </div>
+                    
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-warning btn-sm" onclick="testAlarm()"><i class="bi bi-play-circle"></i> Test Alarm</button>
+                        <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-save"></i> Save Config</button>
+                    </div>
+                </div>
+            </div>
+        </form>
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3">
+            <div>
+                <h6 class="mb-1">Global Alarm Switch</h6>
+                <div class="text-muted small">When disabled, no severity level will raise a dashboard alarm.</div>
+            </div>
+            <span class="badge {% if alarm_master_enabled %}bg-success{% else %}bg-danger{% endif %}">
+                {% if alarm_master_enabled %}Enabled{% else %}Disabled{% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="ariba-card p-0">
+        <div class="table-responsive">
+            <table class="table ariba-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Description</th>
+                        <th>Sort</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alarm in alarms %}
+                    <tr>
+                        <td>
+                            <span class="severity-badge severity-{{ alarm.severity|lower }}">{{ alarm.severity }}</span>
+                        </td>
+                        <td>{{ alarm.description|default:'Alarm notification for this severity level.' }}</td>
+                        <td>{{ alarm.sort_order }}</td>
+                        <td>
+                            {% if alarm.is_enabled and alarm_master_enabled %}
+                            <span class="badge bg-success">Active</span>
+                            {% elif alarm.is_enabled %}
+                            <span class="badge bg-warning text-dark">Paused</span>
+                            {% else %}
+                            <span class="badge bg-danger">Disabled</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form method="post" action="{% url 'settings:alarm_toggle' alarm.id %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-ariba-outline btn-sm" title="Toggle severity alarm">
+                                    {% if alarm.is_enabled %}
+                                    <i class="bi bi-toggle-on text-success"></i>
+                                    {% else %}
+                                    <i class="bi bi-toggle-off text-danger"></i>
+                                    {% endif %}
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-muted text-center">No alarm settings found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const volSlider = document.querySelector('input[name="volume"]');
+        const volVal = document.getElementById('volVal');
+        if (volSlider) {
+            volSlider.addEventListener('input', (e) => {
+                volVal.textContent = e.target.value + '%';
+            });
+        }
+        
+        // Auto-toggle audio switch when file is uploaded
+        const fileInput = document.querySelector('input[name="sound_file"]');
+        const audioSwitch = document.querySelector('input[name="enable_audio"]');
+        
+        if (fileInput && audioSwitch) {
+            fileInput.addEventListener('change', function() {
+                if (this.files.length > 0) {
+                    audioSwitch.checked = true;
+                }
+            });
+        }
+    });
+
+    function testAlarm() {
+        const audioEnabled = document.querySelector('input[name="enable_audio"]').checked;
+        const visualEnabled = document.querySelector('input[name="enable_visual"]').checked;
+        const volume = document.querySelector('input[name="volume"]').value;
+        
+        if (visualEnabled) {
+            const banner = document.getElementById('globalAlarmBanner');
+            if (banner) banner.classList.add('show');
+            document.getElementById('globalAlarmMessage').innerText = "TEST ALARM ACTIVATED!";
+        }
+        
+        if (audioEnabled) {
+            const audio = document.getElementById('globalAlarmAudio');
+            if (audio && audio.src) {
+                audio.volume = volume / 100;
+                audio.play().catch(e => alert("Browser blocked autoplay. " + e));
+            } else {
+                alert("No MP3 uploaded yet to test audio.");
+            }
+        }
+        
+        setTimeout(() => {
+            if (visualEnabled) {
+                const banner = document.getElementById('globalAlarmBanner');
+                if (banner) banner.classList.remove('show');
+            }
+            if (audioEnabled) {
+                const audio = document.getElementById('globalAlarmAudio');
+                if (audio) {
+                    audio.pause();
+                    audio.currentTime = 0;
+                }
+            }
+        }, 3000);
+    }
+</script>
+{% endblock %}

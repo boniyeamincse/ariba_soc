@@ -1,0 +1,463 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0 text-white">
+                <i class="bi bi-speedometer2 text-primary"></i> MTTA / MTTR & SLA Analytics
+            </h4>
+            <small class="text-secondary">
+                Mean Time to Acknowledge (Triage), Mean Time to Resolve, and Tier-wise SLA compliance
+            </small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'reports:home' %}" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-file-text"></i> Scheduled Reports
+            </a>
+            <a href="{% url 'reports:export_mtta_mttr_csv' %}?range={{ selected_range }}&severity={{ selected_severity }}&assignee={{ selected_assignee }}&date_from={{ custom_from }}&date_to={{ custom_to }}" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-filetype-csv"></i> Export CSV
+            </a>
+            <button onclick="window.print()" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-printer"></i> Print
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="ariba-card p-3 mb-4">
+        <form method="get" class="row g-3 align-items-end">
+            <!-- Preset Range -->
+            <div class="col-md-2 col-sm-6">
+                <label class="form-label small text-secondary mb-1">Time Horizon</label>
+                <select name="range" class="form-select form-select-sm bg-dark text-white border-secondary" id="rangeSelect" onchange="toggleCustomDates(this.value)">
+                    <option value="24h" {% if selected_range == '24h' %}selected{% endif %}>Last 24 Hours</option>
+                    <option value="7d" {% if selected_range == '7d' %}selected{% endif %}>Last 7 Days</option>
+                    <option value="30d" {% if selected_range == '30d' %}selected{% endif %}>Last 30 Days</option>
+                    <option value="90d" {% if selected_range == '90d' %}selected{% endif %}>Last 90 Days</option>
+                    <option value="all" {% if selected_range == 'all' %}selected{% endif %}>All Time</option>
+                    <option value="custom" {% if selected_range == 'custom' %}selected{% endif %}>Custom Range</option>
+                </select>
+            </div>
+
+            <!-- Custom From -->
+            <div class="col-md-2 col-sm-6 custom-date-col" style="{% if selected_range != 'custom' %}display: none;{% endif %}">
+                <label class="form-label small text-secondary mb-1">Date From</label>
+                <input type="date" name="date_from" value="{{ custom_from }}" class="form-control form-control-sm bg-dark text-white border-secondary">
+            </div>
+
+            <!-- Custom To -->
+            <div class="col-md-2 col-sm-6 custom-date-col" style="{% if selected_range != 'custom' %}display: none;{% endif %}">
+                <label class="form-label small text-secondary mb-1">Date To</label>
+                <input type="date" name="date_to" value="{{ custom_to }}" class="form-control form-control-sm bg-dark text-white border-secondary">
+            </div>
+
+            <!-- Severity Filter -->
+            <div class="col-md-2 col-sm-6">
+                <label class="form-label small text-secondary mb-1">Severity</label>
+                <select name="severity" class="form-select form-select-sm bg-dark text-white border-secondary">
+                    <option value="All" {% if selected_severity == 'All' %}selected{% endif %}>All Severities</option>
+                    {% for sev in severities %}
+                    <option value="{{ sev }}" {% if selected_severity == sev %}selected{% endif %}>{{ sev }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Assignee Filter -->
+            <div class="col-md-2 col-sm-6">
+                <label class="form-label small text-secondary mb-1">Analyst / Assignee</label>
+                <select name="assignee" class="form-select form-select-sm bg-dark text-white border-secondary">
+                    <option value="All" {% if selected_assignee == 'All' %}selected{% endif %}>All Assignees</option>
+                    <option value="unassigned" {% if selected_assignee == 'unassigned' %}selected{% endif %}>Unassigned Pool</option>
+                    {% for analyst in analysts %}
+                    <option value="{{ analyst.id }}" {% if selected_assignee == analyst.id|stringformat:"s" %}selected{% endif %}>
+                        {{ analyst.username }} ({{ analyst.get_full_name|default:analyst.username }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Actions -->
+            <div class="col-md-2 col-sm-6 d-flex gap-2">
+                <button type="submit" class="btn btn-ariba-primary btn-sm w-100">
+                    <i class="bi bi-funnel"></i> Apply
+                </button>
+                <a href="{% url 'reports:mtta_mttr' %}" class="btn btn-ariba-outline btn-sm">
+                    Reset
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Executive KPI Row -->
+    <div class="row g-3 mb-4">
+        <!-- MTTA -->
+        <div class="col-md-3 col-sm-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="kpi-label">Avg MTTA (Triage)</span>
+                    <i class="bi bi-stopwatch text-info fs-5"></i>
+                </div>
+                <div class="kpi-value text-info mb-1">{{ metrics.avg_mtta_display }}</div>
+                <small class="text-secondary">Median (P50): <strong class="text-white">{{ metrics.median_mtta_display }}</strong></small>
+            </div>
+        </div>
+
+        <!-- MTTR -->
+        <div class="col-md-3 col-sm-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="kpi-label">Avg MTTR (Resolution)</span>
+                    <i class="bi bi-shield-check text-success fs-5"></i>
+                </div>
+                <div class="kpi-value text-success mb-1">{{ metrics.avg_mttr_display }}</div>
+                <small class="text-secondary">Median (P50): <strong class="text-white">{{ metrics.median_mttr_display }}</strong></small>
+            </div>
+        </div>
+
+        <!-- SLA Compliance Rate -->
+        <div class="col-md-3 col-sm-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="kpi-label">SLA Compliance Rate</span>
+                    <i class="bi bi-check2-circle text-primary fs-5"></i>
+                </div>
+                <div class="kpi-value {% if metrics.sla_compliance_rate >= 90 %}text-success{% elif metrics.sla_compliance_rate >= 75 %}text-warning{% else %}text-danger{% endif %} mb-1">
+                    {{ metrics.sla_compliance_rate }}%
+                </div>
+                <small class="text-secondary">
+                    <span class="text-success">{{ metrics.total_within_sla }} Met</span> &bull; 
+                    <span class="text-danger">{{ metrics.total_breached }} Breached</span>
+                </small>
+            </div>
+        </div>
+
+        <!-- Evaluated Volume -->
+        <div class="col-md-3 col-sm-6">
+            <div class="kpi-card text-center p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="kpi-label">Total Alert Volume</span>
+                    <i class="bi bi-bell text-warning fs-5"></i>
+                </div>
+                <div class="kpi-value text-white mb-1">{{ metrics.total_alerts }}</div>
+                <small class="text-secondary">
+                    {{ metrics.total_acknowledged }} Ack'd &bull; {{ metrics.total_resolved }} Resolved
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trend Visualizations Row -->
+    <div class="row g-3 mb-4">
+        <!-- MTTA / MTTR Trend -->
+        <div class="col-lg-6">
+            <div class="ariba-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="m-0 text-white"><i class="bi bi-graph-up text-primary"></i> MTTA & MTTR Speed Trend (Minutes)</h6>
+                    <small class="text-secondary">Lower is faster</small>
+                </div>
+                <div style="position: relative; height: 260px;">
+                    <canvas id="mttaMttrTrendChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alert Ingestion & Resolution Volume Trend -->
+        <div class="col-lg-6">
+            <div class="ariba-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="m-0 text-white"><i class="bi bi-bar-chart-line text-info"></i> Ingested vs. Resolved vs. SLA Breaches</h6>
+                    <small class="text-secondary">Throughput comparison</small>
+                </div>
+                <div style="position: relative; height: 260px;">
+                    <canvas id="volumeTrendChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Severity Performance Breakdown Table -->
+    <div class="ariba-card p-3 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="m-0 text-white"><i class="bi bi-layers text-warning"></i> Severity SLA Performance Breakdown</h5>
+            <small class="text-secondary">Target SLA vs Actual Performance</small>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-dark table-hover table-sm align-middle mb-0">
+                <thead>
+                    <tr class="text-secondary small">
+                        <th>Severity</th>
+                        <th class="text-center">Total Alerts</th>
+                        <th class="text-center">Target Triage</th>
+                        <th class="text-center">Avg MTTA</th>
+                        <th class="text-center">Median MTTA</th>
+                        <th class="text-center">Triage SLA %</th>
+                        <th class="text-center">Target Resolve</th>
+                        <th class="text-center">Avg MTTR</th>
+                        <th class="text-center">Median MTTR</th>
+                        <th class="text-center">Resolve SLA %</th>
+                        <th class="text-center">Breached</th>
+                        <th class="text-center">Overall Compliance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in metrics.severity_breakdown %}
+                    <tr>
+                        <td>
+                            {% if item.severity == 'Critical' %}
+                            <span class="badge bg-danger">Critical</span>
+                            {% elif item.severity == 'High' %}
+                            <span class="badge bg-warning text-dark">High</span>
+                            {% elif item.severity == 'Medium' %}
+                            <span class="badge bg-primary">Medium</span>
+                            {% elif item.severity == 'Low' %}
+                            <span class="badge bg-success">Low</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ item.severity }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center fw-bold">{{ item.total }}</td>
+                        <td class="text-center text-secondary small">&le; {{ item.ack_target_display }}</td>
+                        <td class="text-center text-info">{{ item.avg_mtta_display }}</td>
+                        <td class="text-center text-secondary">{{ item.median_mtta_display }}</td>
+                        <td class="text-center">
+                            <span class="badge {% if item.ack_compliance_pct >= 90 %}bg-success{% elif item.ack_compliance_pct >= 75 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                                {{ item.ack_compliance_pct }}%
+                            </span>
+                        </td>
+                        <td class="text-center text-secondary small">&le; {{ item.res_target_display }}</td>
+                        <td class="text-center text-success">{{ item.avg_mttr_display }}</td>
+                        <td class="text-center text-secondary">{{ item.median_mttr_display }}</td>
+                        <td class="text-center">
+                            <span class="badge {% if item.res_compliance_pct >= 90 %}bg-success{% elif item.res_compliance_pct >= 75 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                                {{ item.res_compliance_pct }}%
+                            </span>
+                        </td>
+                        <td class="text-center {% if item.breached > 0 %}text-danger fw-bold{% else %}text-secondary{% endif %}">
+                            {{ item.breached }}
+                        </td>
+                        <td class="text-center">
+                            <div class="d-flex align-items-center justify-content-center gap-1">
+                                <div class="progress flex-grow-1" style="height: 6px; max-width: 60px; background-color: #1e293b;">
+                                    <div class="progress-bar {% if item.sla_compliance_pct >= 90 %}bg-success{% elif item.sla_compliance_pct >= 75 %}bg-warning{% else %}bg-danger{% endif %}"
+                                         role="progressbar" style="width: {{ item.sla_compliance_pct }}%"></div>
+                                </div>
+                                <span class="small fw-semibold">{{ item.sla_compliance_pct }}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="12" class="text-center text-secondary py-3">No alerts found for the selected filter criteria.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Analyst Performance Leaderboard Table -->
+    <div class="ariba-card p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h5 class="m-0 text-white"><i class="bi bi-people text-info"></i> SOC Analyst Performance & Triage Leaderboard</h5>
+                <small class="text-secondary">Workload distribution, triage response times, and SLA adherence rate</small>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-dark table-hover table-sm align-middle mb-0">
+                <thead>
+                    <tr class="text-secondary small">
+                        <th>Analyst</th>
+                        <th>Role</th>
+                        <th class="text-center">Assigned</th>
+                        <th class="text-center">In Progress</th>
+                        <th class="text-center">Resolved</th>
+                        <th class="text-center">Avg MTTA (Triage)</th>
+                        <th class="text-center">Median MTTA</th>
+                        <th class="text-center">Avg MTTR (Resolve)</th>
+                        <th class="text-center">Median MTTR</th>
+                        <th class="text-center">SLA Breaches</th>
+                        <th class="text-center">SLA Adherence</th>
+                        <th class="text-center">TP Rate</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in metrics.analysts_breakdown %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="avatar-sm rounded-circle bg-dark d-flex align-items-center justify-content-center border border-secondary" style="width: 28px; height: 28px; font-size: 11px;">
+                                    <i class="bi bi-person text-secondary"></i>
+                                </div>
+                                <div>
+                                    <strong class="text-white">{{ a.full_name }}</strong>
+                                    {% if a.username != 'Unassigned' and a.username != a.full_name %}
+                                    <small class="text-secondary d-block">@{{ a.username }}</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">{{ a.role }}</span>
+                        </td>
+                        <td class="text-center fw-bold">{{ a.assigned }}</td>
+                        <td class="text-center text-warning">{{ a.in_progress }}</td>
+                        <td class="text-center text-success">{{ a.resolved }}</td>
+                        <td class="text-center text-info">{{ a.avg_mtta_display }}</td>
+                        <td class="text-center text-secondary">{{ a.median_mtta_display }}</td>
+                        <td class="text-center text-success">{{ a.avg_mttr_display }}</td>
+                        <td class="text-center text-secondary">{{ a.median_mttr_display }}</td>
+                        <td class="text-center {% if a.breached > 0 %}text-danger fw-bold{% else %}text-secondary{% endif %}">{{ a.breached }}</td>
+                        <td class="text-center">
+                            <span class="badge {% if a.sla_adherence_pct >= 90 %}bg-success{% elif a.sla_adherence_pct >= 75 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                                {{ a.sla_adherence_pct }}%
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <small class="text-secondary">{{ a.tp_rate }}% ({{ a.tp_count }} TP)</small>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="12" class="text-center text-secondary py-3">No analyst data available for this period.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleCustomDates(value) {
+    const cols = document.querySelectorAll('.custom-date-col');
+    cols.forEach(el => {
+        el.style.display = (value === 'custom') ? 'block' : 'none';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const trendData = {{ metrics.trend_chart_json|safe }};
+    const labels = trendData.dates.length > 0 ? trendData.dates : ['No Data'];
+    const mttaPoints = trendData.mtta.length > 0 ? trendData.mtta : [0];
+    const mttrPoints = trendData.mttr.length > 0 ? trendData.mttr : [0];
+    const createdPoints = trendData.created.length > 0 ? trendData.created : [0];
+    const resolvedPoints = trendData.resolved.length > 0 ? trendData.resolved : [0];
+    const breachedPoints = trendData.breached.length > 0 ? trendData.breached : [0];
+
+    // Chart 1: MTTA / MTTR Trend
+    const ctx1 = document.getElementById('mttaMttrTrendChart').getContext('2d');
+    new Chart(ctx1, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Avg MTTA (Triage min)',
+                    data: mttaPoints,
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: 3,
+                },
+                {
+                    label: 'Avg MTTR (Resolve min)',
+                    data: mttrPoints,
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: 3,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { color: '#94a3b8', font: { size: 11 } }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.parsed.y + ' mins';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#64748b', maxRotation: 45, minRotation: 0 }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#64748b' },
+                    title: { display: true, text: 'Minutes', color: '#64748b' }
+                }
+            }
+        }
+    });
+
+    // Chart 2: Volume & Breaches
+    const ctx2 = document.getElementById('volumeTrendChart').getContext('2d');
+    new Chart(ctx2, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Ingested',
+                    data: createdPoints,
+                    backgroundColor: '#3b82f6',
+                    borderRadius: 3,
+                },
+                {
+                    label: 'Resolved',
+                    data: resolvedPoints,
+                    backgroundColor: '#22c55e',
+                    borderRadius: 3,
+                },
+                {
+                    label: 'Breached',
+                    data: breachedPoints,
+                    backgroundColor: '#ef4444',
+                    borderRadius: 3,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { color: '#94a3b8', font: { size: 11 } }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#64748b', maxRotation: 45, minRotation: 0 }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#64748b', precision: 0 },
+                    title: { display: true, text: 'Alerts Count', color: '#64748b' }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

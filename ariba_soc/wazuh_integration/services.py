@@ -83,6 +83,73 @@ class ManagerClient:
             logger.error(f'Failed to get manager status: {e}')
             return {'error': str(e)}
 
+    def execute_active_response(self, command, agent_id, arguments=None, custom=False):
+        """
+        Executes an Active Response command on the specified agent via Wazuh API.
+        Args:
+            command (str): Command name (e.g. 'firewall-drop', 'host-deny', 'disable-account', 'restart-wazuh')
+            agent_id (str): Wazuh Agent ID (e.g. '001' or 'all')
+            arguments (list): List of command arguments, e.g. ['-', '192.168.1.50']
+            custom (bool): True if using a custom command
+        Returns:
+            dict: {'success': bool, 'message': str, 'raw': dict}
+        """
+        if arguments is None:
+            arguments = []
+
+        payload = {
+            'command': command,
+            'custom': custom,
+            'arguments': arguments,
+        }
+
+        params = {}
+        if agent_id and agent_id != 'all':
+            params['agents_list'] = str(agent_id)
+
+        try:
+            response = self.session.put(
+                f'{self.base_url}/active-response',
+                headers=self.get_headers(),
+                params=params,
+                json=payload,
+                timeout=self.timeout
+            )
+            data = response.json() if response.status_code in [200, 400] else {}
+
+            error_code = data.get('error', 0)
+            affected = data.get('data', {}).get('total_affected_items', 0)
+            failed_items = data.get('data', {}).get('failed_items', [])
+
+            if response.status_code == 200 and error_code == 0 and affected > 0:
+                return {
+                    'success': True,
+                    'message': data.get('message', f'Active Response {command} sent successfully to agent {agent_id}.'),
+                    'raw': data
+                }
+            elif response.status_code == 200 and failed_items:
+                err_detail = failed_items[0].get('error', {}).get('message', data.get('message', 'Failed to execute command on agent.'))
+                return {
+                    'success': False,
+                    'message': f"Wazuh Agent Error: {err_detail}",
+                    'raw': data
+                }
+            else:
+                err_detail = data.get('detail') or data.get('message') or response.text
+                return {
+                    'success': False,
+                    'message': f"Failed to execute Active Response: {err_detail}",
+                    'raw': data
+                }
+        except Exception as e:
+            logger.error(f"Active Response API call failed: {e}")
+            return {
+                'success': False,
+                'message': f"Active response execution error: {str(e)}",
+                'raw': {'error': str(e)}
+            }
+
+
 
 class IndexerClient:
     def __init__(self, config=None):
@@ -310,7 +377,14 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
             wazuh_alert_id__in=[str(a.get('id', '')) for a in alerts_data if a.get('id')]
         ).values_list('wazuh_alert_id', flat=True))
 
+        from datetime import timedelta
+        from settings_manager.models import AlertAggregationSetting, AlertSuppressionRule
+        agg_setting = AlertAggregationSetting.load()
+        cutoff = timezone.now() - timedelta(minutes=agg_setting.window_minutes) if agg_setting.is_enabled else None
+        active_suppression_rules = list(AlertSuppressionRule.objects.filter(is_active=True))
+
         batch = []
+        batch_keys = {}
         for i, alert_raw in enumerate(alerts_data):
             alert_id = str(alert_raw.get('id', '')) or str(i)
             if alert_id in existing_ids:
@@ -318,7 +392,66 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
             try:
                 data = normalize_es_alert(alert_raw, i)
                 data['source'] = source
-                batch.append(Alert(**data))
+
+                # Evaluate suppression
+                matched_srule = None
+                for srule in active_suppression_rules:
+                    if srule.matches(data):
+                        matched_srule = srule
+                        srule.match_count += 1
+                        srule.save(update_fields=['match_count'])
+                        break
+
+                if matched_srule:
+                    if matched_srule.action == 'DROP':
+                        continue
+                    elif matched_srule.action == 'AUTO_CLOSE':
+                        data['status'] = 'Closed'
+                        data['verdict'] = 'False Positive'
+                        data['closure_reason'] = f'Auto-suppressed by rule: {matched_srule.name}'
+                        if matched_srule.reason:
+                            data['root_cause_summary'] = f'Suppression justification: {matched_srule.reason}'
+
+                agg_key = agg_setting.generate_aggregation_key(
+                    rule_id=str(data.get('rule_id', '')),
+                    source_ip=str(data.get('source_ip', '')),
+                    destination_ip=str(data.get('destination_ip', '')),
+                    agent_id=str(data.get('agent_id', '')),
+                    hostname=str(data.get('hostname', '')),
+                    username=str(data.get('username', '')),
+                ) if agg_setting.is_enabled else ''
+
+                if agg_key:
+                    existing_agg = Alert.objects.filter(
+                        aggregation_key=agg_key,
+                        status__in=['New', 'In Progress', 'Awaiting Action'],
+                        last_seen_at__gte=cutoff,
+                        event_count__lt=agg_setting.max_events_per_alert,
+                    ).order_by('-last_seen_at').first()
+
+                    if existing_agg:
+                        existing_agg.event_count += 1
+                        existing_agg.last_seen_at = timezone.now()
+                        existing_agg.save(update_fields=['event_count', 'last_seen_at', 'updated_at'])
+                        continue
+
+                    if agg_key in batch_keys:
+                        prev_alert = batch_keys[agg_key]
+                        if prev_alert.event_count < agg_setting.max_events_per_alert:
+                            prev_alert.event_count += 1
+                            prev_alert.last_seen_at = timezone.now()
+                            continue
+
+                data['aggregation_key'] = agg_key
+                data['event_count'] = 1
+                data['first_seen_at'] = timezone.now()
+                data['last_seen_at'] = timezone.now()
+                alert_obj = Alert(**data)
+                from alerts.services import apply_asset_criticality
+                apply_asset_criticality(alert_obj)
+                batch.append(alert_obj)
+                if agg_key:
+                    batch_keys[agg_key] = alert_obj
             except Exception as e:
                 logger.error(f'Failed to normalize alert {alert_id}: {e}')
 
@@ -328,10 +461,12 @@ def fetch_wazuh_alerts(time_range='1h', config=None):
 
             # Evaluate escalation rules against each, and enrich.
             from alerts.signals import evaluate_auto_escalation
+            from alerts.services import emit_alarm_notification
             from .enrichment_service import EnrichmentService
             new_ids = [a.wazuh_alert_id for a in batch]
             for alert in Alert.objects.filter(wazuh_alert_id__in=new_ids, status='New'):
                 evaluate_auto_escalation(alert)
+                emit_alarm_notification(alert)
                 if EnrichmentService.enrich_alert(alert):
                     alert.save(update_fields=['enrichment_data'])
 

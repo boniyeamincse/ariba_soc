@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Executive SOC Report</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+            @frame footer_frame {
+                -pdf-frame-content: footer_content;
+                left: 50pt; width: 512pt; top: 772pt; height: 20pt;
+            }
+        }
+        body { font-family: Helvetica, sans-serif; font-size: 10pt; color: #333; }
+        h1 { color: #1e3a8a; font-size: 24pt; margin-bottom: 0; }
+        h2 { color: #2563eb; font-size: 16pt; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+        .subtitle { color: #6b7280; font-size: 12pt; margin-bottom: 20px; }
+        .tlp { background-color: #f59e0b; color: white; padding: 2px 8px; font-weight: bold; float: right; font-size: 10pt; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f8fafc; font-weight: bold; }
+        .summary-box { background-color: #f1f5f9; border-left: 4px solid #3b82f6; padding: 10px; margin-bottom: 20px; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .critical { color: #dc2626; font-weight: bold; }
+        .high { color: #ea580c; font-weight: bold; }
+        .medium { color: #d97706; }
+        .low { color: #16a34a; }
+    </style>
+</head>
+<body>
+    <div id="footer_content" class="text-right" style="color: #94a3b8; font-size: 8pt;">
+        Page <pdf:pagenumber> of <pdf:pagecount> | Ariba SOC Enterprise
+    </div>
+
+    <div>
+        <span class="tlp">TLP:AMBER</span>
+        <h1>Ariba SOC — Executive Summary</h1>
+        <div class="subtitle">Reporting Period: {{ since|date:"Y-m-d" }} to {{ now|date:"Y-m-d" }}</div>
+    </div>
+
+    <div class="summary-box">
+        <p>This report provides a high-level overview of security alerts, threat landscape data, and SOC performance metrics across the environment.</p>
+    </div>
+
+    <h2>1. Alert Summary</h2>
+    <table>
+        <tr>
+            <th>Total Alerts</th>
+            <th>Critical</th>
+            <th>High</th>
+            <th>Medium</th>
+            <th>Low</th>
+        </tr>
+        <tr>
+            <td class="text-center" style="font-size: 14pt; font-weight: bold;">{{ total_alerts }}</td>
+            <td class="text-center critical">{{ critical_alerts }}</td>
+            <td class="text-center high">{{ high_alerts }}</td>
+            <td class="text-center medium">{{ medium_alerts }}</td>
+            <td class="text-center low">{{ low_alerts }}</td>
+        </tr>
+    </table>
+
+    <h2>2. Top Targeted Assets</h2>
+    <table>
+        <tr>
+            <th>Hostname</th>
+            <th>Total Alerts</th>
+            <th>Highest Severity</th>
+        </tr>
+        {% for asset in top_assets %}
+        <tr>
+            <td>{{ asset.hostname }}</td>
+            <td class="text-center">{{ asset.count }}</td>
+            <td class="text-center">{{ asset.highest }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3">No assets targeted in this period.</td></tr>
+        {% endfor %}
+    </table>
+
+    <h2>3. Threat Landscape (MITRE ATT&CK)</h2>
+    <p>The following tactics and techniques were most frequently observed during this period.</p>
+    <table>
+        <tr>
+            <th>Tactic / Technique</th>
+            <th>Count</th>
+        </tr>
+        {% for tactic in mitre_tactics %}
+        <tr>
+            <td>{{ tactic.tactic|default:"Unclassified Tactic" }}</td>
+            <td class="text-center">{{ tactic.count }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2">No MITRE ATT&CK data recorded.</td></tr>
+        {% endfor %}
+    </table>
+
+    <h2>4. Regulatory Compliance Violations</h2>
+    <p>Alerts mapping to standard regulatory frameworks.</p>
+    <table>
+        <tr>
+            <th>Framework</th>
+            <th>Violation Count</th>
+        </tr>
+        <tr>
+            <td><strong>PCI-DSS</strong> (Payment Card Industry)</td>
+            <td class="text-center">{{ compliance.pci }}</td>
+        </tr>
+        <tr>
+            <td><strong>HIPAA</strong> (Healthcare Privacy)</td>
+            <td class="text-center">{{ compliance.hipaa }}</td>
+        </tr>
+        <tr>
+            <td><strong>GDPR</strong> (EU Data Protection)</td>
+            <td class="text-center">{{ compliance.gdpr }}</td>
+        </tr>
+        <tr>
+            <td><strong>NIST 800-53</strong> (Federal Security Controls)</td>
+            <td class="text-center">{{ compliance.nist }}</td>
+        </tr>
+    </table>
+
+    <div style="page-break-before: always;"></div>
+
+    <h2>5. Recent Critical Incidents</h2>
+    <table>
+        <tr>
+            <th>Time</th>
+            <th>Alert Name</th>
+            <th>Host</th>
+            <th>Status</th>
+        </tr>
+        {% for alert in recent_critical %}
+        <tr>
+            <td>{{ alert.alert_time|date:"Y-m-d H:i" }}</td>
+            <td>{{ alert.alert_name|truncatechars:50 }}</td>
+            <td>{{ alert.hostname }}</td>
+            <td>{{ alert.status }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4">No critical incidents in this period.</td></tr>
+        {% endfor %}
+    </table>
+
+</body>
+</html>

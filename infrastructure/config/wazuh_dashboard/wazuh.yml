@@ -4,4 +4,4 @@ hosts:
       port: 55000
       username: wazuh-wui
       password: "WazuhApi@12345"
-      run_as: false
+      run_as: true

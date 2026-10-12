@@ -256,8 +256,11 @@
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <pre id="event-json" class="hunt-json mb-0"></pre>
+            <div class="modal-body position-relative">
+                <button type="button" class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-3 mt-2" onclick="navigator.clipboard.writeText(document.getElementById('event-json').textContent); this.innerHTML='<i class=\'bi bi-check2\'></i> Copied!'; setTimeout(() => this.innerHTML='<i class=\'bi bi-clipboard\'></i> Copy JSON', 2000)" style="z-index: 10;">
+                    <i class="bi bi-clipboard"></i> Copy JSON
+                </button>
+                <pre id="event-json" class="hunt-json mb-0 pt-3"></pre>
             </div>
         </div>
     </div>

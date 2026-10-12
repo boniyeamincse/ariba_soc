@@ -30,7 +30,7 @@ services:
 
   wazuh.indexer:
     environment:
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"  # Lower for dev
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
     ports:
       - "9200:9200"
 
@@ -40,8 +40,8 @@ services:
 
   db:
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
   redis:
     ports:
-      - "6379:6379"
+      - "6380:6379"

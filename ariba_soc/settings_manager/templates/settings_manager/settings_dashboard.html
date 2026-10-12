@@ -47,14 +47,41 @@
         </div>
         <div class="col-6 col-md-3">
             <div class="settings-stat-card">
+                <div class="settings-stat-value">{{ alarm_enabled_count }} / {{ alarm_count }}</div>
+                <div class="settings-stat-label"><i class="bi bi-bell-fill"></i> Alarm Toggles</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="settings-stat-card">
                 <div class="settings-stat-value">{{ verdict_count }}</div>
                 <div class="settings-stat-label"><i class="bi bi-check2-square"></i> Verdicts</div>
             </div>
         </div>
+        <div class="col-6 col-md-3">
+            <a href="{% url 'settings:aggregation' %}" class="text-decoration-none">
+                <div class="settings-stat-card border-info">
+                    <div class="settings-stat-value text-info">{% if agg_setting.is_enabled %}{{ agg_setting.window_minutes }}m{% else %}Off{% endif %}</div>
+                    <div class="settings-stat-label"><i class="bi bi-layers-half text-info"></i> Aggregation Window</div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-3">
+            <a href="{% url 'settings:suppression_rules' %}" class="text-decoration-none">
+                <div class="settings-stat-card border-warning">
+                    <div class="settings-stat-value text-warning">{{ suppression_count }}</div>
+                    <div class="settings-stat-label"><i class="bi bi-funnel text-warning"></i> Suppression Rules</div>
+                </div>
+            </a>
+        </div>
     </div>
 
     <div class="ariba-card p-3">
-        <h6 class="text-secondary mb-3"><i class="bi bi-journal-text"></i> Recent Audit Log</h6>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="text-secondary m-0"><i class="bi bi-journal-text me-1"></i> Recent Audit Log</h6>
+            <a href="{% url 'settings:audit' %}" class="btn btn-ariba-outline btn-sm py-0 px-2">
+                <i class="bi bi-arrow-right me-1"></i>View All Audit Logs
+            </a>
+        </div>
         <div class="table-responsive">
             <table class="table ariba-table">
                 <thead>

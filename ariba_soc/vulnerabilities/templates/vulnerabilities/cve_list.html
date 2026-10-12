@@ -1,35 +1,105 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}CVE Inventory{% endblock %}
+{% block title %}CVE Library - Vulnerability Management{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'vulnerabilities/css/vulnerabilities.css' %}">
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-3">
-    <h4 class="mb-3"><i class="fas fa-fingerprint me-2"></i>CVE Inventory</h4>
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0 text-white"><i class="bi bi-fingerprint text-info me-2"></i>CVE Library</h4>
+            <small class="text-secondary">Common Vulnerabilities and Exposures identified in the monitored environment</small>
+        </div>
+        <div>
+            <a href="{% url 'vulnerabilities:overview' %}" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back to Overview
+            </a>
+        </div>
+    </div>
 
-    <div class="card">
+    <!-- Navigation Bar -->
+    <div class="vuln-nav-bar px-3 py-2 mb-4">
+        <ul class="nav nav-pills gap-1 flex-wrap align-items-center">
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'vulnerabilities:overview' %}">
+                    <i class="bi bi-grid-1x2 me-1"></i> Overview
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'vulnerabilities:inventory' %}">
+                    <i class="bi bi-list-check me-1"></i> Inventory
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'vulnerabilities:affected_assets' %}">
+                    <i class="bi bi-hdd-network me-1"></i> Affected Assets
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 active bg-primary text-white" href="{% url 'vulnerabilities:cve_list' %}">
+                    <i class="bi bi-fingerprint me-1"></i> CVE Library
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <!-- CVEs Table -->
+    <div class="ariba-card p-0">
         <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-                <thead class="table-dark">
+            <table class="table ariba-table table-hover align-middle mb-0">
+                <thead>
                     <tr>
-                        <th>CVE ID</th>
+                        <th>CVE Identifier</th>
                         <th>Affected Agents</th>
                         <th>Total Instances</th>
                         <th>Max CVSS</th>
-                        <th>Severity</th>
+                        <th>Calculated Severity</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for cve in cves %}
                     <tr>
-                        <td>{{ cve.cve_id }}</td>
-                        <td><span class="badge bg-primary">{{ cve.affected_agents }}</span></td>
-                        <td>{{ cve.count }}</td>
-                        <td>{{ cve.max_cvss|default:"-" }}</td>
-                        <td><span class="badge bg-{% if cve.severity == 'Critical' %}danger{% elif cve.severity == 'High' %}warning text-dark{% elif cve.severity == 'Medium' %}info{% else %}secondary{% endif %}">{{ cve.severity|default:"-" }}</span></td>
+                        <td class="font-monospace fw-bold">
+                            <span class="text-info">{{ cve.cve_id }}</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-primary-subtle text-primary border border-primary font-monospace">{{ cve.affected_agents }}</span>
+                        </td>
+                        <td>
+                            <span class="font-monospace text-light">{{ cve.count }}</span>
+                        </td>
+                        <td class="font-monospace">
+                            {% if cve.max_cvss %}
+                                <span class="{% if cve.max_cvss >= 9.0 %}text-danger fw-bold{% elif cve.max_cvss >= 7.0 %}text-warning{% else %}text-light{% endif %}">
+                                    {{ cve.max_cvss }}
+                                </span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if cve.severity == 'Critical' %}
+                                <span class="badge vuln-badge-critical font-monospace">{{ cve.severity }}</span>
+                            {% elif cve.severity == 'High' %}
+                                <span class="badge vuln-badge-high font-monospace">{{ cve.severity }}</span>
+                            {% elif cve.severity == 'Medium' %}
+                                <span class="badge vuln-badge-medium font-monospace">{{ cve.severity }}</span>
+                            {% elif cve.severity == 'Low' %}
+                                <span class="badge vuln-badge-low font-monospace">{{ cve.severity }}</span>
+                            {% else %}
+                                <span class="badge vuln-badge-info font-monospace">{{ cve.severity|default:"-" }}</span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="5" class="text-center text-muted py-3">No CVEs found</td></tr>
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">No CVEs found</td>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>

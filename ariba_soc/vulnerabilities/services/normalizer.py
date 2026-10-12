@@ -1,4 +1,5 @@
 from vulnerabilities.models import VulnerabilityCase, VulnerabilityAuditLog
+from vulnerabilities.services.risk_calculator import calculate_due_at
 
 
 def normalize_cve_id(cve_id):
@@ -29,8 +30,9 @@ def map_severity_to_priority(severity, cvss_score=None):
 
 def sync_vulnerability_from_indexer(vuln_data, user=None):
     cve_id = normalize_cve_id(vuln_data.get('cve_id', ''))
-    agent_id = vuln_data.get('agent_id', '')
-    package_name = vuln_data.get('package_name', '')
+    agent_id = str(vuln_data.get('agent_id', '')).strip()
+    agent_name = str(vuln_data.get('agent_name', '')).strip()
+    package_name = str(vuln_data.get('package_name', '')).strip()
     key = build_vulnerability_key(cve_id, agent_id, package_name)
 
     priority = map_severity_to_priority(
@@ -42,17 +44,22 @@ def sync_vulnerability_from_indexer(vuln_data, user=None):
         vulnerability_key=key,
         defaults={
             'agent_id': agent_id,
+            'agent_name': agent_name,
             'cve_id': cve_id,
             'package_name': package_name,
-            'installed_version': vuln_data.get('installed_version', ''),
-            'vulnerable_version': vuln_data.get('vulnerable_version', ''),
+            'installed_version': vuln_data.get('installed_version', '') or '',
+            'vulnerable_version': vuln_data.get('vulnerable_version', '') or '',
             'cvss_score': vuln_data.get('cvss_score'),
-            'severity': vuln_data.get('severity', ''),
-            'description': vuln_data.get('description', ''),
-            'reference_url': vuln_data.get('reference', ''),
+            'severity': vuln_data.get('severity', '') or '',
+            'description': vuln_data.get('description', '') or '',
+            'reference_url': vuln_data.get('reference', '') or '',
             'priority': priority,
         }
     )
+
+    if not case.due_at:
+        case.due_at = calculate_due_at(priority)
+        case.save(update_fields=['due_at'])
 
     if created:
         VulnerabilityAuditLog.objects.create(

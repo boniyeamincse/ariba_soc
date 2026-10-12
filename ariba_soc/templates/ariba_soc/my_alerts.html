@@ -32,7 +32,14 @@
                     {% for alert in alerts %}
                     <tr>
                         <td class="text-nowrap"><small>{{ alert.alert_time|date:"M d, H:i" }}</small></td>
-                        <td><span class="fw-medium">{{ alert.alert_name|truncatechars:50 }}</span></td>
+                        <td>
+                            <span class="fw-medium">{{ alert.alert_name|truncatechars:50 }}</span>
+                            {% if alert.event_count > 1 %}
+                            <span class="badge bg-secondary bg-opacity-75 text-info ms-1" style="font-size: 0.7rem;" title="Aggregated {{ alert.event_count }} events">
+                                <i class="bi bi-layers-half"></i> {{ alert.event_count }}
+                            </span>
+                            {% endif %}
+                        </td>
                         <td class="d-none d-md-table-cell">{% include 'ariba_soc/_severity_badge.html' with severity=alert.severity %}</td>
                         <td class="d-none d-md-table-cell">{% include 'ariba_soc/_status_pill.html' with status=alert.status %}</td>
                         <td class="d-none d-md-table-cell">{% include 'ariba_soc/_verdict_pill.html' with verdict=alert.verdict %}</td>
@@ -56,6 +63,21 @@
                 </tbody>
             </table>
         </div>
+        {% if alerts.has_other_pages %}
+        <div class="card-footer ariba-card-footer d-flex justify-content-center border-top border-secondary border-opacity-25 py-2">
+            <ul class="pagination pagination-sm mb-0">
+                {% if alerts.has_previous %}
+                <li class="page-item"><a class="page-link ariba-input" href="?page=1">&laquo;</a></li>
+                <li class="page-item"><a class="page-link ariba-input" href="?page={{ alerts.previous_page_number }}">&lsaquo;</a></li>
+                {% endif %}
+                <li class="page-item disabled"><span class="page-link ariba-input">Page {{ alerts.number }} of {{ alerts.paginator.num_pages }}</span></li>
+                {% if alerts.has_next %}
+                <li class="page-item"><a class="page-link ariba-input" href="?page={{ alerts.next_page_number }}">&rsaquo;</a></li>
+                <li class="page-item"><a class="page-link ariba-input" href="?page={{ alerts.paginator.num_pages }}">&raquo;</a></li>
+                {% endif %}
+            </ul>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 </div>

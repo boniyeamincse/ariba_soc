@@ -31,7 +31,24 @@ def dashboard_home(request):
     role = getattr(request.user.analyst_profile, 'role', '')
     if role == 'MONITOR':
         return render(request, 'monitor/wallboard.html')
-    return dashboard_manager(request)
+
+    today = TODAY()
+    open_alerts_qs = Alert.objects.filter(status__in=OPEN_STATUSES)
+
+    context = {
+        'dashboard_title': 'Executive SOC Overview Dashboard',
+        'dashboard_level': 'overview',
+        'total_alerts_today': Alert.objects.filter(alert_time__gte=today).count(),
+        'open_alerts': open_alerts_qs.count(),
+        'critical_open': open_alerts_qs.filter(severity='Critical').count(),
+        'sla_breached': Alert.objects.filter(sla_status='Breached', status__in=OPEN_STATUSES).count(),
+        'true_positives': Alert.objects.filter(verdict='True Positive').count(),
+        'false_positives': Alert.objects.filter(verdict='False Positive').count(),
+        'escalated_alerts': Alert.objects.filter(is_escalated=True, status__in=OPEN_STATUSES).count(),
+        'closed_alerts': Alert.objects.filter(status='Closed').count(),
+    }
+    return render(request, 'ariba_soc/dashboard_home.html', context)
+
 
 
 @login_required

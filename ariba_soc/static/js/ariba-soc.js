@@ -156,6 +156,13 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function moveAlert(alertId, newStatus, column) {
+        var card = document.querySelector('.kanban-card[data-alert-id="' + alertId + '"]');
+        if (!card) return;
+        
+        var oldColumn = card.closest('.kanban-column-body');
+        column.appendChild(card);
+        updateColumnCounts();
+
         fetch('/api/alerts/' + alertId + '/move/', {
             method: 'POST',
             headers: {
@@ -166,8 +173,45 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(function(response) { return response.json(); })
         .then(function(data) {
-            if (data.success) {
-                location.reload();
+            if (!data.success) {
+                if (oldColumn) {
+                    oldColumn.appendChild(card);
+                    updateColumnCounts();
+                }
+                alert('Failed to move alert: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(function() {
+            if (oldColumn) {
+                oldColumn.appendChild(card);
+                updateColumnCounts();
+            }
+            alert('Failed to move alert due to network error.');
+        });
+    }
+
+    function updateColumnCounts() {
+        document.querySelectorAll('.kanban-column').forEach(function(col) {
+            var cards = col.querySelectorAll('.kanban-card');
+            var visibleCount = 0;
+            cards.forEach(function(c) {
+                if (c.style.display !== 'none') visibleCount++;
+            });
+            
+            var badge = col.querySelector('.kanban-column-header .badge');
+            if (badge) badge.textContent = visibleCount;
+            
+            var body = col.querySelector('.kanban-column-body');
+            var emptyMsg = body.querySelector('.empty-message');
+            if (visibleCount === 0) {
+                if (!emptyMsg) {
+                    var div = document.createElement('div');
+                    div.className = 'text-center text-muted py-4 empty-message';
+                    div.innerHTML = '<small>No alerts matching criteria</small>';
+                    body.appendChild(div);
+                }
+            } else if (emptyMsg) {
+                emptyMsg.remove();
             }
         });
     }
@@ -176,6 +220,89 @@ document.addEventListener('DOMContentLoaded', function() {
         var value = '; ' + document.cookie;
         var parts = value.split('; ' + name + '=');
         if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+
+    // Global alarm polling and audio playback
+    var alarmBanner = document.getElementById('globalAlarmBanner');
+    var alarmAudio = document.getElementById('globalAlarmAudio');
+    var alarmStopBtn = document.getElementById('globalAlarmStopBtn');
+    var alarmStateUrl = alarmBanner ? alarmBanner.getAttribute('data-state-url') : '';
+    var alarmStopUrl = alarmBanner ? alarmBanner.getAttribute('data-stop-url') : '';
+    var alarmSoundUrl = alarmBanner ? alarmBanner.getAttribute('data-sound-url') : '';
+    var alarmPollingTimer = null;
+    var alarmWasActive = false;
+
+    function applyAlarmState(state) {
+        if (!alarmBanner) return;
+        var active = !!(state && state.active && state.enabled);
+        var soundUrl = state && state.sound_url ? state.sound_url : alarmSoundUrl;
+        var message = state && state.active_message ? state.active_message : 'A monitored alert triggered the alarm state.';
+
+        alarmBanner.classList.toggle('show', active);
+        document.body.classList.toggle('alarm-active', active);
+
+        var alarmMessage = document.getElementById('globalAlarmMessage');
+        if (alarmMessage) {
+            alarmMessage.textContent = message;
+        }
+
+        if (alarmAudio) {
+            if (soundUrl && alarmAudio.getAttribute('src') !== soundUrl) {
+                alarmAudio.setAttribute('src', soundUrl);
+                alarmAudio.load();
+            }
+            if (active) {
+                if (!alarmWasActive) {
+                    alarmAudio.currentTime = 0;
+                    alarmAudio.play().catch(function() {});
+                } else if (alarmAudio.paused) {
+                    alarmAudio.play().catch(function() {});
+                }
+            } else {
+                alarmAudio.pause();
+                alarmAudio.currentTime = 0;
+            }
+        }
+
+        alarmWasActive = active;
+    }
+
+    function refreshAlarmState() {
+        if (!alarmStateUrl) return;
+        fetch(alarmStateUrl, {
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json'
+            }
+        })
+        .then(function(response) { return response.ok ? response.json() : null; })
+        .then(function(data) {
+            if (data) applyAlarmState(data);
+        })
+        .catch(function() {});
+    }
+
+    if (alarmBanner && alarmStateUrl) {
+        refreshAlarmState();
+        alarmPollingTimer = setInterval(refreshAlarmState, 3000);
+    }
+
+    if (alarmStopBtn && alarmStopUrl) {
+        alarmStopBtn.addEventListener('click', function() {
+            fetch(alarmStopUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(function(response) { return response.ok ? response.json() : null; })
+            .then(function(data) {
+                if (data) applyAlarmState(data);
+            })
+            .catch(function() {});
+        });
     }
 
     // Filter form auto-submit
@@ -245,3 +372,30 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+    // Kanban quick filters
+    var currentUserId = document.body.getAttribute('data-user-id'); // Need to make sure this exists or find another way. Wait! 
+    var currentUserId = document.body.getAttribute('data-user-id');
+    document.querySelectorAll('.board-filter-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var filter = this.getAttribute('data-filter');
+            
+            // Toggle active state
+            document.querySelectorAll('.board-filter-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+
+            var cards = document.querySelectorAll('.kanban-card');
+            cards.forEach(function(card) {
+                var show = true;
+                if (filter === 'mine') {
+                    show = (card.getAttribute('data-assignee-id') === currentUserId);
+                } else if (filter === 'critical') {
+                    show = (card.getAttribute('data-severity') === 'Critical' || card.getAttribute('data-severity') === 'High');
+                }
+                
+                card.style.display = show ? 'block' : 'none';
+            });
+            
+            updateColumnCounts();
+        });
+    });

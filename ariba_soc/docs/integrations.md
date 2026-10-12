@@ -6,6 +6,40 @@
 
 Ariba SOC connects to the Wazuh Manager via its REST API on port `55000`. Authentication is JWT-based.
 
+### Kali Agent Connectivity Best Practice
+
+If your Kali host runs the Wazuh agent and the Wazuh manager is on the same Docker host, use the loopback address. Do not hardcode a LAN, Wi-Fi, or public IP for the manager in that case.
+
+Recommended agent config for the Kali host:
+
+```xml
+<client>
+  <server>
+    <address>127.0.0.1</address>
+    <port>1514</port>
+    <protocol>tcp</protocol>
+  </server>
+
+  <config-profile>kali, kali-host, linux</config-profile>
+  <notify_time>10</notify_time>
+  <time-reconnect>60</time-reconnect>
+  <auto_restart>yes</auto_restart>
+</client>
+```
+
+Why this is the right choice in a same-host Docker lab:
+
+- `127.0.0.1` stays stable when the machine changes from Wi-Fi to LAN.
+- Docker publishes the manager port to the host in `infrastructure/docker-compose.yml`.
+- `tcp` plus `time-reconnect` and `auto_restart` helps the agent recover after the network briefly drops.
+
+What this does not solve:
+
+- If the machine is offline, the agent cannot stay connected in real time.
+- If the manager is on another host, use a stable DNS name or a VPN address such as WireGuard or Tailscale instead of a raw IP.
+
+See the dedicated setup guide: [Kali Agent Setup](guide/kali-agent-setup.md)
+
 ### Configuration
 
 Configured via UI (Admin → Wazuh Integration → Manager Config):

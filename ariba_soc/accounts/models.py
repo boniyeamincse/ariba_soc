@@ -26,10 +26,61 @@ TEAM_CHOICES = [
 ]
 
 
+class SocTeam(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+
+    TIER_CHOICES = [
+        ('L1', 'Tier 1 - Triage & Initial Response'),
+        ('L2', 'Tier 2 - Advanced Investigation & IR'),
+        ('L3', 'Tier 3 - Threat Hunting & Forensics'),
+        ('ENG', 'Detection Engineering & Wazuh'),
+        ('MGMT', 'SOC Management & Governance'),
+    ]
+    tier = models.CharField(max_length=20, choices=TIER_CHOICES, default='L1')
+
+    lead = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='led_teams'
+    )
+
+    SHIFT_CHOICES = [
+        ('24x7', '24x7 Dedicated'),
+        ('MORNING', 'Morning Shift (08:00 - 16:00)'),
+        ('EVENING', 'Evening Shift (16:00 - 00:00)'),
+        ('NIGHT', 'Night Shift (00:00 - 08:00)'),
+        ('GENERAL', 'Standard Business Hours (09:00 - 18:00)'),
+    ]
+    shift_type = models.CharField(max_length=20, choices=SHIFT_CHOICES, default='GENERAL')
+    shift_start_time = models.TimeField(null=True, blank=True)
+    shift_end_time = models.TimeField(null=True, blank=True)
+
+    notification_email = models.EmailField(blank=True)
+    webhook_url = models.URLField(blank=True, help_text='Slack/Teams/Webhook endpoint for team alerts')
+
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['tier', 'name']
+        verbose_name = 'SOC Team'
+        verbose_name_plural = 'SOC Teams'
+
+    def __str__(self):
+        return f"{self.name} ({self.get_tier_display()})"
+
+
 class AnalystProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='analyst_profile')
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='L1')
     team = models.CharField(max_length=20, choices=TEAM_CHOICES, blank=True)
+    soc_team = models.ForeignKey(
+        SocTeam, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='members',
+        help_text='Dynamic SOC Team assigned to this analyst'
+    )
     phone = models.CharField(max_length=20, blank=True)
     designation = models.CharField(max_length=100, blank=True)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)

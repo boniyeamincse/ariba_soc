@@ -204,3 +204,17 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting policy.
 ## License
 
 This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+
+
+
+user the project :
+
+https://localhost:8443/app/login?
+user :admin
+Pass :Admin@12345
+
+
+http://localhost:8080/accounts/login/
+
+user :admin
+Pass :Admin@12345

@@ -1,15 +1,21 @@
 from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm
-from accounts.models import AnalystProfile, ROLE_CHOICES, TEAM_CHOICES
+from accounts.models import AnalystProfile, ROLE_CHOICES, TEAM_CHOICES, SocTeam
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
-    DashboardSetting, AuditLogSetting, SystemSetting, IOCEnrichmentSetting
+    DashboardSetting, AuditLogSetting, AlarmSetting, AlarmSystemSetting, SystemSetting, IOCEnrichmentSetting,
+    AlertAggregationSetting, AlertSuppressionRule
 )
 
 class UserManagementForm(UserCreationForm):
     role = forms.ChoiceField(choices=ROLE_CHOICES)
+    soc_team = forms.ModelChoiceField(
+        queryset=SocTeam.objects.filter(is_active=True),
+        required=False,
+        empty_label="-- Select SOC Team --"
+    )
     team = forms.ChoiceField(choices=TEAM_CHOICES, required=False)
     phone = forms.CharField(max_length=20, required=False)
     designation = forms.CharField(max_length=100, required=False)
@@ -26,6 +32,7 @@ class UserManagementForm(UserCreationForm):
         self.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
         self.fields['role'].widget.attrs.update({'class': 'form-select form-select-sm'})
         self.fields['team'].widget.attrs.update({'class': 'form-select form-select-sm'})
+        self.fields['soc_team'].widget.attrs.update({'class': 'form-select form-select-sm'})
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -33,7 +40,8 @@ class UserManagementForm(UserCreationForm):
             user.save()
             profile, _ = AnalystProfile.objects.get_or_create(user=user)
             profile.role = self.cleaned_data['role']
-            profile.team = self.cleaned_data.get('team', '')
+            profile.soc_team = self.cleaned_data.get('soc_team')
+            profile.team = profile.soc_team.tier if profile.soc_team else self.cleaned_data.get('team', '')
             profile.phone = self.cleaned_data.get('phone', '')
             profile.designation = self.cleaned_data.get('designation', '')
             profile.is_active = self.cleaned_data.get('is_active', True)
@@ -42,6 +50,11 @@ class UserManagementForm(UserCreationForm):
 
 class UserEditForm(forms.ModelForm):
     role = forms.ChoiceField(choices=ROLE_CHOICES)
+    soc_team = forms.ModelChoiceField(
+        queryset=SocTeam.objects.filter(is_active=True),
+        required=False,
+        empty_label="-- Select SOC Team --"
+    )
     team = forms.ChoiceField(choices=TEAM_CHOICES, required=False)
     phone = forms.CharField(max_length=20, required=False)
     designation = forms.CharField(max_length=100, required=False)
@@ -58,37 +71,80 @@ class UserEditForm(forms.ModelForm):
         self.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
         self.fields['role'].widget.attrs.update({'class': 'form-select form-select-sm'})
         self.fields['team'].widget.attrs.update({'class': 'form-select form-select-sm'})
+        self.fields['soc_team'].widget.attrs.update({'class': 'form-select form-select-sm'})
         if self.instance and hasattr(self.instance, 'analyst_profile'):
             p = self.instance.analyst_profile
             self.initial['role'] = p.role
             self.initial['team'] = p.team
+            self.initial['soc_team'] = p.soc_team_id if p.soc_team else None
             self.initial['phone'] = p.phone
             self.initial['designation'] = p.designation
             self.initial['is_active'] = p.is_active
 
-    def save(self, commit=True):
+    def save(self, commit=True, files=None):
         user = super().save(commit=False)
         if commit:
             user.save()
             profile, _ = AnalystProfile.objects.get_or_create(user=user)
             profile.role = self.cleaned_data['role']
-            profile.team = self.cleaned_data.get('team', '')
+            profile.soc_team = self.cleaned_data.get('soc_team')
+            profile.team = profile.soc_team.tier if profile.soc_team else self.cleaned_data.get('team', '')
             profile.phone = self.cleaned_data.get('phone', '')
             profile.designation = self.cleaned_data.get('designation', '')
             profile.is_active = self.cleaned_data.get('is_active', True)
+            if files and 'avatar' in files and files['avatar']:
+                profile.avatar = files['avatar']
             profile.save()
         return user
+
+
+class SocTeamForm(forms.ModelForm):
+    class Meta:
+        model = SocTeam
+        fields = [
+            'name', 'tier', 'lead', 'shift_type',
+            'shift_start_time', 'shift_end_time',
+            'notification_email', 'webhook_url',
+            'description', 'is_active'
+        ]
+        widgets = {
+            'shift_start_time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control form-control-sm'}),
+            'shift_end_time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control form-control-sm'}),
+            'description': forms.Textarea(attrs={'rows': 2, 'class': 'form-control form-control-sm'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.update({'class': 'form-check-input'})
+            elif isinstance(field.widget, forms.Select):
+                field.widget.attrs.update({'class': 'form-select form-select-sm'})
+            elif name not in ['shift_start_time', 'shift_end_time', 'description']:
+                field.widget.attrs.update({'class': 'form-control form-control-sm'})
+        self.fields['lead'].queryset = User.objects.filter(is_active=True).order_by('username')
+        self.fields['lead'].empty_label = "-- Select Team Lead --"
 
 class AnalystProfileForm(forms.ModelForm):
     class Meta:
         model = AnalystProfile
-        fields = ['role', 'team', 'phone', 'designation', 'is_active']
+        fields = ['role', 'soc_team', 'team', 'phone', 'designation', 'is_active']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for f in self.fields.values():
-            f.widget.attrs.update({'class': 'form-select form-select-sm' if isinstance(f, (forms.ChoiceField, forms.TypedChoiceField)) else 'form-control form-control-sm'})
+            f.widget.attrs.update({'class': 'form-select form-select-sm' if isinstance(f, (forms.ChoiceField, forms.TypedChoiceField, forms.ModelChoiceField)) else 'form-control form-control-sm'})
         self.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
+        self.fields['soc_team'].queryset = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
+        self.fields['soc_team'].empty_label = "-- Unassigned Team --"
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if instance.soc_team:
+            instance.team = instance.soc_team.tier
+        if commit:
+            instance.save()
+        return instance
 
 class AlertSourceSettingsForm(forms.ModelForm):
     class Meta:
@@ -218,6 +274,86 @@ class AuditLogSettingForm(forms.ModelForm):
             f.widget.attrs.update({'class': 'form-control form-control-sm'})
         self.fields['log_enabled'].widget.attrs.update({'class': 'form-check-input'})
         self.fields['is_critical'].widget.attrs.update({'class': 'form-check-input'})
+
+class AlarmSettingForm(forms.ModelForm):
+    class Meta:
+        model = AlarmSetting
+        fields = ['severity', 'is_enabled', 'description', 'sort_order']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for f in self.fields.values():
+            f.widget.attrs.update({'class': 'form-control form-control-sm'})
+        self.fields['is_enabled'].widget.attrs.update({'class': 'form-check-input'})
+        self.fields['severity'].widget.attrs.update({'class': 'form-select form-select-sm'})
+
+class AlarmSystemSettingForm(forms.ModelForm):
+    class Meta:
+        model = AlarmSystemSetting
+        fields = ['is_enabled', 'enable_audio', 'enable_visual', 'volume', 'sound_file']
+        widgets = {
+            'sound_file': forms.FileInput(attrs={'class': 'form-control form-control-sm', 'accept': '.mp3,audio/mpeg'})
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['is_enabled'].widget.attrs.update({'class': 'form-check-input'})
+        self.fields['enable_audio'].widget.attrs.update({'class': 'form-check-input'})
+        self.fields['enable_visual'].widget.attrs.update({'class': 'form-check-input'})
+        self.fields['volume'].widget.attrs.update({'type': 'range', 'class': 'form-range', 'min': '0', 'max': '100', 'step': '1'})
+
+    def clean(self):
+        cleaned_data = super().clean()
+        enable_audio = cleaned_data.get('enable_audio')
+        sound_file = cleaned_data.get('sound_file')
+        
+        # If user enables audio but there is no MP3 file, automatically disable it
+        if enable_audio and not sound_file:
+            cleaned_data['enable_audio'] = False
+            
+        return cleaned_data
+
+class AlertAggregationSettingForm(forms.ModelForm):
+    class Meta:
+        model = AlertAggregationSetting
+        fields = [
+            'is_enabled', 'window_minutes', 'max_events_per_alert',
+            'group_by_rule', 'group_by_source_ip', 'group_by_destination_ip',
+            'group_by_agent', 'group_by_username'
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for f in self.fields.values():
+            if isinstance(f.widget, forms.CheckboxInput):
+                f.widget.attrs.update({'class': 'form-check-input'})
+            else:
+                f.widget.attrs.update({'class': 'form-control form-control-sm'})
+
+
+class AlertSuppressionRuleForm(forms.ModelForm):
+    class Meta:
+        model = AlertSuppressionRule
+        fields = [
+            'name', 'action', 'rule_id', 'source_ip', 'destination_ip',
+            'hostname', 'agent_id', 'username', 'is_regex', 'reason', 
+            'expires_at', 'status', 'is_active'
+        ]
+        widgets = {
+            'expires_at': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control form-control-sm'}),
+            'reason': forms.Textarea(attrs={'rows': 2, 'class': 'form-control form-control-sm', 'placeholder': 'Reason for suppression, false positive context or change ticket...'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.update({'class': 'form-check-input'})
+            elif isinstance(field.widget, forms.Select):
+                field.widget.attrs.update({'class': 'form-select form-select-sm'})
+            elif name not in ['expires_at', 'reason']:
+                field.widget.attrs.update({'class': 'form-control form-control-sm'})
+
 
 class SystemSettingForm(forms.ModelForm):
     class Meta:

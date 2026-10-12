@@ -1,0 +1,126 @@
+{% extends 'settings_manager/settings_base.html' %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0"><i class="bi bi-layers-half text-info"></i> Dynamic Alert Aggregation & Correlation</h4>
+            <p class="settings-page-desc mb-0">Group rapid-fire duplicate alerts into single actionable cases to prevent SOC analyst fatigue.</p>
+        </div>
+        <div>
+            <form method="post" action="{% url 'settings:aggregation_toggle' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm {% if agg_setting.is_enabled %}btn-success{% else %}btn-outline-secondary{% endif %}">
+                    {% if agg_setting.is_enabled %}
+                    <i class="bi bi-toggle-on"></i> Aggregation Active
+                    {% else %}
+                    <i class="bi bi-toggle-off"></i> Aggregation Disabled
+                    {% endif %}
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Statistics Row -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-4">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value text-primary">{{ total_alerts }}</div>
+                <div class="settings-stat-label"><i class="bi bi-bell"></i> Total Alert Cases</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value text-info">{{ aggregated_alerts }}</div>
+                <div class="settings-stat-label"><i class="bi bi-layers"></i> Aggregated Cases</div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value text-success">+{{ total_events_saved }}</div>
+                <div class="settings-stat-label"><i class="bi bi-shield-check"></i> Raw Events Consolidated</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Form -->
+    <div class="ariba-card p-4 mb-4">
+        <h5 class="border-bottom pb-2 mb-3"><i class="bi bi-sliders"></i> Aggregation Parameters</h5>
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold">Sliding Time Window (Minutes)</label>
+                    {{ form.window_minutes }}
+                    <div class="form-text small">Incoming events matching the criteria within this window will update the existing alert count.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold">Maximum Events per Alert</label>
+                    {{ form.max_events_per_alert }}
+                    <div class="form-text small">Once this event threshold is reached, subsequent events create a fresh alert case.</div>
+                </div>
+            </div>
+
+            <h6 class="mt-4 mb-3 border-bottom pb-2"><i class="bi bi-diagram-3"></i> Grouping Strategy Criteria (Entity Fields)</h6>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="form-check form-switch">
+                        {{ form.group_by_rule }}
+                        <label class="form-check-label fw-bold">Group by Rule ID</label>
+                        <div class="text-muted small">Only aggregate events from identical detection rules.</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check form-switch">
+                        {{ form.group_by_source_ip }}
+                        <label class="form-check-label fw-bold">Group by Source IP</label>
+                        <div class="text-muted small">Aggregate events originating from the same attacker IP.</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check form-switch">
+                        {{ form.group_by_agent }}
+                        <label class="form-check-label fw-bold">Group by Target Agent / Host</label>
+                        <div class="text-muted small">Aggregate events targeting the same internal asset.</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check form-switch">
+                        {{ form.group_by_destination_ip }}
+                        <label class="form-check-label fw-bold">Group by Destination IP</label>
+                        <div class="text-muted small">Group events targeting the same destination address.</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check form-switch">
+                        {{ form.group_by_username }}
+                        <label class="form-check-label fw-bold">Group by Username</label>
+                        <div class="text-muted small">Group events with the same user account context.</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check form-switch">
+                        {{ form.is_enabled }}
+                        <label class="form-check-label fw-bold text-info">Enable Aggregation Engine</label>
+                        <div class="text-muted small">Master switch to turn correlation on or off.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 text-end">
+                <button type="submit" class="btn btn-ariba-primary btn-sm px-4">
+                    <i class="bi bi-save"></i> Save Configuration
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Educational & Architectural Note -->
+    <div class="card bg-dark border-secondary p-3">
+        <h6 class="text-info mb-2"><i class="bi bi-info-circle"></i> How Dynamic Aggregation Works:</h6>
+        <p class="text-muted small mb-0">
+            When Wazuh ingests high-frequency attacks (such as SSH brute force or rapid port scans), the aggregation engine calculates a unique SHA-256 fingerprint based on your active grouping fields. If an open alert exists within your configured sliding window (e.g. {{ agg_setting.window_minutes }} minutes), the engine increments the event counter and updates the last seen timestamp rather than cluttering your database and queues.
+        </p>
+    </div>
+</div>
+{% endblock %}

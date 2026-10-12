@@ -3,13 +3,63 @@
 
 {% block content %}
 <div class="container-fluid py-3">
+    <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h4 class="m-0"><i class="bi bi-graph-up"></i> Management Dashboard</h4>
+        <div>
+            <h4 class="m-0 text-white"><i class="bi bi-grid-1x2 text-info"></i> SOC Overview Dashboard</h4>
+            <small class="text-secondary">Executive threat overview, active queues, and alert velocity &bull; Last updated: {% now "M d, H:i" %}</small>
+        </div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
-            <span class="text-secondary small">Last updated: {% now "M d, H:i" %}</span>
             <button class="btn btn-ariba-outline btn-sm" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+            <a href="{% url 'monitor:wallboard' %}" class="btn btn-ariba-outline btn-sm text-warning" target="_blank">
+                <i class="bi bi-display"></i> Wallboard
+            </a>
         </div>
     </div>
+
+    <!-- Dashboard Tier Switcher Bar -->
+    {% with role=user.analyst_profile.role %}
+    <div class="ariba-card px-3 py-2 mb-4">
+        <ul class="nav nav-pills gap-1 flex-wrap align-items-center">
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 active bg-primary text-white" href="{% url 'dashboard:home' %}">
+                    <i class="bi bi-grid-1x2 me-1"></i> Overview
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'dashboard:l1' %}">
+                    <i class="bi bi-shield me-1"></i> Tier 1 Triage
+                </a>
+            </li>
+            {% if role in 'L2,L3,SOC_ENG,SOC_MGR,ADMIN' or user.is_superuser %}
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'dashboard:l2' %}">
+                    <i class="bi bi-shield-shaded me-1"></i> Tier 2 Investigation
+                </a>
+            </li>
+            {% endif %}
+            {% if role in 'L3,SOC_ENG,SOC_MGR,ADMIN' or user.is_superuser %}
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'dashboard:l3' %}">
+                    <i class="bi bi-shield-lock me-1"></i> Tier 3 Advanced
+                </a>
+            </li>
+            {% endif %}
+            {% if role in 'SOC_MGR,ADMIN' or user.is_superuser %}
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'dashboard:manager' %}">
+                    <i class="bi bi-person-lines-fill me-1"></i> SOC Manager
+                </a>
+            </li>
+            {% endif %}
+            <li class="nav-item ms-md-auto">
+                <a class="nav-link btn-sm py-1 px-2 text-info" href="{% url 'reports:mtta_mttr' %}">
+                    <i class="bi bi-clock-history me-1"></i> MTTA/MTTR Analytics
+                </a>
+            </li>
+        </ul>
+    </div>
+    {% endwith %}
 
     <div class="row g-3 mb-4">
         <div class="col-md-3">
