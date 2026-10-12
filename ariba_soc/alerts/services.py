@@ -26,11 +26,13 @@ def create_audit_log(alert, user, action, old_value='', new_value='', request=No
 
 def update_alert(alert, form, user, request=None):
     changed = []
-    for field in ['assignee', 'status', 'severity', 'verdict', 'priority']:
+    for field in ['assignee', 'assigned_team', 'status', 'severity', 'verdict', 'priority']:
         old = str(getattr(alert, field) or '')
         new = str(form.cleaned_data.get(field) or '')
         if old != new:
             setattr(alert, field, form.cleaned_data[field])
+            if field == 'assigned_team' and form.cleaned_data.get('assigned_team'):
+                alert.current_owner_team = form.cleaned_data['assigned_team'].tier
             if field == 'status' and form.cleaned_data[field] == 'In Progress':
                 alert.acknowledged_at = timezone.now()
             if field == 'status' and form.cleaned_data[field].startswith('Escalated'):
@@ -39,6 +41,7 @@ def update_alert(alert, form, user, request=None):
                 _notify_escalation(alert, f"{form.cleaned_data[field]} — {form.cleaned_data.get('escalation_reason', '')}")
             action_map = {
                 'assignee': 'Assigned',
+                'assigned_team': 'Team Reassigned',
                 'status': 'Status Changed',
                 'severity': 'Severity Changed',
                 'verdict': 'Verdict Changed',
@@ -188,25 +191,34 @@ def emit_alarm_notification(alert):
         return 0
 
 
-def assign_alert(alert, user, assignee=None, request=None):
-    if assignee is None:
+def assign_alert(alert, user, assignee=None, request=None, team=None):
+    if assignee is None and team is None:
         assignee = user
-    old = str(alert.assignee)
+    old = str(alert.assignee or alert.assigned_team or 'Unassigned')
     
     notify = False
-    if alert.assignee != assignee and assignee != user:
+    if assignee and alert.assignee != assignee and assignee != user:
         notify = True
         
-    alert.assignee = assignee
+    if assignee:
+        alert.assignee = assignee
+        if not alert.assigned_team and hasattr(assignee, 'analyst_profile') and assignee.analyst_profile.soc_team:
+            alert.assigned_team = assignee.analyst_profile.soc_team
+            alert.current_owner_team = alert.assigned_team.tier
+    if team:
+        alert.assigned_team = team
+        alert.current_owner_team = team.tier
+
     alert.assigned_by = user
     alert.assigned_at = timezone.now()
     if alert.status == 'New':
         alert.status = 'In Progress'
         alert.acknowledged_at = timezone.now()
     alert.save()
-    create_audit_log(alert, user, 'Assigned', old, str(assignee), request)
+    new_label = str(assignee.username if assignee else (team.name if team else ''))
+    create_audit_log(alert, user, 'Assigned', old, new_label, request)
     
-    if notify:
+    if notify and assignee:
         _notify_assignment(alert, assignee, user, request)
 
 
