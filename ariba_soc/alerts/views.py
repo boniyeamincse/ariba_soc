@@ -10,6 +10,7 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.contrib.auth.models import User
+from accounts.models import SocTeam
 from settings_manager.models import SeveritySettings, StatusSettings, VerdictSettings
 from accounts.decorators import role_required, permission_required, TIER_ORDER
 from .models import (
@@ -44,15 +45,19 @@ def _handle_workflow_error(request, exc, alert_id=None):
 @login_required
 @permission_required('can_view_alerts')
 def alert_table(request):
-    alerts = Alert.objects.select_related('assignee', 'source').all()
+    alerts = Alert.objects.select_related('assignee', 'source', 'assigned_team').all()
     severity = request.GET.get('severity')
     status = request.GET.get('status')
     verdict = request.GET.get('verdict')
     search = request.GET.get('search')
     assignee = request.GET.get('assignee')
+    team = request.GET.get('team')
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
     sort = request.GET.get('sort', '-alert_time')
+
+    user_profile = getattr(request.user, 'analyst_profile', None)
+    user_soc_team = user_profile.soc_team if user_profile else None
 
     if search:
         alerts = alerts.filter(
@@ -76,6 +81,16 @@ def alert_table(request):
         alerts = alerts.filter(verdict=verdict)
     if assignee:
         alerts = alerts.filter(assignee_id=assignee)
+    if team:
+        if team == 'my_team':
+            if user_soc_team:
+                alerts = alerts.filter(assigned_team=user_soc_team)
+            else:
+                alerts = alerts.none()
+        elif team.isdigit():
+            alerts = alerts.filter(assigned_team_id=int(team))
+        elif team in ('L1', 'L2', 'L3', 'ENG', 'MGMT'):
+            alerts = alerts.filter(assigned_team__tier=team)
     if date_from:
         alerts = alerts.filter(alert_time__gte=date_from)
     if date_to:
@@ -92,17 +107,21 @@ def alert_table(request):
     alerts_page = paginator.get_page(page)
 
     assignees = Alert.objects.exclude(assignee__isnull=True).values_list('assignee_id', 'assignee__username').distinct()
+    soc_teams = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
 
     context = {
         'alerts': alerts_page,
         'assignees': assignees,
         'users': User.objects.filter(is_active=True),
+        'soc_teams': soc_teams,
+        'user_soc_team': user_soc_team,
         'severities': SeveritySettings.objects.filter(is_active=True).order_by('sort_order'),
         'statuses': StatusSettings.objects.filter(is_active=True).order_by('sort_order'),
         'verdicts': VerdictSettings.objects.filter(is_active=True).order_by('name'),
         'current_filters': {
             'search': search, 'severity': severity, 'status': status,
-            'verdict': verdict, 'assignee': assignee, 'date_from': date_from, 'date_to': date_to,
+            'verdict': verdict, 'assignee': assignee, 'team': team,
+            'date_from': date_from, 'date_to': date_to, 'sort': sort,
         },
         'is_paginated': alerts_page.has_other_pages(),
     }
@@ -112,7 +131,21 @@ def alert_table(request):
 @login_required
 @permission_required('can_view_alerts')
 def alert_board(request):
-    alerts = Alert.objects.select_related('assignee', 'source').all()
+    alerts = Alert.objects.select_related('assignee', 'source', 'assigned_team').all()
+
+    team_param = request.GET.get('team')
+    user_profile = getattr(request.user, 'analyst_profile', None)
+    user_soc_team = user_profile.soc_team if user_profile else None
+
+    if team_param == 'my_team':
+        if user_soc_team:
+            alerts = alerts.filter(assigned_team=user_soc_team)
+        else:
+            alerts = alerts.none()
+    elif team_param and team_param.isdigit():
+        alerts = alerts.filter(assigned_team_id=int(team_param))
+    elif team_param in ('L1', 'L2', 'L3', 'ENG', 'MGMT'):
+        alerts = alerts.filter(assigned_team__tier=team_param)
 
     now = timezone.now()
     month = request.GET.get('month')
@@ -137,6 +170,7 @@ def alert_board(request):
             Q(hostname__icontains=search) |
             Q(username__icontains=search)
         )
+    soc_teams = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
     context = {
         'new_alerts': alerts.filter(status='New'),
         'in_progress_alerts': alerts.filter(status='In Progress'),
@@ -150,6 +184,9 @@ def alert_board(request):
         'closed_alerts': alerts.filter(status='Closed'),
         'archived_alerts': alerts.filter(status='Archived'),
         'users': User.objects.filter(is_active=True),
+        'soc_teams': soc_teams,
+        'user_soc_team': user_soc_team,
+        'selected_team': team_param,
         'selected_month': month,
         'selected_year': year,
         'months': [
@@ -166,17 +203,19 @@ def alert_board(request):
 @permission_required('can_view_alerts')
 def alert_detail(request, alert_id):
     alert = get_object_or_404(
-        Alert.objects.select_related('assignee', 'source', 'assigned_by'), id=alert_id,
+        Alert.objects.select_related('assignee', 'source', 'assigned_by', 'assigned_team'), id=alert_id,
     )
     comments = alert.comments.select_related('user').all()
     audit_logs = alert.audit_logs.select_related('user').all()[:50]
     transitions = alert.transitions.select_related('actor').all()[:50]
     escalation_records = alert.escalation_records.all()[:10]
     form = AlertEditForm(instance=alert, user=request.user)
+    soc_teams = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
     return render(request, 'ariba_soc/alert_detail.html', {
         'alert': alert, 'comments': comments, 'audit_logs': audit_logs,
         'transitions': transitions, 'escalation_records': escalation_records,
         'form': form, 'users': User.objects.filter(is_active=True),
+        'soc_teams': soc_teams,
     })
 
 
@@ -422,6 +461,17 @@ def alert_bulk_action(request):
                 for alert in alerts:
                     assign_alert(alert, request.user, assignee, request)
             messages.success(request, f'{count} alerts assigned.')
+        elif action == 'assign_team':
+            team_id = value
+            if team_id:
+                target_team = get_object_or_404(SocTeam, id=team_id)
+                for alert in alerts:
+                    old_val = alert.assigned_team.name if alert.assigned_team else 'Unassigned'
+                    alert.assigned_team = target_team
+                    alert.current_owner_team = target_team.tier
+                    alert.save(update_fields=['assigned_team', 'current_owner_team'])
+                    create_audit_log(alert, request.user, 'Team Reassigned', old_val, target_team.name, request)
+                messages.success(request, f'{count} alerts assigned to team {target_team.name}.')
         elif action == 'status':
             check_perm(request.user, 'can_change_status')
             allowed_statuses = list(StatusSettings.objects.filter(is_active=True).values_list('name', flat=True))

@@ -35,6 +35,7 @@
                         <button class="btn btn-sm btn-ariba-outline" data-bs-toggle="modal" data-bs-target="#editAlertModal"
                             data-alert-id="{{ alert.id }}"
                             data-assignee-id="{{ alert.assignee_id|default:'' }}"
+                            data-assigned-team-id="{{ alert.assigned_team_id|default:'' }}"
                             data-status="{{ alert.status }}"
                             data-severity="{{ alert.severity }}"
                             data-verdict="{{ alert.verdict }}"
@@ -419,22 +420,62 @@
 
         <div class="col-lg-4">
             <div class="ariba-card p-3 mb-3">
-                <h6 class="text-secondary"><i class="bi bi-person"></i> Assignment</h6>
-                <hr style="border-color: var(--border-color);">
-                {% if alert.assignee %}
-                <p><strong>{{ alert.assignee.get_full_name|default:alert.assignee.username }}</strong>
-                    {% if alert.assignee.analyst_profile %}
-                    <span class="badge bg-secondary">{{ alert.assignee.analyst_profile.get_role_display }}</span>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="text-secondary m-0"><i class="bi bi-people-fill"></i> Team & Analyst Assignment</h6>
+                </div>
+                <hr style="border-color: var(--border-color);" class="my-2">
+                
+                {# ── SOC Team Block ── #}
+                <div class="mb-3">
+                    <div class="text-secondary small mb-1">Operational SOC Team</div>
+                    {% if alert.assigned_team %}
+                    <div class="p-2 rounded border" style="background: rgba(30, 41, 59, 0.6); border-color: rgba(59, 130, 246, 0.25) !important;">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-semibold text-light">
+                                <i class="bi bi-diagram-3-fill text-primary me-1"></i>{{ alert.assigned_team.name }}
+                            </span>
+                            <span class="badge bg-primary-subtle text-primary border border-primary" style="font-size:0.7rem;">
+                                {{ alert.assigned_team.get_tier_display }}
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between small text-muted mt-1">
+                            <span><i class="bi bi-clock me-1"></i>{{ alert.assigned_team.get_shift_type_display }}</span>
+                            {% if alert.assigned_team.lead %}
+                            <span><i class="bi bi-person-badge me-1"></i>Lead: {{ alert.assigned_team.lead.username }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% elif alert.current_owner_team %}
+                    <span class="badge bg-dark border border-secondary text-secondary">{{ alert.current_owner_team }}</span>
+                    {% else %}
+                    <span class="text-muted small"><i class="bi bi-dash-circle me-1"></i>No Team Assigned</span>
                     {% endif %}
-                </p>
-                <small class="text-muted">Assigned by {{ alert.assigned_by.username|default:'System' }} at {{ alert.assigned_at|date:"M d, H:i"|default:'—' }}</small>
-                {% else %}
-                <p class="text-muted">Unassigned</p>
-                {% endif %}
-                <form method="post" action="{% url 'alerts:assign' alert.id %}" class="mt-2">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-ariba-primary btn-sm w-100"><i class="bi bi-person-plus"></i> Assign to me</button>
-                </form>
+                </div>
+
+                {# ── Assigned Analyst Block ── #}
+                <div class="mb-2">
+                    <div class="text-secondary small mb-1">Assigned Analyst</div>
+                    {% if alert.assignee %}
+                    <p class="mb-1"><strong>{{ alert.assignee.get_full_name|default:alert.assignee.username }}</strong>
+                        {% if alert.assignee.analyst_profile %}
+                        <span class="badge bg-secondary ms-1">{{ alert.assignee.analyst_profile.get_role_display }}</span>
+                        {% endif %}
+                    </p>
+                    <small class="text-muted d-block">Assigned by {{ alert.assigned_by.username|default:'System' }} at {{ alert.assigned_at|date:"M d, H:i"|default:'—' }}</small>
+                    {% else %}
+                    <p class="text-muted small mb-1">Unassigned Analyst</p>
+                    {% endif %}
+                </div>
+
+                <div class="d-flex gap-2 mt-3">
+                    <form method="post" action="{% url 'alerts:assign' alert.id %}" class="flex-grow-1">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-ariba-primary btn-sm w-100"><i class="bi bi-person-plus"></i> Assign to me</button>
+                    </form>
+                    <button type="button" class="btn btn-ariba-outline btn-sm" data-bs-toggle="modal" data-bs-target="#editAlertModal" title="Reassign Team/Analyst">
+                        <i class="bi bi-arrow-left-right"></i>
+                    </button>
+                </div>
             </div>
 
             <!-- SOAR Containment Card -->
@@ -515,6 +556,7 @@
                     <button class="btn btn-sm btn-ariba-outline text-start" data-bs-toggle="modal" data-bs-target="#editAlertModal"
                         data-alert-id="{{ alert.id }}"
                         data-assignee-id="{{ alert.assignee_id|default:'' }}"
+                        data-assigned-team-id="{{ alert.assigned_team_id|default:'' }}"
                         data-status="{{ alert.status }}"
                         data-severity="{{ alert.severity }}"
                         data-verdict="{{ alert.verdict }}"
