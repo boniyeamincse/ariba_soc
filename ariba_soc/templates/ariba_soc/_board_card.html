@@ -20,6 +20,7 @@
                 <li><a class="dropdown-item" href="javascript:void(0);" data-bs-toggle="modal" data-bs-target="#editAlertModal"
                     data-alert-id="{{ alert.id }}"
                     data-assignee-id="{{ alert.assignee_id|default:'' }}"
+                    data-assigned-team-id="{{ alert.assigned_team_id|default:'' }}"
                     data-status="{{ alert.status }}"
                     data-severity="{{ alert.severity }}"
                     data-verdict="{{ alert.verdict }}"
@@ -37,10 +38,18 @@
             </ul>
         </div>
     </div>
-    <div class="d-flex justify-content-between mt-1">
-        <small class="text-muted">{{ alert.source_name }}</small>
+    <div class="d-flex justify-content-between align-items-center mt-1">
+        <div>
+            {% if alert.assigned_team %}
+            <span class="badge border" style="background: rgba(30, 41, 59, 0.8); border-color: rgba(59, 130, 246, 0.3) !important; color: #93c5fd; font-size: 0.68rem;" title="{{ alert.assigned_team.name }}">
+                <i class="bi bi-diagram-3-fill me-1 text-primary"></i>{{ alert.assigned_team.name|truncatechars:14 }}
+            </span>
+            {% else %}
+            <small class="text-muted">{{ alert.source_name }}</small>
+            {% endif %}
+        </div>
         {% if alert.assignee %}
-        <small class="text-info">{{ alert.assignee.username }}</small>
+        <small class="text-info"><i class="bi bi-person me-1"></i>{{ alert.assignee.username }}</small>
         {% endif %}
     </div>
 </div>
