@@ -16,6 +16,22 @@
             </div>
         </div>
         <div class="col-6 col-md-3">
+            <a href="{% url 'settings:team_management' %}" class="text-decoration-none">
+                <div class="settings-stat-card">
+                    <div class="settings-stat-value text-info">{{ team_count }}</div>
+                    <div class="settings-stat-label"><i class="bi bi-diagram-3"></i> SOC Teams</div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-3">
+            <a href="{% url 'settings:shift_handover_list' %}" class="text-decoration-none">
+                <div class="settings-stat-card">
+                    <div class="settings-stat-value text-warning">{{ handover_count }}</div>
+                    <div class="settings-stat-label"><i class="bi bi-arrow-repeat"></i> Shift Handovers</div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-3">
             <div class="settings-stat-card">
                 <div class="settings-stat-value">{{ severity_count }}</div>
                 <div class="settings-stat-label"><i class="bi bi-exclamation-triangle"></i> Severities</div>

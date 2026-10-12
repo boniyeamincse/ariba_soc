@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
 
 ROLE_CHOICES = [
     ('L1', 'SOC L1 Analyst'),
@@ -152,3 +153,67 @@ def create_analyst_profile(sender, instance, created, **kwargs):
 def save_analyst_profile(sender, instance, **kwargs):
     if hasattr(instance, 'analyst_profile'):
         instance.analyst_profile.save()
+
+
+SHIFT_TYPE_CHOICES = [
+    ('24x7', '24/7 Follow-the-Sun'),
+    ('MORNING', 'Morning Shift (06:00 - 14:00)'),
+    ('EVENING', 'Evening Shift (14:00 - 22:00)'),
+    ('NIGHT', 'Night Shift (22:00 - 06:00)'),
+    ('GENERAL', 'General / Business Hours (09:00 - 18:00)'),
+]
+
+HANDOVER_STATUS_CHOICES = [
+    ('DRAFT', 'Draft'),
+    ('SUBMITTED', 'Submitted - Pending Acknowledgment'),
+    ('ACKNOWLEDGED', 'Acknowledged & Handed Over'),
+]
+
+
+class ShiftHandoverLog(models.Model):
+    outgoing_team = models.ForeignKey(
+        SocTeam, on_delete=models.CASCADE, related_name='handovers_sent',
+        help_text="Team currently completing duty"
+    )
+    incoming_team = models.ForeignKey(
+        SocTeam, on_delete=models.CASCADE, related_name='handovers_received',
+        help_text="Team assuming operational responsibility"
+    )
+    outgoing_lead = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='handovers_submitted',
+        help_text="Lead/analyst submitting the handover"
+    )
+    incoming_lead = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='handovers_acknowledged', help_text="Incoming Lead accepting the handover"
+    )
+    shift_date = models.DateField(default=timezone.now)
+    shift_type = models.CharField(max_length=20, choices=SHIFT_TYPE_CHOICES, default='MORNING')
+    status = models.CharField(max_length=20, choices=HANDOVER_STATUS_CHOICES, default='SUBMITTED')
+
+    # Shift Activity Metrics Snapshot
+    alerts_ingested_count = models.IntegerField(default=0)
+    alerts_closed_count = models.IntegerField(default=0)
+    escalations_count = models.IntegerField(default=0)
+    open_critical_count = models.IntegerField(default=0)
+
+    # Operational Handover Briefing Notes
+    active_incidents_summary = models.TextField(blank=True, help_text="Summary of ongoing high/critical investigations")
+    containment_actions_taken = models.TextField(blank=True, help_text="Active containment, SOAR blocks, or isolated assets")
+    infrastructure_health_notes = models.TextField(blank=True, help_text="Wazuh, sensor, or pipeline operational notes")
+    handover_notes = models.TextField(help_text="Priority action items and handover briefing for incoming shift")
+
+    # Acknowledgment Tracking
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    acknowledgment_comment = models.TextField(blank=True, help_text="Notes/confirmations from incoming lead")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Shift Handover Log'
+        verbose_name_plural = 'Shift Handover Logs'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Handover #{self.id}: {self.outgoing_team.name} → {self.incoming_team.name} ({self.shift_date})"

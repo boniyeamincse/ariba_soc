@@ -1,0 +1,174 @@
+{% extends 'settings_manager/settings_base.html' %}
+{% load humanize %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    {% include 'settings_manager/_user_access_nav.html' with active_tab='handovers' %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <div class="d-flex align-items-center gap-2">
+                <h4 class="m-0"><i class="bi bi-journal-check"></i> Shift Handover Report #{{ handover.id }}</h4>
+                {% if handover.status == 'ACKNOWLEDGED' %}
+                <span class="badge bg-success"><i class="bi bi-check-all me-1"></i> Acknowledged & Signed Off</span>
+                {% elif handover.status == 'SUBMITTED' %}
+                <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i> Pending Incoming Lead Sign-Off</span>
+                {% else %}
+                <span class="badge bg-secondary">{{ handover.get_status_display }}</span>
+                {% endif %}
+            </div>
+            <p class="settings-page-desc mb-0">
+                Shift Date: <strong>{{ handover.shift_date|date:"Y-m-d" }}</strong> ({{ handover.get_shift_type_display }}) • Created: {{ handover.created_at|date:"M d, Y H:i" }}
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <button onclick="window.print()" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-printer me-1"></i> Print / PDF
+            </button>
+            <a href="{% url 'settings:shift_handover_list' %}" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Back to Handovers
+            </a>
+        </div>
+    </div>
+
+    <!-- Handover Teams Rotation Card -->
+    <div class="ariba-card p-3 mb-4">
+        <div class="row g-3 align-items-center">
+            <div class="col-md-5">
+                <div class="p-3 rounded bg-dark border border-secondary">
+                    <div class="text-muted small mb-1"><i class="bi bi-box-arrow-right text-warning me-1"></i> Outgoing Team (Ending Duty)</div>
+                    <h5 class="m-0 text-light">{{ handover.outgoing_team.name }}</h5>
+                    <div class="mt-2 small text-muted">
+                        Lead: <strong class="text-light">{{ handover.outgoing_lead.get_full_name|default:handover.outgoing_lead.username }}</strong>
+                        <span class="ms-2">({{ handover.created_at|time:"H:i" }})</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 text-center">
+                <div class="d-none d-md-block">
+                    <i class="bi bi-arrow-right-circle text-info fs-1"></i>
+                    <div class="small text-muted mt-1">Shift Rotation</div>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="p-3 rounded bg-dark border border-secondary">
+                    <div class="text-muted small mb-1"><i class="bi bi-box-arrow-in-right text-success me-1"></i> Incoming Team (Assuming Duty)</div>
+                    <h5 class="m-0 text-light">{{ handover.incoming_team.name }}</h5>
+                    <div class="mt-2 small text-muted">
+                        Lead:
+                        {% if handover.incoming_lead %}
+                        <strong class="text-success">{{ handover.incoming_lead.get_full_name|default:handover.incoming_lead.username }}</strong>
+                        <span class="ms-2">({{ handover.acknowledged_at|time:"H:i" }})</span>
+                        {% else %}
+                        <span class="text-warning">Pending Acknowledgment</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Metrics Snapshot KPIs -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value text-info">{{ handover.alerts_ingested_count }}</div>
+                <div class="settings-stat-label"><i class="bi bi-inbox"></i> Ingested Alerts</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value text-success">{{ handover.alerts_closed_count }}</div>
+                <div class="settings-stat-label"><i class="bi bi-check-circle"></i> Closed / Resolved</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value text-warning">{{ handover.escalations_count }}</div>
+                <div class="settings-stat-label"><i class="bi bi-arrow-up-circle"></i> Escalations Handled</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="settings-stat-card">
+                <div class="settings-stat-value text-danger">{{ handover.open_critical_count }}</div>
+                <div class="settings-stat-label"><i class="bi bi-exclamation-triangle"></i> Open Criticals</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Briefing Sections -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="ariba-card p-3 h-100">
+                <h6 class="text-info mb-3"><i class="bi bi-card-checklist me-1"></i> Priority Handover Notes & Instructions</h6>
+                <div class="p-3 rounded bg-dark border border-secondary text-light small" style="white-space: pre-wrap; min-height: 120px;">
+                    {{ handover.handover_notes|default:'No specific instructions provided.' }}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="ariba-card p-3 h-100">
+                <h6 class="text-danger mb-3"><i class="bi bi-shield-exclamation me-1"></i> Active Incidents & High-Attention Assets</h6>
+                <div class="p-3 rounded bg-dark border border-secondary text-light small" style="white-space: pre-wrap; min-height: 120px;">
+                    {{ handover.active_incidents_summary|default:'No active high-priority incidents reported during shift.' }}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="ariba-card p-3 h-100">
+                <h6 class="text-warning mb-3"><i class="bi bi-shield-lock me-1"></i> Containment Actions & SOAR Blocks</h6>
+                <div class="p-3 rounded bg-dark border border-secondary text-light small" style="white-space: pre-wrap; min-height: 100px;">
+                    {{ handover.containment_actions_taken|default:'No active containment blocks or host isolations.' }}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="ariba-card p-3 h-100">
+                <h6 class="text-primary mb-3"><i class="bi bi-hdd-network me-1"></i> Infrastructure & Pipeline Health</h6>
+                <div class="p-3 rounded bg-dark border border-secondary text-light small" style="white-space: pre-wrap; min-height: 100px;">
+                    {{ handover.infrastructure_health_notes|default:'All Wazuh managers, forwarders, and detection pipelines operational.' }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sign-off & Acknowledgment Panel -->
+    <div class="ariba-card p-4">
+        <h5 class="mb-3"><i class="bi bi-patch-check me-2"></i> Operational Sign-Off & Verification</h5>
+        {% if handover.status == 'ACKNOWLEDGED' %}
+        <div class="alert alert-success border-success bg-dark text-success p-3 m-0">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <i class="bi bi-check-circle-fill fs-4"></i>
+                <h6 class="m-0 text-success">Handover Fully Acknowledged & Operational Responsibility Accepted</h6>
+            </div>
+            <p class="small mb-1">
+                Signed off by: <strong>{{ handover.incoming_lead.get_full_name|default:handover.incoming_lead.username }}</strong> on <strong>{{ handover.acknowledged_at|date:"Y-m-d H:i:s" }}</strong>
+            </p>
+            {% if handover.acknowledgment_comment %}
+            <div class="mt-2 p-2 rounded bg-black text-light small border border-secondary">
+                <strong>Lead Remarks:</strong> {{ handover.acknowledgment_comment }}
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <form method="post" action="{% url 'settings:shift_handover_acknowledge' handover.id %}">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label small text-muted">
+                    Incoming Lead Confirmation Remarks & Verification Notes:
+                </label>
+                {{ ack_form.acknowledgment_comment }}
+            </div>
+            <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted">
+                    By clicking below, you confirm receipt of active incidents, queue state, and accept operational shift lead responsibility.
+                </small>
+                <button type="submit" class="btn btn-success btn-sm px-3">
+                    <i class="bi bi-check2-circle me-1"></i> Acknowledge & Accept Shift
+                </button>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

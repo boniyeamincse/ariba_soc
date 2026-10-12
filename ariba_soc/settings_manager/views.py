@@ -7,7 +7,7 @@ from django.http import JsonResponse
 from django.db.models import Q, Sum, Count
 from django.core.paginator import Paginator
 from alerts.models import AlertAuditLog
-from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES, SETTINGS_ALLOWED_ROLES as _FALLBACK_SETTINGS_ROLES, SocTeam
+from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES, SETTINGS_ALLOWED_ROLES as _FALLBACK_SETTINGS_ROLES, SocTeam, ShiftHandoverLog
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
@@ -20,7 +20,8 @@ from .forms import (
     VerdictSettingsForm, SLASettingsForm, EscalationRuleForm,
     NotificationSettingForm, ReportSettingForm, DashboardSettingForm,
     AuditLogSettingForm, AlarmSettingForm, AlarmSystemSettingForm, SystemSettingForm, ResetPasswordForm,
-    IOCEnrichmentSettingForm, AlertAggregationSettingForm, AlertSuppressionRuleForm
+    IOCEnrichmentSettingForm, AlertAggregationSettingForm, AlertSuppressionRuleForm,
+    ShiftHandoverForm, ShiftHandoverAcknowledgeForm
 )
 
 def _get_allowed_roles():
@@ -53,6 +54,8 @@ def settings_dashboard(request):
     ctx = {
         'section': 'dashboard',
         'user_count': User.objects.filter(is_active=True).count(),
+        'team_count': SocTeam.objects.filter(is_active=True).count(),
+        'handover_count': ShiftHandoverLog.objects.count(),
         'source_count': AlertSourceSettings.objects.count(),
         'severity_count': SeveritySettings.objects.count(),
         'status_count': StatusSettings.objects.count(),
@@ -1566,3 +1569,136 @@ def test_ioc_enrichment_api(request, pk):
         
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)})
+
+
+@login_required
+def shift_handover_list(request):
+    search = request.GET.get('search', '').strip()
+    status_filter = request.GET.get('status', '').strip()
+    team_filter = request.GET.get('team', '').strip()
+
+    now = timezone.now()
+    shift_window_start = now - timedelta(hours=8)
+
+    # Calculate live 8-hour shift metrics snapshot
+    live_ingested = Alert.objects.filter(alert_time__gte=shift_window_start).count()
+    live_closed = Alert.objects.filter(closed_at__gte=shift_window_start).count()
+    if live_closed == 0:
+        live_closed = Alert.objects.filter(status__in=['Closed', 'Resolved'], status_updated_at__gte=shift_window_start).count()
+    live_escalations = Alert.objects.filter(is_escalated=True, escalated_at__gte=shift_window_start).count()
+    if live_escalations == 0:
+        live_escalations = Alert.objects.filter(status__startswith='Escalated').count()
+    live_critical = Alert.objects.filter(severity='Critical', status__in=['New', 'In Progress', 'Under Investigation', 'Awaiting Action']).count()
+
+    handovers = ShiftHandoverLog.objects.select_related(
+        'outgoing_team', 'incoming_team', 'outgoing_lead', 'incoming_lead'
+    ).order_by('-shift_date', '-created_at')
+
+    if search:
+        handovers = handovers.filter(
+            Q(outgoing_team__name__icontains=search) |
+            Q(incoming_team__name__icontains=search) |
+            Q(handover_notes__icontains=search) |
+            Q(active_incidents_summary__icontains=search)
+        )
+    if status_filter:
+        handovers = handovers.filter(status=status_filter)
+    if team_filter:
+        handovers = handovers.filter(Q(outgoing_team_id=team_filter) | Q(incoming_team_id=team_filter))
+
+    if request.method == 'POST' and 'create' in request.POST:
+        form = ShiftHandoverForm(request.POST)
+        if form.is_valid():
+            handover = form.save(commit=False)
+            handover.outgoing_lead = request.user
+            handover.save()
+            _log_setting_change(request.user, f'Submitted Shift Handover #{handover.id}', 'ShiftHandoverLog', handover.id, '', handover.status, request)
+            messages.success(request, f'Shift Handover #{handover.id} ({handover.outgoing_team.name} → {handover.incoming_team.name}) logged successfully.')
+            return redirect('settings:shift_handover_detail', pk=handover.id)
+        else:
+            messages.error(request, 'Please check the errors in the handover form.')
+    else:
+        # Determine likely shift by current local time
+        current_hour = now.hour
+        if 6 <= current_hour < 14:
+            s_type = 'MORNING'
+        elif 14 <= current_hour < 22:
+            s_type = 'EVENING'
+        else:
+            s_type = 'NIGHT'
+
+        # Default outgoing team from user profile if assigned
+        user_team = getattr(getattr(request.user, 'analyst_profile', None), 'soc_team', None)
+
+        form = ShiftHandoverForm(initial={
+            'shift_date': now.date(),
+            'shift_type': s_type,
+            'outgoing_team': user_team,
+            'alerts_ingested_count': live_ingested,
+            'alerts_closed_count': live_closed,
+            'escalations_count': live_escalations,
+            'open_critical_count': live_critical,
+            'status': 'SUBMITTED',
+        })
+
+    pending_count = ShiftHandoverLog.objects.filter(status='SUBMITTED').count()
+    completed_count = ShiftHandoverLog.objects.filter(status='ACKNOWLEDGED').count()
+    soc_teams = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
+
+    ctx = {
+        'section': 'handovers',
+        'handovers': handovers,
+        'form': form,
+        'search': search,
+        'status_filter': status_filter,
+        'team_filter': team_filter,
+        'soc_teams': soc_teams,
+        'pending_count': pending_count,
+        'completed_count': completed_count,
+        'live_critical': live_critical,
+        'live_ingested': live_ingested,
+    }
+    return render(request, 'settings_manager/shift_handover_list.html', ctx)
+
+
+@login_required
+def shift_handover_detail(request, pk):
+    handover = get_object_or_404(
+        ShiftHandoverLog.objects.select_related(
+            'outgoing_team', 'incoming_team', 'outgoing_lead', 'incoming_lead'
+        ),
+        pk=pk
+    )
+    ack_form = ShiftHandoverAcknowledgeForm(instance=handover)
+    ctx = {
+        'section': 'handovers',
+        'handover': handover,
+        'ack_form': ack_form,
+    }
+    return render(request, 'settings_manager/shift_handover_detail.html', ctx)
+
+
+@login_required
+@require_POST
+def shift_handover_acknowledge(request, pk):
+    handover = get_object_or_404(ShiftHandoverLog, pk=pk)
+    form = ShiftHandoverAcknowledgeForm(request.POST, instance=handover)
+    if form.is_valid():
+        handover = form.save(commit=False)
+        handover.status = 'ACKNOWLEDGED'
+        handover.incoming_lead = request.user
+        handover.acknowledged_at = timezone.now()
+        handover.save()
+        _log_setting_change(
+            request.user,
+            f'Acknowledged Shift Handover #{handover.id}',
+            'ShiftHandoverLog',
+            handover.id,
+            'SUBMITTED',
+            'ACKNOWLEDGED',
+            request
+        )
+        messages.success(request, f'Shift Handover #{handover.id} signed off and acknowledged.')
+    else:
+        messages.error(request, 'Could not acknowledge handover. Please provide a comment.')
+    return redirect('settings:shift_handover_detail', pk=handover.id)

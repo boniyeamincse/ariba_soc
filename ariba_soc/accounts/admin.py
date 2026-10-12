@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AnalystProfile, RolePermission, SocTeam
+from .models import AnalystProfile, RolePermission, SocTeam, ShiftHandoverLog
 
 @admin.register(SocTeam)
 class SocTeamAdmin(admin.ModelAdmin):
@@ -7,6 +7,12 @@ class SocTeamAdmin(admin.ModelAdmin):
     list_filter = ['tier', 'shift_type', 'is_active']
     search_fields = ['name', 'description', 'lead__username']
     prepopulated_fields = {'slug': ('name',)}
+
+@admin.register(ShiftHandoverLog)
+class ShiftHandoverLogAdmin(admin.ModelAdmin):
+    list_display = ['id', 'outgoing_team', 'incoming_team', 'shift_type', 'outgoing_lead', 'status', 'shift_date', 'created_at']
+    list_filter = ['status', 'shift_type', 'outgoing_team', 'incoming_team']
+    search_fields = ['handover_notes', 'active_incidents_summary', 'containment_actions_taken']
 
 @admin.register(AnalystProfile)
 class AnalystProfileAdmin(admin.ModelAdmin):

@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm
-from accounts.models import AnalystProfile, ROLE_CHOICES, TEAM_CHOICES, SocTeam
+from accounts.models import AnalystProfile, ROLE_CHOICES, TEAM_CHOICES, SocTeam, ShiftHandoverLog
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
@@ -388,3 +388,47 @@ class IOCEnrichmentSettingForm(forms.ModelForm):
         self.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
         self.fields['auto_enrich'].widget.attrs.update({'class': 'form-check-input'})
         self.fields['provider_name'].widget.attrs.update({'class': 'form-select form-select-sm'})
+
+
+class ShiftHandoverForm(forms.ModelForm):
+    class Meta:
+        model = ShiftHandoverLog
+        fields = [
+            'outgoing_team', 'incoming_team', 'shift_date', 'shift_type',
+            'alerts_ingested_count', 'alerts_closed_count', 'escalations_count', 'open_critical_count',
+            'active_incidents_summary', 'containment_actions_taken',
+            'infrastructure_health_notes', 'handover_notes', 'status'
+        ]
+        widgets = {
+            'shift_date': forms.DateInput(attrs={'type': 'date'}),
+            'active_incidents_summary': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Active P1/P2 incidents, investigation status, containment status...'}),
+            'containment_actions_taken': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Firewall blocks, endpoint isolations, token revocations executed during shift...'}),
+            'infrastructure_health_notes': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Sensor, forwarder, Wazuh manager, Elasticsearch or pipeline health remarks...'}),
+            'handover_notes': forms.Textarea(attrs={'rows': 4, 'placeholder': 'Priority action items, high-attention assets, handover briefing for incoming shift...'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['outgoing_team'].queryset = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
+        self.fields['incoming_team'].queryset = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
+        for fname, f in self.fields.items():
+            if isinstance(f.widget, forms.CheckboxInput):
+                f.widget.attrs.update({'class': 'form-check-input'})
+            elif isinstance(f.widget, forms.Select):
+                f.widget.attrs.update({'class': 'form-select form-select-sm'})
+            else:
+                f.widget.attrs.update({'class': 'form-control form-control-sm'})
+
+
+class ShiftHandoverAcknowledgeForm(forms.ModelForm):
+    class Meta:
+        model = ShiftHandoverLog
+        fields = ['acknowledgment_comment']
+        widgets = {
+            'acknowledgment_comment': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Confirm shift transfer, acknowledge critical items, or add incoming lead remarks...'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['acknowledgment_comment'].widget.attrs.update({'class': 'form-control form-control-sm'})
+        self.fields['acknowledgment_comment'].required = True
