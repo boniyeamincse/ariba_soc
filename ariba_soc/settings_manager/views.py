@@ -5,7 +5,9 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.db.models import Q, Sum, Count
-from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES, SETTINGS_ALLOWED_ROLES as _FALLBACK_SETTINGS_ROLES
+from django.core.paginator import Paginator
+from alerts.models import AlertAuditLog
+from accounts.models import AnalystProfile, RolePermission, ROLE_CHOICES, SETTINGS_ALLOWED_ROLES as _FALLBACK_SETTINGS_ROLES, SocTeam
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
@@ -13,7 +15,7 @@ from .models import (
     IOCEnrichmentSetting, AlertAggregationSetting, AlertSuppressionRule
 )
 from .forms import (
-    UserManagementForm, UserEditForm, AnalystProfileForm,
+    UserManagementForm, UserEditForm, AnalystProfileForm, SocTeamForm,
     AlertSourceSettingsForm, SeveritySettingsForm, StatusSettingsForm,
     VerdictSettingsForm, SLASettingsForm, EscalationRuleForm,
     NotificationSettingForm, ReportSettingForm, DashboardSettingForm,
@@ -292,6 +294,144 @@ def user_reset_password(request, user_id):
     ctx = {'section': 'users', 'form': form, 'edit_user': user}
     return render(request, 'settings_manager/user_reset_password.html', ctx)
 
+
+def team_management(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+
+    search = request.GET.get('search', '').strip()
+    tier_filter = request.GET.get('tier', '').strip()
+    shift_filter = request.GET.get('shift', '').strip()
+    status_filter = request.GET.get('status', '').strip()
+
+    teams = SocTeam.objects.select_related('lead').prefetch_related('members__user').all()
+
+    if search:
+        teams = teams.filter(
+            Q(name__icontains=search) |
+            Q(description__icontains=search) |
+            Q(lead__username__icontains=search)
+        )
+    if tier_filter:
+        teams = teams.filter(tier=tier_filter)
+    if shift_filter:
+        teams = teams.filter(shift_type=shift_filter)
+    if status_filter == 'active':
+        teams = teams.filter(is_active=True)
+    elif status_filter == 'inactive':
+        teams = teams.filter(is_active=False)
+
+    if request.method == 'POST' and 'create_team' in request.POST:
+        form = SocTeamForm(request.POST)
+        if form.is_valid():
+            from django.utils.text import slugify
+            team = form.save(commit=False)
+            base_slug = slugify(team.name)
+            slug = base_slug
+            counter = 1
+            while SocTeam.objects.filter(slug=slug).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            team.slug = slug
+            team.save()
+
+            member_ids = request.POST.getlist('members')
+            if member_ids:
+                AnalystProfile.objects.filter(user_id__in=member_ids).update(soc_team=team, team=team.tier)
+
+            _log_setting_change(request.user, f'Created SOC Team {team.name}', 'SocTeam', team.id, '', 'Created', request)
+            messages.success(request, f'SOC Team "{team.name}" created successfully.')
+            return redirect('settings:team_management')
+    else:
+        form = SocTeamForm()
+
+    total_teams = SocTeam.objects.count()
+    active_teams = SocTeam.objects.filter(is_active=True).count()
+    assigned_analysts = AnalystProfile.objects.filter(soc_team__isnull=False).count()
+    unassigned_analysts = AnalystProfile.objects.filter(soc_team__isnull=True).count()
+    all_users = User.objects.filter(is_active=True).order_by('username')
+
+    ctx = {
+        'section': 'teams',
+        'teams': teams,
+        'form': form,
+        'all_users': all_users,
+        'search': search,
+        'tier_filter': tier_filter,
+        'shift_filter': shift_filter,
+        'status_filter': status_filter,
+        'tier_choices': SocTeam.TIER_CHOICES,
+        'shift_choices': SocTeam.SHIFT_CHOICES,
+        'total_teams': total_teams,
+        'active_teams': active_teams,
+        'assigned_analysts': assigned_analysts,
+        'unassigned_analysts': unassigned_analysts,
+    }
+    return render(request, 'settings_manager/team_management.html', ctx)
+
+
+def team_edit(request, team_id):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+
+    team = get_object_or_404(SocTeam, id=team_id)
+    if request.method == 'POST':
+        form = SocTeamForm(request.POST, instance=team)
+        if form.is_valid():
+            team = form.save()
+            member_ids = [int(i) for i in request.POST.getlist('members') if i.isdigit()]
+            AnalystProfile.objects.filter(user_id__in=member_ids).update(soc_team=team, team=team.tier)
+            AnalystProfile.objects.filter(soc_team=team).exclude(user_id__in=member_ids).update(soc_team=None)
+
+            _log_setting_change(request.user, f'Updated SOC Team {team.name}', 'SocTeam', team.id, '', 'Updated', request)
+            messages.success(request, f'SOC Team "{team.name}" updated.')
+            return redirect('settings:team_management')
+    else:
+        form = SocTeamForm(instance=team)
+
+    all_users = User.objects.filter(is_active=True).order_by('username')
+    current_member_ids = list(team.members.values_list('user_id', flat=True))
+
+    ctx = {
+        'section': 'teams',
+        'team': team,
+        'form': form,
+        'all_users': all_users,
+        'current_member_ids': current_member_ids,
+    }
+    return render(request, 'settings_manager/team_edit.html', ctx)
+
+
+@require_POST
+def team_toggle(request, team_id):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    team = get_object_or_404(SocTeam, id=team_id)
+    team.is_active = not team.is_active
+    team.save(update_fields=['is_active', 'updated_at'])
+    status_str = "activated" if team.is_active else "deactivated"
+    _log_setting_change(request.user, f'Toggled SOC Team {team.name} to {status_str}', 'SocTeam', team.id, '', status_str, request)
+    messages.success(request, f'SOC Team "{team.name}" {status_str}.')
+    return redirect('settings:team_management')
+
+
+@require_POST
+def team_delete(request, team_id):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    team = get_object_or_404(SocTeam, id=team_id)
+    team_name = team.name
+    AnalystProfile.objects.filter(soc_team=team).update(soc_team=None)
+    team.delete()
+    _log_setting_change(request.user, f'Deleted SOC Team {team_name}', 'SocTeam', team_id, team_name, 'Deleted', request)
+    messages.success(request, f'SOC Team "{team_name}" deleted.')
+    return redirect('settings:team_management')
+
+
 def role_permission(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -379,7 +519,7 @@ def analyst_profile_list(request):
         messages.error(request, 'Access denied.')
         return redirect('alerts:table')
     search = request.GET.get('search', '')
-    profiles = AnalystProfile.objects.select_related('user').all()
+    profiles = AnalystProfile.objects.select_related('user', 'soc_team').all()
     if search:
         profiles = profiles.filter(Q(user__username__icontains=search) | Q(user__first_name__icontains=search) | Q(designation__icontains=search))
     if request.method == 'POST' and 'update' in request.POST:
@@ -393,7 +533,8 @@ def analyst_profile_list(request):
             return redirect('settings:analyst_profile')
     else:
         form = AnalystProfileForm()
-    ctx = {'section': 'analysts', 'profiles': profiles, 'form': form, 'search': search}
+    teams = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
+    ctx = {'section': 'analysts', 'profiles': profiles, 'form': form, 'search': search, 'teams': teams}
     return render(request, 'settings_manager/analyst_profile.html', ctx)
 
 def wazuh_api_settings(request):
@@ -851,6 +992,48 @@ def dashboard_edit(request, pk):
         form = DashboardSettingForm(instance=obj)
     ctx = {'section': 'dashboard', 'form': form, 'object': obj}
     return render(request, 'settings_manager/dashboard_edit.html', ctx)
+
+def audit_log_list(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    
+    log_type = request.GET.get('type', 'alerts')
+    search_q = request.GET.get('q', '').strip()
+    page = request.GET.get('page', 1)
+
+    if log_type == 'settings':
+        qs = SettingAuditLog.objects.select_related('user').all().order_by('-created_at')
+        if search_q:
+            qs = qs.filter(
+                Q(action__icontains=search_q) |
+                Q(model_name__icontains=search_q) |
+                Q(user__username__icontains=search_q) |
+                Q(ip_address__icontains=search_q)
+            )
+    else:
+        qs = AlertAuditLog.objects.select_related('user', 'alert').all().order_by('-created_at')
+        if search_q:
+            qs = qs.filter(
+                Q(action__icontains=search_q) |
+                Q(alert__alert_name__icontains=search_q) |
+                Q(user__username__icontains=search_q) |
+                Q(old_value__icontains=search_q) |
+                Q(new_value__icontains=search_q) |
+                Q(ip_address__icontains=search_q)
+            )
+
+    paginator = Paginator(qs, 50)
+    logs_page = paginator.get_page(page)
+
+    ctx = {
+        'section': 'audit',
+        'log_type': log_type,
+        'logs': logs_page,
+        'search_q': search_q,
+        'total_logs': qs.count(),
+    }
+    return render(request, 'settings_manager/audit_logs.html', ctx)
 
 def audit_log_settings(request):
     if not _check_settings_access(request.user):

@@ -3,8 +3,8 @@ from .models import Alert, AlertComment, AlertAuditLog, AlertSource, AlertEscala
 
 @admin.register(Alert)
 class AlertAdmin(admin.ModelAdmin):
-    list_display = ['alert_name', 'severity', 'status', 'verdict', 'assignee', 'alert_time']
-    list_filter = ['severity', 'status', 'verdict', 'source']
+    list_display = ['alert_name', 'severity', 'status', 'verdict', 'assigned_team', 'assignee', 'alert_time']
+    list_filter = ['severity', 'status', 'verdict', 'assigned_team', 'source']
     search_fields = ['alert_name', 'hostname', 'username', 'source_ip', 'rule_id']
     date_hierarchy = 'alert_time'
 

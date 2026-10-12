@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm
-from accounts.models import AnalystProfile, ROLE_CHOICES, TEAM_CHOICES
+from accounts.models import AnalystProfile, ROLE_CHOICES, TEAM_CHOICES, SocTeam
 from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
@@ -11,6 +11,11 @@ from .models import (
 
 class UserManagementForm(UserCreationForm):
     role = forms.ChoiceField(choices=ROLE_CHOICES)
+    soc_team = forms.ModelChoiceField(
+        queryset=SocTeam.objects.filter(is_active=True),
+        required=False,
+        empty_label="-- Select SOC Team --"
+    )
     team = forms.ChoiceField(choices=TEAM_CHOICES, required=False)
     phone = forms.CharField(max_length=20, required=False)
     designation = forms.CharField(max_length=100, required=False)
@@ -27,6 +32,7 @@ class UserManagementForm(UserCreationForm):
         self.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
         self.fields['role'].widget.attrs.update({'class': 'form-select form-select-sm'})
         self.fields['team'].widget.attrs.update({'class': 'form-select form-select-sm'})
+        self.fields['soc_team'].widget.attrs.update({'class': 'form-select form-select-sm'})
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -34,7 +40,8 @@ class UserManagementForm(UserCreationForm):
             user.save()
             profile, _ = AnalystProfile.objects.get_or_create(user=user)
             profile.role = self.cleaned_data['role']
-            profile.team = self.cleaned_data.get('team', '')
+            profile.soc_team = self.cleaned_data.get('soc_team')
+            profile.team = profile.soc_team.tier if profile.soc_team else self.cleaned_data.get('team', '')
             profile.phone = self.cleaned_data.get('phone', '')
             profile.designation = self.cleaned_data.get('designation', '')
             profile.is_active = self.cleaned_data.get('is_active', True)
@@ -43,6 +50,11 @@ class UserManagementForm(UserCreationForm):
 
 class UserEditForm(forms.ModelForm):
     role = forms.ChoiceField(choices=ROLE_CHOICES)
+    soc_team = forms.ModelChoiceField(
+        queryset=SocTeam.objects.filter(is_active=True),
+        required=False,
+        empty_label="-- Select SOC Team --"
+    )
     team = forms.ChoiceField(choices=TEAM_CHOICES, required=False)
     phone = forms.CharField(max_length=20, required=False)
     designation = forms.CharField(max_length=100, required=False)
@@ -59,10 +71,12 @@ class UserEditForm(forms.ModelForm):
         self.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
         self.fields['role'].widget.attrs.update({'class': 'form-select form-select-sm'})
         self.fields['team'].widget.attrs.update({'class': 'form-select form-select-sm'})
+        self.fields['soc_team'].widget.attrs.update({'class': 'form-select form-select-sm'})
         if self.instance and hasattr(self.instance, 'analyst_profile'):
             p = self.instance.analyst_profile
             self.initial['role'] = p.role
             self.initial['team'] = p.team
+            self.initial['soc_team'] = p.soc_team_id if p.soc_team else None
             self.initial['phone'] = p.phone
             self.initial['designation'] = p.designation
             self.initial['is_active'] = p.is_active
@@ -73,7 +87,8 @@ class UserEditForm(forms.ModelForm):
             user.save()
             profile, _ = AnalystProfile.objects.get_or_create(user=user)
             profile.role = self.cleaned_data['role']
-            profile.team = self.cleaned_data.get('team', '')
+            profile.soc_team = self.cleaned_data.get('soc_team')
+            profile.team = profile.soc_team.tier if profile.soc_team else self.cleaned_data.get('team', '')
             profile.phone = self.cleaned_data.get('phone', '')
             profile.designation = self.cleaned_data.get('designation', '')
             profile.is_active = self.cleaned_data.get('is_active', True)
@@ -82,16 +97,54 @@ class UserEditForm(forms.ModelForm):
             profile.save()
         return user
 
+
+class SocTeamForm(forms.ModelForm):
+    class Meta:
+        model = SocTeam
+        fields = [
+            'name', 'tier', 'lead', 'shift_type',
+            'shift_start_time', 'shift_end_time',
+            'notification_email', 'webhook_url',
+            'description', 'is_active'
+        ]
+        widgets = {
+            'shift_start_time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control form-control-sm'}),
+            'shift_end_time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control form-control-sm'}),
+            'description': forms.Textarea(attrs={'rows': 2, 'class': 'form-control form-control-sm'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.update({'class': 'form-check-input'})
+            elif isinstance(field.widget, forms.Select):
+                field.widget.attrs.update({'class': 'form-select form-select-sm'})
+            elif name not in ['shift_start_time', 'shift_end_time', 'description']:
+                field.widget.attrs.update({'class': 'form-control form-control-sm'})
+        self.fields['lead'].queryset = User.objects.filter(is_active=True).order_by('username')
+        self.fields['lead'].empty_label = "-- Select Team Lead --"
+
 class AnalystProfileForm(forms.ModelForm):
     class Meta:
         model = AnalystProfile
-        fields = ['role', 'team', 'phone', 'designation', 'is_active']
+        fields = ['role', 'soc_team', 'team', 'phone', 'designation', 'is_active']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for f in self.fields.values():
-            f.widget.attrs.update({'class': 'form-select form-select-sm' if isinstance(f, (forms.ChoiceField, forms.TypedChoiceField)) else 'form-control form-control-sm'})
+            f.widget.attrs.update({'class': 'form-select form-select-sm' if isinstance(f, (forms.ChoiceField, forms.TypedChoiceField, forms.ModelChoiceField)) else 'form-control form-control-sm'})
         self.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
+        self.fields['soc_team'].queryset = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
+        self.fields['soc_team'].empty_label = "-- Unassigned Team --"
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if instance.soc_team:
+            instance.team = instance.soc_team.tier
+        if commit:
+            instance.save()
+        return instance
 
 class AlertSourceSettingsForm(forms.ModelForm):
     class Meta:

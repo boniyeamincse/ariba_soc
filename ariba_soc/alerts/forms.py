@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth.models import User
+from accounts.models import SocTeam
 from settings_manager.models import SeveritySettings, StatusSettings, VerdictSettings
 from .models import Alert, AlertComment, SEVERITY_CHOICES, STATUS_CHOICES, VERDICT_CHOICES
 
@@ -13,13 +14,18 @@ class AlertEditForm(forms.ModelForm):
 
     class Meta:
         model = Alert
-        fields = ['assignee', 'status', 'severity', 'verdict', 'priority', 'analyst_comment', 'escalation_reason', 'remediation_note', 'closure_reason']
+        fields = ['assignee', 'assigned_team', 'status', 'severity', 'verdict', 'priority', 'analyst_comment', 'escalation_reason', 'remediation_note', 'closure_reason']
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
         self.fields['assignee'].queryset = User.objects.filter(is_active=True).select_related('analyst_profile')
         self.fields['assignee'].widget.attrs.update({'class': 'form-select'})
+
+        self.fields['assigned_team'].queryset = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
+        self.fields['assigned_team'].required = False
+        self.fields['assigned_team'].empty_label = "-- Unassigned Team --"
+        self.fields['assigned_team'].widget.attrs.update({'class': 'form-select'})
 
         self.fields['severity'].choices = list(
             SeveritySettings.objects.filter(is_active=True).order_by('sort_order').values_list('name', 'name')

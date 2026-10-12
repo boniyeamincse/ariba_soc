@@ -15,6 +15,32 @@
     </div>
   </div>
 
+  {# ── Sub-nav Pills (User & Access) ── #}
+  <div class="ariba-card px-3 py-2 mb-3 mt-2">
+    <ul class="nav nav-pills gap-1 flex-wrap align-items-center">
+      <li class="nav-item">
+        <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'settings:user_management' %}">
+          <i class="bi bi-people me-1"></i> Users
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'settings:team_management' %}">
+          <i class="bi bi-diagram-3-fill me-1"></i> SOC Teams
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link btn-sm py-1 px-3 active bg-primary text-white" href="{% url 'settings:role_permission' %}">
+          <i class="bi bi-shield-lock me-1"></i> Role & Permissions
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'settings:analyst_profile' %}">
+          <i class="bi bi-person-badge me-1"></i> Analyst Profiles
+        </a>
+      </li>
+    </ul>
+  </div>
+
   {# ── Legend ── #}
   <div class="d-flex flex-wrap gap-3 mb-3 mt-2">
     {% for rc, label in role_choices %}

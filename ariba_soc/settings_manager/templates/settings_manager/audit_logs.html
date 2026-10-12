@@ -1,0 +1,175 @@
+{% extends 'settings_manager/settings_base.html' %}
+{% load humanize %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <div class="small text-muted mb-1">
+                <a href="{% url 'settings:dashboard' %}" class="text-secondary text-decoration-none">Settings</a> &rsaquo; 
+                <span class="text-info">Audit Logs</span>
+            </div>
+            <h4 class="m-0 text-white"><i class="bi bi-journal-text text-info me-2"></i>Audit Logs</h4>
+            <p class="settings-page-desc mb-0">Comprehensive audit trail of security operations, analyst workflows, and system settings modifications.</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <a href="{% url 'settings:audit_log' %}" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-gear me-1"></i>Audit Settings
+            </a>
+            <a href="{% url 'settings:dashboard' %}" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Settings Overview
+            </a>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs / Subnav -->
+    <div class="ariba-card px-3 py-2 mb-3">
+        <ul class="nav nav-pills gap-1 flex-wrap align-items-center">
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 {% if log_type == 'alerts' %}active bg-primary text-white{% else %}text-secondary{% endif %}" href="?type=alerts{% if search_q %}&q={{ search_q }}{% endif %}">
+                    <i class="bi bi-bell-fill me-1"></i> Alert Operations Log
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 {% if log_type == 'settings' %}active bg-primary text-white{% else %}text-secondary{% endif %}" href="?type=settings{% if search_q %}&q={{ search_q }}{% endif %}">
+                    <i class="bi bi-sliders me-1"></i> Settings Changes Log
+                </a>
+            </li>
+            <li class="nav-item ms-md-auto">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'settings:audit_log' %}">
+                    <i class="bi bi-journal-check me-1"></i> Retention & Policies
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Search / Filter Bar -->
+    <div class="ariba-card p-3 mb-3">
+        <form method="get" class="row g-2 align-items-center">
+            <input type="hidden" name="type" value="{{ log_type }}">
+            <div class="col-md-9 col-sm-8">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-transparent border-end-0" style="border-color: var(--border-color);"><i class="bi bi-search text-secondary"></i></span>
+                    <input type="text" name="q" value="{{ search_q }}" class="form-control ariba-input border-start-0" placeholder="Search by user, action, alert title, or IP...">
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-4 d-flex gap-2">
+                <button type="submit" class="btn btn-ariba-primary btn-sm flex-grow-1">Filter</button>
+                {% if search_q %}
+                <a href="?type={{ log_type }}" class="btn btn-ariba-outline btn-sm">Reset</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    <!-- Audit Table Card -->
+    <div class="ariba-card p-0">
+        <div class="table-responsive">
+            <table class="table ariba-table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 150px;">Timestamp</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        {% if log_type == 'settings' %}
+                            <th>Setting Model</th>
+                            <th>Object ID</th>
+                            <th>Values / Note</th>
+                        {% else %}
+                            <th>Related Alert</th>
+                            <th class="d-none d-md-table-cell">Old Value</th>
+                            <th class="d-none d-md-table-cell">New Value</th>
+                        {% endif %}
+                        <th class="d-none d-lg-table-cell">IP Address</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td class="text-nowrap font-monospace text-secondary small">
+                            {{ log.created_at|date:"M d, Y H:i:s" }}
+                        </td>
+                        <td>
+                            {% if log.user %}
+                                <span class="text-light fw-semibold"><i class="bi bi-person me-1 text-info"></i>{{ log.user.username }}</span>
+                            {% else %}
+                                <span class="text-muted"><i class="bi bi-cpu me-1"></i>System</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-info-subtle text-info border border-info font-monospace">{{ log.action }}</span>
+                        </td>
+                        {% if log_type == 'settings' %}
+                            <td>
+                                <code class="text-light">{{ log.model_name }}</code>
+                            </td>
+                            <td class="font-monospace text-secondary">
+                                {{ log.object_id|default:"-" }}
+                            </td>
+                            <td>
+                                {% if log.new_value %}
+                                <small class="text-light">{{ log.new_value|truncatechars:60 }}</small>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        {% else %}
+                            <td>
+                                {% if log.alert %}
+                                <a href="{% url 'alerts:detail' log.alert.id %}" class="text-info text-decoration-none fw-semibold">
+                                    {{ log.alert.alert_name|truncatechars:35 }}
+                                </a>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="d-none d-md-table-cell font-monospace">
+                                <small class="text-muted">{{ log.old_value|default:"—"|truncatechars:30 }}</small>
+                            </td>
+                            <td class="d-none d-md-table-cell font-monospace">
+                                <small class="text-light">{{ log.new_value|default:"—"|truncatechars:30 }}</small>
+                            </td>
+                        {% endif %}
+                        <td class="d-none d-lg-table-cell font-monospace text-secondary small">
+                            {{ log.ip_address|default:"—" }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <i class="bi bi-journal-x fs-2 d-block mb-2 text-secondary"></i>
+                            No audit logs found matching criteria.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if logs.has_other_pages %}
+        <div class="p-3 border-top d-flex justify-content-between align-items-center flex-wrap gap-2" style="border-color: var(--border-color) !important;">
+            <small class="text-muted">Showing {{ logs.start_index }} to {{ logs.end_index }} of {{ total_logs }} entries</small>
+            <nav>
+                <ul class="pagination pagination-sm mb-0">
+                    {% if logs.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link ariba-input" href="?type={{ log_type }}&page={{ logs.previous_page_number }}{% if search_q %}&q={{ search_q }}{% endif %}">&laquo; Prev</a>
+                    </li>
+                    {% endif %}
+                    <li class="page-item disabled">
+                        <span class="page-link ariba-input">Page {{ logs.number }} of {{ logs.paginator.num_pages }}</span>
+                    </li>
+                    {% if logs.has_next %}
+                    <li class="page-item">
+                        <a class="page-link ariba-input" href="?type={{ log_type }}&page={{ logs.next_page_number }}{% if search_q %}&q={{ search_q }}{% endif %}">Next &raquo;</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

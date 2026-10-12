@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="dcterms.date" content="2026-10-12" />
+  <title>Ariba SOC — Full Code Review &amp; Findings Report</title>
+  <style>
+
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+</style>
+  <style type="text/css">:root {
+--bg: #f4f6f9;
+--card: #ffffff;
+--ink: #1c2733;
+--muted: #5b6b7c;
+--line: #dde4ec;
+--brand: #0b3d66;
+--brand2: #14588f;
+--crit: #c62828;
+--high: #e65100;
+--med: #f9a825;
+--low: #2e7d32;
+--info: #0277bd;
+}
+* { box-sizing: border-box; }
+body {
+margin: 0;
+font-family: "Segoe UI", "Inter", Roboto, "Helvetica Neue", Arial, sans-serif;
+background: var(--bg);
+color: var(--ink);
+line-height: 1.55;
+}
+header.report {
+background: linear-gradient(135deg, var(--brand) 0%, var(--brand2) 100%);
+color: #fff;
+padding: 36px 48px 28px;
+}
+header.report h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: .3px; }
+header.report .sub { opacity: .9; font-size: 14px; }
+header.report .meta { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 10px; }
+header.report .meta span {
+background: rgba(255,255,255,.14);
+border: 1px solid rgba(255,255,255,.25);
+border-radius: 999px;
+padding: 4px 14px;
+font-size: 13px;
+}
+.verdict {
+margin: 24px 48px 0;
+background: #fdecea;
+border: 1px solid #f5c6c2;
+border-left: 6px solid var(--crit);
+border-radius: 10px;
+padding: 16px 20px;
+font-size: 15px;
+}
+.verdict strong { color: var(--crit); }
+main { max-width: 1080px; margin: 0 auto; padding: 8px 24px 64px; }
+h1, h2, h3 { color: var(--brand); }
+h2 {
+font-size: 21px;
+margin: 40px 0 14px;
+padding-bottom: 8px;
+border-bottom: 2px solid var(--line);
+}
+h3 { font-size: 16px; margin: 26px 0 8px; }
+p, li { font-size: 14.5px; }
+code {
+background: #eef2f7;
+border: 1px solid var(--line);
+border-radius: 4px;
+padding: 1px 6px;
+font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+font-size: 12.5px;
+color: #ad1457;
+}
+pre {
+background: #101820;
+color: #d8e2ec;
+border-radius: 8px;
+padding: 14px 16px;
+overflow-x: auto;
+font-size: 12.5px;
+line-height: 1.5;
+}
+pre code { background: none; border: 0; color: inherit; padding: 0; }
+table {
+border-collapse: collapse;
+width: 100%;
+margin: 14px 0 20px;
+background: var(--card);
+border: 1px solid var(--line);
+border-radius: 10px;
+overflow: hidden;
+box-shadow: 0 1px 3px rgba(16,24,40,.06);
+font-size: 13.5px;
+}
+th {
+background: var(--brand);
+color: #fff;
+text-align: left;
+padding: 10px 12px;
+font-weight: 600;
+}
+td { padding: 9px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+tr:nth-child(even) td { background: #f8fafc; }
+blockquote {
+margin: 12px 0;
+padding: 10px 16px;
+border-left: 4px solid var(--brand2);
+background: #eef4fa;
+border-radius: 0 8px 8px 0;
+color: var(--muted);
+}
+hr { border: 0; border-top: 1px dashed var(--line); margin: 30px 0; }
+em { color: var(--muted); }
+
+.sev, td:first-child code, p > code.sev {
+display: inline-block;
+border-radius: 4px;
+padding: 1px 8px;
+font-size: 11.5px;
+font-weight: 700;
+letter-spacing: .4px;
+text-transform: uppercase;
+}
+table td:first-child { font-weight: 600; white-space: nowrap; }
+
+nav.toc {
+background: var(--card);
+border: 1px solid var(--line);
+border-radius: 10px;
+padding: 18px 24px;
+margin: 24px 0;
+box-shadow: 0 1px 3px rgba(16,24,40,.06);
+}
+nav.toc b { color: var(--brand); display: block; margin-bottom: 8px; }
+nav.toc ol { margin: 0; padding-left: 20px; }
+nav.toc a { color: var(--brand2); text-decoration: none; }
+nav.toc a:hover { text-decoration: underline; }
+footer {
+text-align: center;
+color: var(--muted);
+font-size: 12.5px;
+padding: 24px;
+border-top: 1px solid var(--line);
+}
+
+.count-crit { color: var(--crit); font-weight: 700; }
+.count-high { color: var(--high); font-weight: 700; }
+.count-med { color: #b8860b; font-weight: 700; }
+.count-low { color: var(--low); font-weight: 700; }
+@media print {
+body { background: #fff; }
+header.report { -webkit-print-color-adjust: exact; }
+pre { white-space: pre-wrap; }
+}
+</style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Ariba SOC — Full Code Review &amp; Findings
+Report</h1>
+<p class="date">2026-10-12</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#ariba-soc--full-code-review--findings" id="toc-ariba-soc--full-code-review--findings">Ariba SOC — Full Code
+Review &amp; Findings</a>
+<ul>
+<li><a href="#1-live-verified-runtime-findings-verified-today-with-curl--container-logs" id="toc-1-live-verified-runtime-findings-verified-today-with-curl--container-logs">1.
+Live-Verified Runtime Findings (verified today with curl / container
+logs)</a></li>
+<li><a href="#2-critical-findings-code" id="toc-2-critical-findings-code">2. Critical Findings (code)</a></li>
+<li><a href="#3-high-findings" id="toc-3-high-findings">3. High
+Findings</a></li>
+<li><a href="#4-medium-findings-condensed" id="toc-4-medium-findings-condensed">4. Medium Findings
+(condensed)</a></li>
+<li><a href="#5-cross-check-vs-deployment-report-2026-10-11-host-1024662" id="toc-5-cross-check-vs-deployment-report-2026-10-11-host-1024662">5.
+Cross-Check vs Deployment Report (2026-10-11, host 10.24.66.2)</a></li>
+<li><a href="#6-top-priority-fix-order" id="toc-6-top-priority-fix-order">6. Top Priority Fix Order</a></li>
+<li><a href="#7-whats-clean-verified" id="toc-7-whats-clean-verified">7.
+What&#39;s Clean (verified)</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="ariba-soc--full-code-review--findings">Ariba SOC — Full Code
+Review &amp; Findings</h1>
+<p><strong>Date:</strong> 2026-10-12 <strong>Target:</strong>
+<code>http://localhost:8080/</code> (local Docker stack) + full source
+of <code>ariba_soc/</code> (Django 5.1) <strong>Method:</strong> 4
+parallel deep code reviews (alerts/dashboard · accounts/settings/audit ·
+incidents/vulnerabilities/hunting · reports/monitor/wazuh/config) + live
+runtime verification <strong>Verdict:</strong> <strong>NO-GO for
+production.</strong> The alert workflow engine is entirely broken at
+runtime (HTTP 500 on every transition), RBAC is broadly unenforced, and
+several secrets/exports are exposed. This review is code-focused; the
+earlier deployment review (2026-10-11, target 10.24.66.2) is
+cross-referenced at the end.</p>
+<hr />
+<h2 id="1-live-verified-runtime-findings-verified-today-with-curl--container-logs">1.
+Live-Verified Runtime Findings (verified today with curl / container
+logs)</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>L-1</td>
+<td><strong>Critical</strong></td>
+<td><strong>Every alert workflow action (claim/escalate/close/reopen)
+returns HTTP 500.</strong> <code>select_for_update()</code> is called
+outside any transaction (<code>ATOMIC_REQUESTS</code> is off). The
+entire triage workflow is dead.</td>
+<td><code>POST /647/claim/</code> → 500; container log:
+<code>django.db.transaction.TransactionManagementError: select_for_update cannot be used outside of a transaction</code>
+at <code>alerts/workflow.py:518</code>, caller <code>:189</code></td>
+</tr>
+<tr>
+<td>L-2</td>
+<td><strong>Critical</strong></td>
+<td><strong>Media tree (SOC report PDFs, avatars) served unauthenticated
+by nginx.</strong> Anyone can download confidential generated reports
+without login.</td>
+<td><code>GET /media/avatars/boniyeamin.jpeg</code> →
+<strong>200</strong> with no cookies; nginx
+<code>location /media/</code> has no auth; reports exist at
+<code>/app/media/reports/*.pdf</code></td>
+</tr>
+<tr>
+<td>L-3</td>
+<td>Info</td>
+<td>Stack is up: 8/8 containers healthy; login works
+(<code>admin</code>);
+dashboard/alerts/incidents/vulnerabilities/reports/audit/wazuh pages all
+200 after login.</td>
+<td><code>docker ps</code>, login flow 302→200</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-critical-findings-code">2. Critical Findings (code)</h2>
+<h3 id="cr-1--alert-workflow-engine-fundamentally-broken-alertsworkflowpy">CR-1
+— Alert workflow engine fundamentally broken
+(<code>alerts/workflow.py</code>)</h3>
+<ul>
+<li><strong>CR-1a: All transitions 500 in production</strong> —
+<code>_acquire_lock()</code> (<code>workflow.py:516-518</code>) runs
+<code>select_for_update()</code> <strong>before</strong> entering
+<code>transaction.atomic()</code>, and <code>ATOMIC_REQUESTS</code> is
+not enabled (<code>config/settings.py</code>). On PostgreSQL every
+claim/escalate/accept/return/resolve/close/reopen/incident action raises
+<code>TransactionManagementError</code> (live-verified, L-1). Tests pass
+only because SQLite silently no-ops the lock.</li>
+<li><strong>CR-1b: New alerts can never leave <code>NEW</code></strong>
+— alerts are ingested with default <code>workflow_state=&#39;NEW&#39;</code>,
+but <code>ALLOWED_TRANSITIONS[&#39;NEW&#39;] = {&#39;QUEUED_L1&#39;}</code> only
+(<code>workflow.py:18</code>) while <code>claim</code> validates toward
+<code>IN_PROGRESS_L1</code> (<code>:193</code>). The L1 queue
+(<code>workflow_state=&#39;QUEUED_L1&#39;</code>) is permanently empty;
+<code>NEW</code> is also missing from dashboard
+<code>OPEN_WORKFLOW_STATES</code> (<code>dashboard/views.py:13</code>),
+so fresh alerts are excluded from SLA/risk widgets.</li>
+<li><strong>Fix:</strong> wrap lock+validation+mutation in one
+<code>transaction.atomic()</code>; default new open alerts to
+<code>QUEUED_L1</code> (or allow <code>NEW→IN_PROGRESS_L1</code>).</li>
+</ul>
+<h3 id="cr-2--generated-soc-reports--media-publicly-downloadable-deploynginxdockerconf13-15">CR-2
+— Generated SOC reports &amp; media publicly downloadable
+(<code>deploy/nginx.docker.conf:13-15</code>)</h3>
+<p><code>location /media/ { alias /app/media/; }</code> serves the whole
+media tree with no auth; <code>reports/services.py</code> writes every
+generated report (PDF/CSV/XLSX) into <code>MEDIA_ROOT/reports/</code>
+with predictable timestamped names. Live-verified (L-2).
+<strong>Fix:</strong> serve reports via an authenticated Django view or
+<code>location /media/reports/ { deny all; }</code> + authenticated
+download endpoint; move reports out of web-served media.</p>
+<h3 id="cr-3--privilege-escalation-non-admins-can-mint-admin-users-settings_managerviewspy31-38-formspy13-viewspy193-205240-251">CR-3
+— Privilege escalation: non-admins can mint ADMIN users
+(<code>settings_manager/views.py:31-38</code>, <code>forms.py:13</code>,
+<code>views.py:193-205,240-251</code>)</h3>
+<p>Settings access is granted to
+<code>SOC_MGR</code>/<code>SOC_ENG</code>/<code>ADMIN</code>, but the
+user forms offer <code>role=ADMIN</code> with no restriction, no
+self-edit guard — a SOC_ENG can create an ADMIN, promote themselves, or
+bulk-promote. Prior report C-08 is only <strong>partially fixed</strong>
+(L1/VIEWER now blocked; SOC_ENG/SOC_MGR still escalate).</p>
+<h3 id="cr-4--settings-allowlist-is-db-writable--persistent-backdoor-settings_managerviewspy24-28900-915">CR-4
+— Settings allowlist is DB-writable = persistent backdoor
+(<code>settings_manager/views.py:24-28,900-915</code>)</h3>
+<p><code>_get_allowed_roles()</code> reads
+<code>SystemSetting.get_setting(&#39;settings_allowed_roles&#39;)</code>, and
+the <code>system_settings</code> view accepts arbitrary key/value
+writes. A SOC_ENG can POST
+<code>key=settings_allowed_roles, value=L1,L2,VIEWER,MONITOR</code> and
+grant every role full settings/user-management access permanently.</p>
+<h3 id="cr-5--incident-permissions-never-seeded-on-fresh-installs--create-incident-403-for-everyone-incl-admin-accountsmigrations0010_add_incident_permissionspy">CR-5
+— Incident permissions never seeded on fresh installs → &quot;Create
+Incident&quot; 403 for <strong>everyone incl. ADMIN</strong>
+(<code>accounts/migrations/0010_add_incident_permissions.py</code>)</h3>
+<p><code>0010</code> adds the six incident permission flags with
+<code>default=False</code> <strong>after</strong> the seed migrations
+(<code>0003</code>/<code>0006</code>) ran; no <code>RunPython</code>
+seeds them. All roles end with <code>can_create_incident=False</code>
+etc. until an admin hand-edits the matrix. Tests mask this by granting
+perms in <code>setUp</code>.</p>
+<hr />
+<h2 id="3-high-findings">3. High Findings</h2>
+<h3 id="application-security--rbac">Application security / RBAC</h3>
+<ul>
+<li><strong>H-1 Missing authorization across core views</strong>
+(<code>alerts/views.py</code>): <code>alert_edit</code>
+(<code>:184</code>), <code>alert_add_comment</code> (<code>:220</code>),
+and all asset views (<code>:549-600</code>) are
+<code>@login_required</code> only — VIEWERs/deactivated users can
+reassign any alert, change priority, comment, and create/edit/delete
+assets.</li>
+<li><strong>H-2 RBAC bypass via TIER_ACTIONS</strong>
+(<code>alerts/workflow.py:41</code> vs <code>views.py:448</code>):
+<code>alert_close</code> consults only role tiers, never
+<code>can_close_alert</code>; an L1 refused bulk-close can close the
+same alert via the single close endpoint. <code>can_assign_others</code>
+similarly unenforced on <code>alert_edit</code>.</li>
+<li><strong>H-3 Permission matrix largely decorative</strong>
+(<code>accounts/models.py:60-62</code>): 9 toggles
+(<code>can_manage_users</code>, <code>can_view_audit_logs</code>,
+<code>can_manage_wazuh</code>, <code>can_view_reports</code>,
+<code>can_export_reports</code>, <code>can_escalate_alert</code>,
+<code>can_reassign</code>, <code>can_add_remediation</code>,
+<code>can_mark_incident</code>) have <strong>zero enforcement call
+sites</strong>.</li>
+<li><strong>H-4 Deactivated accounts can still log in</strong>
+(<code>settings_manager/forms.py:40,79</code>): forms set only
+<code>profile.is_active</code>, never <code>user.is_active</code>;
+<code>_check_settings_access</code> has no active check at all.</li>
+<li><strong>H-5 Incident assign/close/reopen has no permission
+gate</strong> (<code>incidents/views/assignment.py:9</code>,
+<code>transition.py:15</code>): only MONITOR is blocked;
+<code>INCIDENT_PERMISSIONS</code> dict is dead code — L1/VIEWER can
+close incidents.</li>
+<li><strong>H-6 Vulnerability remediation has no granularity</strong>
+(<code>vulnerabilities/views.py:104-174</code>): L1 can risk-accept
+critical CVEs, mark false positives, resolve;
+<code>vulnerability_permission_required</code> decorator exists but is
+never used.</li>
+<li><strong>H-7 Audit middleware is a no-op</strong>
+(<code>audit/middleware.py:3-9</code>): <code>AuditLog</code> never
+written; LOGIN/LOGOUT/USER_CREATED audit actions are dead — compliance
+gap. (Prior report H-07, unfixed.)</li>
+<li><strong>H-8 Password resets bypass all validators</strong>
+(<code>settings_manager/forms.py:315-323</code>):
+<code>validate_password()</code> never called;
+<code>AUTH_PASSWORD_VALIDATORS</code> skipped for admin-set passwords on
+any account.</li>
+<li><strong>H-9 No rate limiting/lockout on login</strong>
+(<code>accounts/urls.py:20</code>): no django-axes/ratelimit anywhere;
+brute-force/stuffing unmitigated. (Prior H-04, unfixed.)</li>
+<li><strong>H-10 Audit log viewer is login-only</strong>
+(<code>audit/views.py:7-12</code>): any authenticated account (incl.
+MONITOR wallboard) can read every audit row incl. IPs and old/new
+values; <code>can_view_audit_logs</code> ignored.</li>
+<li><strong>H-11 Lower-privileged settings users can
+delete/deactivate/demote ADMIN accounts</strong>
+(<code>settings_manager/views.py:139,187,264</code>): protection keys on
+<code>is_superuser</code> only, but form-created ADMINs aren&#39;t
+superusers.</li>
+<li><strong>H-12 Permission matrix rewriteable by any settings
+user</strong> (<code>settings_manager/views.py:348-356</code>): SOC_ENG
+can grant own role every capability or strip ADMIN&#39;s.</li>
+</ul>
+<h3 id="broken-core-functionality">Broken core functionality</h3>
+<ul>
+<li><strong>H-13 Detail-page Close/Escalate always 409</strong>
+(<code>templates/ariba_soc/alert_detail.html:528-566</code>): workflow
+forms omit hidden <code>workflow_version</code> → defaults to 1 →
+stale-version rejection after any transition. Non-numeric version →
+unhandled 500.</li>
+<li><strong>H-14 L3 escalation can never be accepted</strong>
+(<code>alerts/workflow.py:284</code>): validation hardcodes
+<code>IN_PROGRESS_L2</code> instead of the target tier; L3 escalations
+stuck in <code>PENDING_L3_ACCEPTANCE</code> forever.</li>
+<li><strong>H-15 Workflow never updates
+<code>alert.status</code></strong>
+(<code>alerts/workflow.py:427-434</code>): board (status-driven) and
+dashboards (workflow_state-driven) permanently disagree;
+<code>_derive_legacy_status()</code>/<code>_set_workflow_state()</code>
+are dead code. Reverse desync too: <code>alert_move_api</code>/bulk
+actions write <code>status</code> bypassing the state machine and
+optimistic locking.</li>
+<li><strong>H-16 Incident status buttons all dead</strong>
+(<code>incidents/templates/incidents/incident_detail.html:117</code> vs
+<code>views/transition.py:29-44</code>): template POSTs lowercased
+<strong>status names</strong> (<code>confirmed</code>,
+<code>investigating</code>, <code>containment</code>…) while server
+<code>fn_map</code> keys are <strong>verbs</strong>
+(<code>confirm</code>, <code>investigate</code>, <code>contain</code>…)
+— intersection is empty; every transition returns
+<code>Unknown action</code>. Evidence textarea conditions also never
+match (<code>t == &#39;CONTAIN&#39;</code> vs real
+<code>CONTAINMENT</code>).</li>
+<li><strong>H-17 <code>Asset.save()</code> crashes for MEDIUM
+assets</strong> (<code>alerts/models.py:152-156</code>): short-circuit
+<code>or</code> prevents <code>kwargs.pop(&#39;recalc_multiplier&#39;)</code>
+when multiplier==1.0 → <code>TypeError</code> → HTTP 500 editing any
+medium asset.</li>
+<li><strong>H-18 PDF report generation always fails</strong>
+(<code>reports/services.py:239,839-842,910</code> +
+<code>requirements.txt:11</code>): guard checks dead
+<code>HAS_REPORTLAB</code> instead of <code>pisa is None</code>; when
+xhtml2pdf import fails, <code>pisa.CreatePDF</code> →
+<code>AttributeError</code> (matches scheduler error).
+<code>xhtml2pdf&gt;=0.2</code> unpinned. Reportlab path
+(<code>_write_pdf</code>) is dead code.</li>
+<li><strong>H-19 Owner-assignment dropdowns permanently empty</strong>
+(<code>incidents/views/detail.py:21-29</code>,
+<code>vulnerabilities/views.py:56-64</code>): <code>users</code> never
+passed to context → <code>&lt;select&gt;</code> renders placeholder
+only; assignment impossible from UI in both apps.</li>
+<li><strong>H-20 Alert sync dedup broken for id-less docs; created
+counts lie</strong>
+(<code>wazuh_integration/services.py:376-389,459</code>): dedup
+pre-check misses docs without <code>id</code>; positional fallbacks
+(<code>&quot;0&quot;</code>,<code>&quot;1&quot;</code>) collide on the unique constraint and
+are silently dropped via <code>ignore_conflicts=True</code> while
+<code>created_count = len(batch)</code> overstates. Scheduler (5-min)
+and manual sync can race.</li>
+</ul>
+<h3 id="data-exposure--injection">Data exposure / injection</h3>
+<ul>
+<li><strong>H-21 Stored/DOM XSS in executive dashboard</strong>
+(<code>templates/ariba_soc/dashboard_home.html:254,263</code>):
+attacker-influenceable <code>alert_name</code>/<code>hostname</code>
+interpolated into <code>innerHTML</code> unescaped → JS execution in any
+viewer&#39;s session.</li>
+<li><strong>H-22 CSV/Excel formula injection in exports</strong>
+(<code>reports/views.py:147-168</code>):
+<code>alert_name</code>/<code>hostname</code>/<code>username</code> from
+telemetry written raw; <code>=cmd|...</code> formulas execute in Excel
+when analyst opens export.</li>
+<li><strong>H-23 IOC provider API keys rendered in plaintext</strong>
+(<code>settings_manager/forms.py:325-337</code>): decrypted
+<code>api_key</code> shown in <code>TextInput</code> value attribute;
+also passed as URL query string (<code>?token=...</code>) → leaks to
+logs/Referers. Blank submit wipes stored secrets.</li>
+<li><strong>H-24 <code>javascript:</code> URLs in vulnerability
+references</strong>
+(<code>vulnerabilities/templates/vulnerabilities/detail.html:41,43</code>):
+reference URLs from indexer rendered as <code>href</code> with no scheme
+allowlist → click XSS.</li>
+<li><strong>H-25 Reports/exports lack authorization</strong>
+(<code>reports/views.py:126-156</code>):
+<code>export_csv</code>/<code>export_excel</code>/<code>generate_now</code>
+are login-only — MONITOR/VIEWER can dump full alert tables and trigger
+report emails.</li>
+<li><strong>H-26 <code>/accounts/users/</code> exposes full analyst
+roster to any authenticated user</strong>
+(<code>accounts/views.py:52-55</code>; MONITOR allowlist includes
+<code>/accounts/</code>).</li>
+</ul>
+<h3 id="config--infra-app-side">Config / infra (app-side)</h3>
+<ul>
+<li><strong>H-27 <code>DEBUG</code>/<code>ALLOWED_HOSTS</code> default
+insecure</strong> (<code>config/settings.py:8,24</code>): default
+<code>True</code>/<code>&#39;*&#39;</code> if env omitted;
+<code>.env.example</code> ships the insecure template. (Prior C-03/C-04
+unfixed.)</li>
+<li><strong>H-28 Wazuh TLS verify defaults False in env AND
+models</strong> (<code>config/settings.py:155</code>,
+<code>wazuh_integration/models.py:26,45</code>). (Prior C-05/H-13
+unfixed.)</li>
+<li><strong>H-29 Email backend hardcoded to console</strong>
+(<code>config/settings.py:180</code>): all SMTP env vars dead;
+<code>fail_silently=True</code> (<code>reports/services.py:212</code>)
+hides even errors — report emails silently never sent. (Prior H-11
+unfixed.)</li>
+<li><strong>H-30 Gunicorn
+<code>forwarded_allow_ips = &#39;*&#39;</code></strong>
+(<code>gunicorn.conf.py:12</code>): anyone can spoof
+<code>X-Forwarded-For</code>/<code>Proto</code>, defeating IP audit
+trails and future lockouts.</li>
+<li><strong>H-31 Notification failures silently swallowed</strong>
+(<code>alerts/services.py:125-157,187-188</code>): bare
+<code>except: pass</code> around assignment/escalation notifications and
+alarms. (Prior H-06 partly unfixed.)</li>
+<li><strong>H-32 Open redirect + unvalidated Active Response
+command</strong>
+(<code>wazuh_integration/views.py:209,214,310-311</code>):
+<code>next</code> redirected without host validation;
+<code>command</code> not validated against allowlist before being sent
+to Wazuh AR endpoint. Same <code>next</code> open-redirect pattern at
+<code>settings_manager/views.py:1216-1218</code>.</li>
+<li><strong>H-33 Unbounded indexer fetch (5000 cap, no
+pagination)</strong> (<code>wazuh_integration/services.py:213</code>):
+detections beyond newest 5000 silently lost; report analytics load full
+tables into memory (<code>reports/services.py:324,653</code>) — OOM DoS
+via <code>?range=all</code>.</li>
+</ul>
+<hr />
+<h2 id="4-medium-findings-condensed">4. Medium Findings (condensed)</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Area</th>
+<th>Finding</th>
+<th>Location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M-1</td>
+<td>alerts</td>
+<td>Transition audit logs record <code>from_state</code>
+<strong>after</strong> mutation → <code>CLOSED→CLOSED</code>, audit
+trail useless</td>
+<td><code>workflow.py:264,412,441,476-479,504</code></td>
+</tr>
+<tr>
+<td>M-2</td>
+<td>alerts</td>
+<td>Bulk assign no-ops but reports success (two selects share
+<code>name=&quot;value&quot;</code>); bulk close bypasses closure rules/state
+machine</td>
+<td><code>alert_table.html:30-36</code>,
+<code>views.py:408-456</code></td>
+</tr>
+<tr>
+<td>M-3</td>
+<td>alerts</td>
+<td><code>status_updated_at</code> is <code>auto_now_add</code> but used
+as &quot;last change&quot; in metrics →
+<code>fp_rate</code>/<code>closed_today</code>/SLA stats skewed</td>
+<td><code>models.py:241</code>,
+<code>dashboard/views.py:103,252,332</code></td>
+</tr>
+<tr>
+<td>M-4</td>
+<td>alerts</td>
+<td><code>alert_move_api</code> lacks <code>@require_POST</code>/JSON
+guard → 500 on GET; bypasses workflow</td>
+<td><code>views.py:468-472</code></td>
+</tr>
+<tr>
+<td>M-5</td>
+<td>alerts</td>
+<td>IR/IT &amp; Management escalate buttons dead
+(<code>tier=irit/management</code> rejected by workflow)</td>
+<td><code>alert_detail.html:536-544</code>,
+<code>workflow.py:218</code></td>
+</tr>
+<tr>
+<td>M-6</td>
+<td>settings</td>
+<td>All <code>*_toggle</code> settings handlers skip
+<code>_log_setting_change</code> — silent audit-log tampering</td>
+<td><code>settings_manager/views.py:481-489,890-898</code></td>
+</tr>
+<tr>
+<td>M-7</td>
+<td>settings</td>
+<td>IOC key in URL query string; blank-field saves wipe encrypted
+secrets</td>
+<td><code>views.py:1362</code>, forms as H-23</td>
+</tr>
+<tr>
+<td>M-8</td>
+<td>incidents</td>
+<td>Incident number generation racy (string <code>Max</code> aggregate,
+no retry) + naive <code>datetime.now()</code> year</td>
+<td><code>incidents/models.py:79-94</code></td>
+</tr>
+<tr>
+<td>M-9</td>
+<td>vulns</td>
+<td><code>accept_risk</code>/<code>mark_false_positive</code> bypass
+<code>ALLOWED_TRANSITIONS</code> state machine; audit
+<code>old_value</code> recorded after mutation (= new value)</td>
+<td><code>services/remediation.py:14-103</code></td>
+</tr>
+<tr>
+<td>M-10</td>
+<td>vulns</td>
+<td>Sync overwrites analyst-set <code>priority</code> on every sync;
+<code>due_at</code> not recalculated</td>
+<td><code>services/normalizer.py</code></td>
+</tr>
+<tr>
+<td>M-11</td>
+<td>hunting</td>
+<td>Hunt search 500s when indexer returns integer
+<code>hits.total</code> (guard written after crash) and when
+<code>rule.mitre</code> is null</td>
+<td><code>hunt_executor.py:47-49,96</code></td>
+</tr>
+<tr>
+<td>M-12</td>
+<td>hunting</td>
+<td>L1 24h hunt limit not enforced (<code>7d</code>/unbounded
+<code>custom</code> pass); L1 field filters silently
+<strong>discarded</strong> → unfiltered data shown as filtered</td>
+<td><code>query_validator.py:81-86</code>,
+<code>query_builder.py:80-82</code></td>
+</tr>
+<tr>
+<td>M-13</td>
+<td>hunting</td>
+<td>Hunt audit IP always empty; failed hunts unaudited; inconsistent log
+redaction (<code>full_log</code> unredacted)</td>
+<td><code>hunt_executor.py:37,63,154-159</code></td>
+</tr>
+<tr>
+<td>M-14</td>
+<td>vulns/incidents</td>
+<td>Unvalidated <code>page</code>/<code>owner</code> params →
+<code>ValueError</code> 500; empty owner selection crashes assign</td>
+<td><code>vulnerabilities/views.py:28,73-76</code>,
+<code>assignment.py:19,35</code></td>
+</tr>
+<tr>
+<td>M-15</td>
+<td>vulns</td>
+<td>Vulnerability
+<code>inventory</code>/<code>assets</code>/<code>cves</code> unreachable
+from UI (dead-end nav); pagination drops filters</td>
+<td><code>urls.py</code>, <code>overview.html</code>,
+<code>inventory.html:68</code></td>
+</tr>
+<tr>
+<td>M-16</td>
+<td>reports</td>
+<td><code>wazuh_health</code> behind login leaks internal API URL;
+broken as LB healthcheck</td>
+<td><code>wazuh_integration/views.py:187-201</code></td>
+</tr>
+<tr>
+<td>M-17</td>
+<td>monitor</td>
+<td>Attack-globe geolocation over plaintext HTTP
+(<code>http://ip-api.com</code>) — forgeable intel + IP leakage</td>
+<td><code>monitor/services.py:227</code></td>
+</tr>
+<tr>
+<td>M-18</td>
+<td>accounts</td>
+<td>GET-based logout → forced-logout CSRF</td>
+<td><code>accounts/urls.py:8-14</code></td>
+</tr>
+<tr>
+<td>M-19</td>
+<td>alerts</td>
+<td>Date filter <code>alert_time__lte</code> drops final day;
+<code>alert_board</code> runs 11 unsliced querysets;
+<code>recalculate_all_alerts_risk</code> loops full table
+in-request</td>
+<td><code>views.py:79-82,140-151,623-629</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Low (notable):</strong> superuser without profile 500s on
+Wazuh views (<code>wazuh_integration/views.py:21-44</code>);
+<code>ManagerClient._request</code> returns <code>None</code> after 401
+exhaustion (<code>services.py:57-68</code>); IPInfo key in URL query
+(<code>enrichment_service.py:33</code>); open redirect via
+<code>HTTP_REFERER</code> (<code>alerts/views.py:217</code>); dead
+routes (<code>hunting:event_detail</code> hardcoded 404).</p>
+<hr />
+<h2 id="5-cross-check-vs-deployment-report-2026-10-11-host-1024662">5.
+Cross-Check vs Deployment Report (2026-10-11, host 10.24.66.2)</h2>
+<table>
+<thead>
+<tr>
+<th>Prior finding</th>
+<th>Status in code today</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-03/C-04 DEBUG=True, ALLOWED_HOSTS=*</td>
+<td><strong>Unfixed</strong> (H-27)</td>
+</tr>
+<tr>
+<td>C-05/H-13 TLS verify False</td>
+<td><strong>Unfixed</strong> (H-28)</td>
+</tr>
+<tr>
+<td>C-08 Privilege escalation via user mgmt</td>
+<td><strong>Partially fixed</strong> — L1/VIEWER blocked;
+SOC_ENG/SOC_MGR still escalate (CR-3)</td>
+</tr>
+<tr>
+<td>H-03 Missing authorization on endpoints</td>
+<td><strong>Unfixed / expanded</strong> (H-1…H-6, H-25, H-26)</td>
+</tr>
+<tr>
+<td>H-04 No login rate limiting</td>
+<td><strong>Unfixed</strong> (H-9)</td>
+</tr>
+<tr>
+<td>H-05 API keys in cleartext forms</td>
+<td><strong>Unfixed</strong> (H-23)</td>
+</tr>
+<tr>
+<td>H-06 Notifications swallowed</td>
+<td><strong>Unfixed</strong> (H-31)</td>
+</tr>
+<tr>
+<td>H-07 Audit middleware no-op</td>
+<td><strong>Unfixed</strong> (H-7)</td>
+</tr>
+<tr>
+<td>H-11 Email console backend</td>
+<td><strong>Unfixed</strong> (H-29)</td>
+</tr>
+<tr>
+<td>C-10 Plain HTTP / no secure cookies</td>
+<td><strong>Unfixed</strong> (local; nginx still HTTP-only)</td>
+</tr>
+</tbody>
+</table>
+<p>New in this review (not in the deployment report): the entire
+workflow engine being broken (CR-1/L-1), unauthenticated media/report
+downloads (CR-2/L-2), incident permissions unseeded (CR-5), all incident
+transition buttons dead (H-16), L3 accept impossible (H-14), XSS in
+dashboard (H-21), CSV injection (H-22), and the settings allowlist
+backdoor (CR-4).</p>
+<hr />
+<h2 id="6-top-priority-fix-order">6. Top Priority Fix Order</h2>
+<ol type="1">
+<li><strong>CR-1 / L-1</strong> — Wrap
+<code>workflow._acquire_lock</code> + mutations in
+<code>transaction.atomic()</code>; add <code>NEW→QUEUED_L1</code> at
+ingestion. (Nothing else matters until triage works.)</li>
+<li><strong>CR-2 / L-2</strong> — Lock down <code>/media/reports/</code>
+(nginx deny + authenticated download view).</li>
+<li><strong>H-16</strong> — Align incident transition verbs (template vs
+<code>fn_map</code>); add a view-level transition test.</li>
+<li><strong>CR-3 / CR-4 / H-4 / H-8</strong> — Harden settings:
+admin-only role assignment, self-edit guard, hard-coded allowlist,
+<code>user.is_active</code> sync, <code>validate_password</code>.</li>
+<li><strong>H-13 / H-14 / H-15 / H-17</strong> — Add
+<code>workflow_version</code> to detail forms, fix L3 validation target,
+sync <code>status</code>↔︎<code>workflow_state</code>, fix
+<code>Asset.save</code> kwarg pop.</li>
+<li><strong>H-1…H-6, H-10, H-25, H-26</strong> — Enforce the permission
+matrix everywhere (wire the 9 dead toggles; gate exports, audit, user
+list, edit/comment/asset views).</li>
+<li><strong>H-21 / H-22 / H-24</strong> — Escape dashboard
+<code>innerHTML</code>, sanitize CSV cells, scheme-allowlist reference
+URLs.</li>
+<li><strong>H-18 / H-29</strong> — Fix PDF guard
+(<code>if pisa is None</code>), pin <code>xhtml2pdf</code>, env-drive
+<code>EMAIL_BACKEND</code>, drop <code>fail_silently</code>.</li>
+<li><strong>H-27 / H-28 / H-30 + prior C-03/C-05/C-09/C-10</strong> —
+Production config hardening (DEBUG/HOSTS defaults, TLS verify, gunicorn
+proxy IPs, secrets perms) per the deployment report.</li>
+<li><strong>H-9 / M-11…M-13</strong> — Login lockout (django-axes);
+hunting 500 guards &amp; L1 time-range enforcement.</li>
+</ol>
+<hr />
+<h2 id="7-whats-clean-verified">7. What&#39;s Clean (verified)</h2>
+<ul>
+<li>CSRF: middleware on, all mutating forms carry
+<code>{% csrf_token %}</code>, no <code>csrf_exempt</code>.</li>
+<li>Login <code>next=</code> open redirect <strong>not</strong> present
+on the auth view (stock <code>LoginView</code> validation).</li>
+<li>Session fixation: stock <code>login()</code> key cycling.</li>
+<li><code>ProfileForm</code> mass assignment: <code>role</code> not in
+<code>fields</code>.</li>
+<li>No <code>|safe</code>/<code>mark_safe</code> in the reviewed apps&#39;
+templates (except the JS <code>innerHTML</code> sink, H-21).</li>
+<li>SSRF in monitor geolocation: private-IP filter correctly applied
+(only the HTTP scheme is the issue).</li>
+</ul>
+<hr />
+<p><em>Generated by automated multi-agent code review + manual runtime
+verification. All findings quote verified source locations; line numbers
+refer to the working tree at review time.</em></p>
+</body>
+</html>

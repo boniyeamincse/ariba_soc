@@ -2,12 +2,36 @@
 
 {% block settings_content %}
 <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div>
-            <h4 class="m-0"><i class="bi bi-journal-check"></i> Audit Log Settings</h4>
+            <div class="small text-muted mb-1">
+                <a href="{% url 'settings:dashboard' %}" class="text-secondary text-decoration-none">Settings</a> &rsaquo; 
+                <span class="text-info">Audit Log Settings</span>
+            </div>
+            <h4 class="m-0 text-white"><i class="bi bi-journal-check text-info me-2"></i>Audit Log Settings</h4>
             <p class="settings-page-desc mb-0">Configure which actions are logged and retention policies.</p>
         </div>
-        <button class="btn btn-ariba-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addAuditLogModal"><i class="bi bi-plus-lg"></i> Add Setting</button>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-ariba-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addAuditLogModal"><i class="bi bi-plus-lg"></i> Add Setting</button>
+            <a href="{% url 'settings:dashboard' %}" class="btn btn-ariba-outline btn-sm"><i class="bi bi-arrow-left me-1"></i>Settings Overview</a>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs / Subnav -->
+    <div class="ariba-card px-3 py-2 mb-3">
+        <ul class="nav nav-pills gap-1 flex-wrap align-items-center">
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'settings:audit' %}">
+                    <i class="bi bi-journal-text me-1"></i> View Audit Logs
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 active bg-primary text-white" href="{% url 'settings:audit_log' %}">
+                    <i class="bi bi-journal-check me-1"></i> Retention & Policies
+                </a>
+            </li>
+        </ul>
     </div>
 
     <div class="ariba-card p-0">

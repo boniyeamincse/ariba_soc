@@ -1,0 +1,159 @@
+{% extends 'settings_manager/settings_base.html' %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+
+  {# ── Header ── #}
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <div class="small text-muted mb-1">
+        <a href="{% url 'settings:dashboard' %}" class="text-secondary text-decoration-none">Settings</a> &rsaquo; 
+        <a href="{% url 'settings:team_management' %}" class="text-secondary text-decoration-none">Teams</a> &rsaquo; 
+        <span class="text-info">{{ team.name }}</span>
+      </div>
+      <h4 class="m-0 text-white"><i class="bi bi-pencil-square text-info me-2"></i>Edit SOC Team: {{ team.name }}</h4>
+      <p class="settings-page-desc mb-0">Update team configuration, shift timings, leadership, and analyst roster.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{% url 'settings:team_management' %}" class="btn btn-ariba-outline btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back to Teams
+      </a>
+      <form method="post" action="{% url 'settings:team_delete' team.id %}" onsubmit="return confirm('Are you sure you want to delete this team? Members will be detached.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-danger btn-sm">
+          <i class="bi bi-trash me-1"></i>Delete Team
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <div class="ariba-card p-3">
+        <h6 class="text-white border-bottom pb-2 mb-3"><i class="bi bi-sliders me-2 text-info"></i>Team Configuration</h6>
+        <form method="post">
+          {% csrf_token %}
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small text-secondary">Team Name <span class="text-danger">*</span></label>
+              {{ form.name }}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small text-secondary">Functional Tier</label>
+              {{ form.tier }}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small text-secondary">Team Lead</label>
+              {{ form.lead }}
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label small text-secondary">Shift Schedule Type</label>
+              {{ form.shift_type }}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small text-secondary">Shift Start Time</label>
+              {{ form.shift_start_time }}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small text-secondary">Shift End Time</label>
+              {{ form.shift_end_time }}
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label small text-secondary">Notification Email</label>
+              {{ form.notification_email }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small text-secondary">Webhook URL (Slack / Teams)</label>
+              {{ form.webhook_url }}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label small text-secondary">Description / Mission Statement</label>
+              {{ form.description }}
+            </div>
+
+            <div class="col-12">
+              <div class="form-check">
+                {{ form.is_active }}
+                <label class="form-check-label small" for="{{ form.is_active.id_for_label }}">Active & Operational for Alert Queue Routing</label>
+              </div>
+            </div>
+
+            <div class="col-12 border-top pt-3 mt-3">
+              <h6 class="text-white mb-2"><i class="bi bi-people-fill me-2 text-warning"></i>Team Member Roster</h6>
+              <p class="small text-muted mb-2">Select the analysts that belong to this team. Hold Ctrl (or Cmd on Mac) to select or deselect multiple members.</p>
+              <select name="members" class="form-select form-select-sm ariba-input" multiple style="height: 160px;">
+                {% for u in all_users %}
+                <option value="{{ u.id }}" {% if u.id in current_member_ids %}selected{% endif %}>
+                  {{ u.username }} ({{ u.get_full_name|default:u.email }})
+                  {% if u.analyst_profile.role %}— [{{ u.analyst_profile.get_role_display }}]{% endif %}
+                  {% if u.analyst_profile.soc_team and u.analyst_profile.soc_team_id != team.id %}
+                    (currently in {{ u.analyst_profile.soc_team.name }})
+                  {% endif %}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12 d-flex justify-content-end gap-2 mt-4">
+              <a href="{% url 'settings:team_management' %}" class="btn btn-ariba-outline btn-sm">Cancel</a>
+              <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-check2 me-1"></i>Save Changes</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="ariba-card p-3 mb-3">
+        <h6 class="text-white border-bottom pb-2 mb-3"><i class="bi bi-info-circle me-2 text-info"></i>Team Summary</h6>
+        <div class="small mb-2">
+          <span class="text-secondary">Current Slug:</span> <code class="text-light">{{ team.slug }}</code>
+        </div>
+        <div class="small mb-2">
+          <span class="text-secondary">Current Tier:</span> 
+          <span class="badge bg-primary-subtle text-primary border border-primary">{{ team.get_tier_display }}</span>
+        </div>
+        <div class="small mb-2">
+          <span class="text-secondary">Team Lead:</span> 
+          {% if team.lead %}
+          <span class="text-light fw-semibold">{{ team.lead.get_full_name|default:team.lead.username }}</span>
+          {% else %}
+          <span class="text-muted">Unassigned</span>
+          {% endif %}
+        </div>
+        <div class="small mb-2">
+          <span class="text-secondary">Total Members:</span> 
+          <span class="badge bg-secondary-subtle text-secondary border border-secondary">{{ team.members.count }}</span>
+        </div>
+        <div class="small">
+          <span class="text-secondary">Created:</span> 
+          <span class="text-light font-monospace">{{ team.created_at|date:"M d, Y" }}</span>
+        </div>
+      </div>
+
+      <div class="ariba-card p-3">
+        <h6 class="text-white border-bottom pb-2 mb-3"><i class="bi bi-people me-2 text-secondary"></i>Current Roster ({{ team.members.count }})</h6>
+        <div style="max-height: 250px; overflow-y: auto;">
+          {% for m in team.members.all %}
+          <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="border-color: var(--border-color) !important;">
+            <div>
+              <span class="text-light fw-semibold small">{{ m.user.username }}</span>
+              <small class="text-muted d-block" style="font-size:0.7rem;">{{ m.get_role_display }}</small>
+            </div>
+            <a href="{% url 'settings:user_edit' m.user.id %}" class="btn btn-ariba-outline btn-sm py-0 px-1" title="Edit user">
+              <i class="bi bi-pencil" style="font-size:0.75rem;"></i>
+            </a>
+          </div>
+          {% empty %}
+          <p class="text-muted small mb-0">No analysts assigned to this team yet.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

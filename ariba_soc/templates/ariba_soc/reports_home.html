@@ -478,7 +478,7 @@
                                 </td>
                                 <td class="text-end">
                                     {% if report.last_report_file %}
-                                    <a href="{{ MEDIA_URL }}{{ report.last_report_file }}" class="btn btn-ariba-outline btn-sm me-1" target="_blank">
+                                    <a href="{% url 'reports:report_download' report.pk %}" class="btn btn-ariba-outline btn-sm me-1">
                                         <i class="bi bi-download"></i> Download
                                     </a>
                                     {% endif %}

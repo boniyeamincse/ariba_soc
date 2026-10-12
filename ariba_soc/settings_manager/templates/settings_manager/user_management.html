@@ -20,6 +20,32 @@
     </div>
   </div>
 
+  {# ── Sub-nav Pills (User & Access) ── #}
+  <div class="ariba-card px-3 py-2 mb-3">
+    <ul class="nav nav-pills gap-1 flex-wrap align-items-center">
+      <li class="nav-item">
+        <a class="nav-link btn-sm py-1 px-3 active bg-primary text-white" href="{% url 'settings:user_management' %}">
+          <i class="bi bi-people me-1"></i> Users
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'settings:team_management' %}">
+          <i class="bi bi-diagram-3-fill me-1"></i> SOC Teams
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'settings:role_permission' %}">
+          <i class="bi bi-shield-lock me-1"></i> Role & Permissions
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'settings:analyst_profile' %}">
+          <i class="bi bi-person-badge me-1"></i> Analyst Profiles
+        </a>
+      </li>
+    </ul>
+  </div>
+
   {# ── Stats Summary Bar ── #}
   <div class="row g-2 mb-3">
     <div class="col-6 col-md-2">
@@ -153,7 +179,19 @@
                   {{ u.analyst_profile.get_role_display }}
                 </span>
               </td>
-              <td>{{ u.analyst_profile.get_team_display|default:'—' }}</td>
+              <td>
+                {% if u.analyst_profile.soc_team %}
+                  <span class="badge bg-primary-subtle text-primary border border-primary font-monospace">
+                    {{ u.analyst_profile.soc_team.name }}
+                  </span>
+                {% elif u.analyst_profile.team %}
+                  <span class="badge bg-secondary-subtle text-secondary border border-secondary">
+                    {{ u.analyst_profile.get_team_display }}
+                  </span>
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
               <td>
                 {% if u.analyst_profile.is_active %}
                   <span class="badge bg-success">Active</span>
@@ -263,7 +301,7 @@
             <div class="col-12 col-md-6"><label class="form-label small">Password *</label>{{ form.password1 }}</div>
             <div class="col-12 col-md-6"><label class="form-label small">Confirm Password *</label>{{ form.password2 }}</div>
             <div class="col-12 col-md-6"><label class="form-label small">Role *</label>{{ form.role }}</div>
-            <div class="col-12 col-md-6"><label class="form-label small">Team</label>{{ form.team }}</div>
+            <div class="col-12 col-md-6"><label class="form-label small">SOC Team</label>{{ form.soc_team }}</div>
             <div class="col-12 col-md-6"><label class="form-label small">Phone</label>{{ form.phone }}</div>
             <div class="col-12 col-md-6"><label class="form-label small">Designation</label>{{ form.designation }}</div>
             <div class="col-12">

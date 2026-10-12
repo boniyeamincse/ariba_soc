@@ -1,13 +1,15 @@
 import csv
 import io
+import os
 from datetime import datetime, timedelta
 from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import HttpResponse
+from django.http import Http404, FileResponse, HttpResponse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from accounts.decorators import permission_required
 from alerts.models import Alert
 from settings_manager.models import ReportSetting
 from reports.services import generate_report, calculate_soc_manager_daily_report
@@ -17,6 +19,46 @@ try:
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
+
+
+_REPORT_CONTENT_TYPES = {
+    '.pdf': 'application/pdf',
+    '.csv': 'text/csv',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.xls': 'application/vnd.ms-excel',
+}
+
+
+@login_required
+@permission_required('can_view_reports')
+def report_download(request, pk):
+    """Role-gated download of a generated report file.
+
+    Replaces the old direct /media/reports/ link that nginx served without
+    authentication. Access requires the caller's role to hold can_view_reports.
+    """
+    report = get_object_or_404(ReportSetting, pk=pk)
+    if not report.last_report_file:
+        raise Http404('No report has been generated for this setting yet.')
+
+    media_root = os.path.realpath(settings.MEDIA_ROOT)
+    reports_root = os.path.realpath(os.path.join(media_root, 'reports'))
+    filepath = os.path.realpath(os.path.join(media_root, report.last_report_file))
+
+    # Path-traversal guard: the resolved file must live under MEDIA_ROOT/reports/.
+    if not (filepath == reports_root or filepath.startswith(reports_root + os.sep)):
+        raise Http404('Invalid report path.')
+    if not os.path.isfile(filepath):
+        raise Http404('Report file not found.')
+
+    ext = os.path.splitext(filepath)[1].lower()
+    content_type = _REPORT_CONTENT_TYPES.get(ext, 'application/octet-stream')
+    return FileResponse(
+        open(filepath, 'rb'),
+        as_attachment=True,
+        filename=os.path.basename(filepath),
+        content_type=content_type,
+    )
 
 
 def _apply_export_filters(request):

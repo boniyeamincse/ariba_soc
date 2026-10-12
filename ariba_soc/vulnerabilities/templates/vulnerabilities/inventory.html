@@ -1,33 +1,89 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Vulnerability Inventory{% endblock %}
+{% block title %}Vulnerability Inventory - Ariba SOC{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'vulnerabilities/css/vulnerabilities.css' %}">
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-3">
-    <h4 class="mb-3"><i class="fas fa-list me-2"></i>Vulnerability Inventory</h4>
-
-    <div class="card mb-3">
-        <div class="card-body">
-            <form method="get" class="row g-2">
-                <div class="col-md-3">{{ form.search }}</div>
-                <div class="col-md-2">{{ form.status }}</div>
-                <div class="col-md-2">{{ form.priority }}</div>
-                <div class="col-md-2">{{ form.cve_id }}</div>
-                <div class="col-md-2">{{ form.agent_id }}</div>
-                <div class="col-md-1">
-                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search"></i></button>
-                </div>
-            </form>
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0 text-white"><i class="bi bi-list-check text-info me-2"></i>Vulnerability Inventory</h4>
+            <small class="text-secondary">{{ total }} detected vulnerability cases</small>
+        </div>
+        <div>
+            <a href="{% url 'vulnerabilities:overview' %}" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back to Overview
+            </a>
         </div>
     </div>
 
-    <p class="text-muted">{{ total }} vulnerabilities found</p>
+    <!-- Navigation Bar -->
+    <div class="vuln-nav-bar px-3 py-2 mb-4">
+        <ul class="nav nav-pills gap-1 flex-wrap align-items-center">
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'vulnerabilities:overview' %}">
+                    <i class="bi bi-grid-1x2 me-1"></i> Overview
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 active bg-primary text-white" href="{% url 'vulnerabilities:inventory' %}">
+                    <i class="bi bi-list-check me-1"></i> Inventory
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'vulnerabilities:affected_assets' %}">
+                    <i class="bi bi-hdd-network me-1"></i> Affected Assets
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'vulnerabilities:cve_list' %}">
+                    <i class="bi bi-fingerprint me-1"></i> CVE Library
+                </a>
+            </li>
+        </ul>
+    </div>
 
-    <div class="card">
+    <!-- Filter Form -->
+    <div class="ariba-card mb-3 p-3">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small text-secondary mb-1">Search CVE / Package</label>
+                {{ form.search }}
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small text-secondary mb-1">Status</label>
+                {{ form.status }}
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small text-secondary mb-1">Priority</label>
+                {{ form.priority }}
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small text-secondary mb-1">CVE ID</label>
+                {{ form.cve_id }}
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small text-secondary mb-1">Agent ID</label>
+                {{ form.agent_id }}
+            </div>
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-ariba-primary w-100" title="Filter results">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Inventory Table -->
+    <div class="ariba-card p-0">
         <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-                <thead class="table-dark">
+            <table class="table ariba-table table-hover align-middle mb-0">
+                <thead>
                     <tr>
                         <th>CVE ID</th>
                         <th>Package</th>
@@ -37,39 +93,90 @@
                         <th>Owner</th>
                         <th>Agent</th>
                         <th>Due</th>
-                        <th>Action</th>
+                        <th class="text-end">Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for item in items %}
                     <tr>
-                        <td><a href="{% url 'vulnerabilities:detail' key=item.vulnerability_key %}">{{ item.cve_id }}</a></td>
-                        <td>{{ item.package_name }}</td>
-                        <td><span class="badge bg-{% if item.priority == 'CRITICAL' %}danger{% elif item.priority == 'HIGH' %}warning text-dark{% elif item.priority == 'MEDIUM' %}info{% else %}secondary{% endif %}">{{ item.priority }}</span></td>
-                        <td>{{ item.cvss_score|default:"-" }}</td>
-                        <td><span class="badge bg-{% if item.status == 'NEW' %}primary{% elif item.status == 'RESOLVED' %}success{% elif item.status == 'RISK_ACCEPTED' %}secondary{% else %}info{% endif %}">{{ item.status }}</span></td>
-                        <td>{{ item.owner.username|default:"-" }}</td>
-                        <td>{{ item.agent_name|default:item.agent_id }}</td>
-                        <td>{% if item.due_at %}{{ item.due_at|date:"d M Y" }}{% else %}-{% endif %}</td>
-                        <td><a href="{% url 'vulnerabilities:detail' key=item.vulnerability_key %}" class="btn btn-sm btn-outline-primary">View</a></td>
+                        <td class="font-monospace fw-bold">
+                            <a href="{% url 'vulnerabilities:detail' key=item.vulnerability_key %}" class="text-info text-decoration-none">
+                                {{ item.cve_id }}
+                            </a>
+                        </td>
+                        <td><span class="text-light">{{ item.package_name }}</span></td>
+                        <td>
+                            {% if item.priority == 'CRITICAL' %}
+                                <span class="badge vuln-badge-critical font-monospace">{{ item.priority }}</span>
+                            {% elif item.priority == 'HIGH' %}
+                                <span class="badge vuln-badge-high font-monospace">{{ item.priority }}</span>
+                            {% elif item.priority == 'MEDIUM' %}
+                                <span class="badge vuln-badge-medium font-monospace">{{ item.priority }}</span>
+                            {% elif item.priority == 'LOW' %}
+                                <span class="badge vuln-badge-low font-monospace">{{ item.priority }}</span>
+                            {% else %}
+                                <span class="badge vuln-badge-info font-monospace">{{ item.priority }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="font-monospace">
+                            {% if item.cvss_score %}
+                                <span class="{% if item.cvss_score >= 9.0 %}text-danger fw-bold{% elif item.cvss_score >= 7.0 %}text-warning{% else %}text-light{% endif %}">
+                                    {{ item.cvss_score }}
+                                </span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.status == 'NEW' %}
+                                <span class="badge vuln-status-new font-monospace">{{ item.status }}</span>
+                            {% elif item.status == 'IN_PROGRESS' %}
+                                <span class="badge vuln-status-in-progress font-monospace">{{ item.status }}</span>
+                            {% elif item.status == 'RESOLVED' %}
+                                <span class="badge vuln-status-resolved font-monospace">{{ item.status }}</span>
+                            {% elif item.status == 'RISK_ACCEPTED' %}
+                                <span class="badge vuln-status-risk-accepted font-monospace">{{ item.status }}</span>
+                            {% elif item.status == 'AWAITING_PATCH' or item.status == 'AWAITING_VERIFICATION' %}
+                                <span class="badge vuln-status-awaiting font-monospace">{{ item.status }}</span>
+                            {% else %}
+                                <span class="badge vuln-status-new font-monospace">{{ item.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.owner.username|default:"<span class='text-muted'>-</span>" }}</td>
+                        <td><span class="text-secondary">{{ item.agent_name|default:item.agent_id }}</span></td>
+                        <td>
+                            {% if item.due_at %}
+                                <span class="small font-monospace text-secondary">{{ item.due_at|date:"d M Y" }}</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <a href="{% url 'vulnerabilities:detail' key=item.vulnerability_key %}" class="btn btn-sm btn-ariba-outline py-0 px-2">
+                                View
+                            </a>
+                        </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="9" class="text-center text-muted py-3">No vulnerabilities found</td></tr>
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-4">No vulnerabilities found matching criteria</td>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
 
+    <!-- Pagination -->
     {% if total_pages > 1 %}
     <nav class="mt-3">
-        <ul class="pagination justify-content-center">
+        <ul class="pagination pagination-sm justify-content-center">
             {% if page > 1 %}
-            <li class="page-item"><a class="page-link" href="?page={{ page|add:"-1" }}">Previous</a></li>
+            <li class="page-item"><a class="page-link" href="?page={{ page|add:"-1" }}">&laquo; Previous</a></li>
             {% endif %}
             <li class="page-item disabled"><span class="page-link">Page {{ page }} of {{ total_pages }}</span></li>
             {% if page < total_pages %}
-            <li class="page-item"><a class="page-link" href="?page={{ page|add:"1" }}">Next</a></li>
+            <li class="page-item"><a class="page-link" href="?page={{ page|add:"1" }}">Next &raquo;</a></li>
             {% endif %}
         </ul>
     </nav>

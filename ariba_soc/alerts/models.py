@@ -191,6 +191,14 @@ class Alert(models.Model):
     assignee = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_alerts')
     assigned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_by_alerts')
     assigned_at = models.DateTimeField(null=True, blank=True)
+    assigned_team = models.ForeignKey(
+        'accounts.SocTeam',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_alerts',
+        help_text='SOC operational team currently responsible for this alert',
+    )
 
     rule_id = models.CharField(max_length=50, blank=True)
     rule_level = models.IntegerField(default=0)
@@ -298,12 +306,20 @@ class Alert(models.Model):
             models.Index(fields=['asset']),
             models.Index(fields=['asset_criticality']),
             models.Index(fields=['risk_score']),
+            models.Index(fields=['assigned_team']),
+            models.Index(fields=['current_owner_team']),
         ]
 
     def __str__(self):
         return f"[{self.severity}] {self.alert_name}"
 
     def save(self, *args, **kwargs):
+        if self.assigned_team:
+            self.current_owner_team = self.assigned_team.tier
+        elif self.assignee and not self.assigned_team:
+            if hasattr(self.assignee, 'analyst_profile') and self.assignee.analyst_profile.soc_team:
+                self.assigned_team = self.assignee.analyst_profile.soc_team
+                self.current_owner_team = self.assigned_team.tier
         if not self.pk or kwargs.pop('recalc_sla', True):
             self.update_sla()
         if self.status == 'Closed' and not self.closed_at:

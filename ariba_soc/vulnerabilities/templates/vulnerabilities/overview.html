@@ -9,97 +9,174 @@
 
 {% block content %}
 <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Vulnerability Management</h4>
-        <form method="post" action="{% url 'vulnerabilities:sync' %}" class="d-inline">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-sync me-1"></i>Sync from Wazuh</button>
-        </form>
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0 text-white"><i class="bi bi-shield-exclamation text-info me-2"></i>Vulnerability Management</h4>
+            <small class="text-secondary">Wazuh vulnerability intelligence and remediation tracking &bull; Last updated: {% now "M d, H:i" %}</small>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-ariba-outline btn-sm" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+            <form method="post" action="{% url 'vulnerabilities:sync' %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-ariba-primary btn-sm">
+                    <i class="bi bi-arrow-repeat me-1"></i>Sync from Wazuh
+                </button>
+            </form>
+        </div>
     </div>
 
+    <!-- Navigation Bar -->
+    <div class="vuln-nav-bar px-3 py-2 mb-4">
+        <ul class="nav nav-pills gap-1 flex-wrap align-items-center">
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 active bg-primary text-white" href="{% url 'vulnerabilities:overview' %}">
+                    <i class="bi bi-grid-1x2 me-1"></i> Overview
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'vulnerabilities:inventory' %}">
+                    <i class="bi bi-list-check me-1"></i> Inventory
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'vulnerabilities:affected_assets' %}">
+                    <i class="bi bi-hdd-network me-1"></i> Affected Assets
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link btn-sm py-1 px-3 text-secondary" href="{% url 'vulnerabilities:cve_list' %}">
+                    <i class="bi bi-fingerprint me-1"></i> CVE Library
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Top KPI Row -->
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card bg-danger text-white"><div class="card-body">
-                <h6 class="card-title">Critical Open</h6>
-                <h2>{{ metrics.critical_open }}</h2>
-            </div></div>
+        <div class="col-md-3 col-sm-6">
+            <div class="kpi-card text-center h-100">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="kpi-label">Critical Open</span>
+                    <i class="bi bi-fire kpi-icon text-danger"></i>
+                </div>
+                <div class="kpi-value text-danger font-monospace fs-3">{{ metrics.critical_open }}</div>
+                <small class="text-muted" style="font-size: 0.72rem;">Requires immediate action</small>
+            </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-warning text-dark"><div class="card-body">
-                <h6 class="card-title">High Open</h6>
-                <h2>{{ metrics.high_open }}</h2>
-            </div></div>
+        <div class="col-md-3 col-sm-6">
+            <div class="kpi-card text-center h-100">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="kpi-label">High Open</span>
+                    <i class="bi bi-exclamation-octagon kpi-icon text-warning"></i>
+                </div>
+                <div class="kpi-value text-warning font-monospace fs-3">{{ metrics.high_open }}</div>
+                <small class="text-muted" style="font-size: 0.72rem;">Prioritized remediation</small>
+            </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-info text-white"><div class="card-body">
-                <h6 class="card-title">Overdue</h6>
-                <h2>{{ metrics.overdue }}</h2>
-            </div></div>
+        <div class="col-md-3 col-sm-6">
+            <div class="kpi-card text-center h-100">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="kpi-label">Overdue</span>
+                    <i class="bi bi-clock-history kpi-icon text-info"></i>
+                </div>
+                <div class="kpi-value text-info font-monospace fs-3">{{ metrics.overdue }}</div>
+                <small class="text-muted" style="font-size: 0.72rem;">Past remediation SLA</small>
+            </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-secondary text-white"><div class="card-body">
-                <h6 class="card-title">Risk Accepted</h6>
-                <h2>{{ metrics.risk_accepted }}</h2>
-            </div></div>
+        <div class="col-md-3 col-sm-6">
+            <div class="kpi-card text-center h-100">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="kpi-label">Risk Accepted</span>
+                    <i class="bi bi-shield-slash kpi-icon text-secondary"></i>
+                </div>
+                <div class="kpi-value text-secondary font-monospace fs-3">{{ metrics.risk_accepted }}</div>
+                <small class="text-muted" style="font-size: 0.72rem;">Exceptions granted</small>
+            </div>
         </div>
     </div>
 
+    <!-- Breakdown Panels -->
     <div class="row g-3 mb-4">
         <div class="col-md-6">
-            <div class="card">
-                <div class="card-header"><h6 class="mb-0">By Status</h6></div>
-                <div class="card-body">
+            <div class="ariba-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="m-0 text-white fw-bold"><i class="bi bi-list-task text-primary me-2"></i>Cases By Status</h6>
+                </div>
+                <div>
                     {% for status, count in metrics.by_status.items %}
-                    <div class="d-flex justify-content-between border-bottom py-1">
-                        <span>{{ status }}</span>
-                        <span class="badge bg-primary">{{ count }}</span>
+                    <div class="d-flex justify-content-between align-items-center vuln-list-row">
+                        <span class="text-light">{{ status }}</span>
+                        {% if status == 'NEW' %}
+                            <span class="badge vuln-status-new font-monospace">{{ count }}</span>
+                        {% elif status == 'IN_PROGRESS' %}
+                            <span class="badge vuln-status-in-progress font-monospace">{{ count }}</span>
+                        {% elif status == 'RESOLVED' %}
+                            <span class="badge vuln-status-resolved font-monospace">{{ count }}</span>
+                        {% elif status == 'RISK_ACCEPTED' %}
+                            <span class="badge vuln-status-risk-accepted font-monospace">{{ count }}</span>
+                        {% elif status == 'AWAITING_PATCH' or status == 'AWAITING_VERIFICATION' %}
+                            <span class="badge vuln-status-awaiting font-monospace">{{ count }}</span>
+                        {% else %}
+                            <span class="badge vuln-status-new font-monospace">{{ count }}</span>
+                        {% endif %}
                     </div>
                     {% empty %}
-                    <p class="text-muted">No data</p>
+                    <p class="text-muted mb-0 py-2">No data available</p>
                     {% endfor %}
                 </div>
             </div>
         </div>
         <div class="col-md-6">
-            <div class="card">
-                <div class="card-header"><h6 class="mb-0">By Priority</h6></div>
-                <div class="card-body">
+            <div class="ariba-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="m-0 text-white fw-bold"><i class="bi bi-bar-chart-steps text-info me-2"></i>Cases By Priority</h6>
+                </div>
+                <div>
                     {% for priority, count in metrics.by_priority.items %}
-                    <div class="d-flex justify-content-between border-bottom py-1">
-                        <span>{{ priority }}</span>
-                        <span class="badge bg-secondary">{{ count }}</span>
+                    <div class="d-flex justify-content-between align-items-center vuln-list-row">
+                        <span class="text-light fw-semibold">{{ priority }}</span>
+                        {% if priority == 'CRITICAL' %}
+                            <span class="badge vuln-badge-critical font-monospace">{{ count }}</span>
+                        {% elif priority == 'HIGH' %}
+                            <span class="badge vuln-badge-high font-monospace">{{ count }}</span>
+                        {% elif priority == 'MEDIUM' %}
+                            <span class="badge vuln-badge-medium font-monospace">{{ count }}</span>
+                        {% elif priority == 'LOW' %}
+                            <span class="badge vuln-badge-low font-monospace">{{ count }}</span>
+                        {% else %}
+                            <span class="badge vuln-badge-info font-monospace">{{ count }}</span>
+                        {% endif %}
                     </div>
                     {% empty %}
-                    <p class="text-muted">No data</p>
+                    <p class="text-muted mb-0 py-2">No data available</p>
                     {% endfor %}
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Velocity and Total Stats -->
     <div class="row g-3">
         <div class="col-md-4">
-            <div class="card">
-                <div class="card-body text-center">
-                    <h5>{{ metrics.new_last_7d }}</h5>
-                    <small class="text-muted">New (7 days)</small>
-                </div>
+            <div class="kpi-card text-center p-3">
+                <span class="kpi-label">New (Last 7 Days)</span>
+                <div class="kpi-value text-info font-monospace mt-1 fs-4">{{ metrics.new_last_7d }}</div>
+                <small class="text-muted" style="font-size: 0.72rem;">Weekly intake velocity</small>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card">
-                <div class="card-body text-center">
-                    <h5>{{ metrics.new_last_30d }}</h5>
-                    <small class="text-muted">New (30 days)</small>
-                </div>
+            <div class="kpi-card text-center p-3">
+                <span class="kpi-label">New (Last 30 Days)</span>
+                <div class="kpi-value text-info font-monospace mt-1 fs-4">{{ metrics.new_last_30d }}</div>
+                <small class="text-muted" style="font-size: 0.72rem;">Monthly discovery rate</small>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card">
-                <div class="card-body text-center">
-                    <h5>{{ metrics.total }}</h5>
-                    <small class="text-muted">Total Cases</small>
-                </div>
+            <div class="kpi-card text-center p-3">
+                <span class="kpi-label">Total Vulnerability Cases</span>
+                <div class="kpi-value text-white font-monospace mt-1 fs-4">{{ metrics.total }}</div>
+                <small class="text-muted" style="font-size: 0.72rem;">All tracked cases</small>
             </div>
         </div>
     </div>
