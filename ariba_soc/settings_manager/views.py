@@ -12,7 +12,7 @@ from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
     DashboardSetting, AuditLogSetting, AlarmSetting, AlarmSystemSetting, SystemSetting, SettingAuditLog,
-    IOCEnrichmentSetting, AlertAggregationSetting, AlertSuppressionRule
+    IOCEnrichmentSetting, AlertAggregationSetting, AlertSuppressionRule, AlertRoutingRule, UserNotificationPreference, Playbook
 )
 from .forms import (
     UserManagementForm, UserEditForm, AnalystProfileForm, SocTeamForm,
@@ -20,8 +20,9 @@ from .forms import (
     VerdictSettingsForm, SLASettingsForm, EscalationRuleForm,
     NotificationSettingForm, ReportSettingForm, DashboardSettingForm,
     AuditLogSettingForm, AlarmSettingForm, AlarmSystemSettingForm, SystemSettingForm, ResetPasswordForm,
-    IOCEnrichmentSettingForm, AlertAggregationSettingForm, AlertSuppressionRuleForm,
-    ShiftHandoverForm, ShiftHandoverAcknowledgeForm
+    IOCEnrichmentSettingForm, AlertAggregationSettingForm, AlertSuppressionRuleForm, AlertRoutingRuleForm,
+    UserNotificationPreferenceForm,
+    ShiftHandoverForm, ShiftHandoverAcknowledgeForm, PlaybookForm
 )
 
 def _get_allowed_roles():
@@ -917,6 +918,23 @@ def notification_toggle(request, pk):
     messages.success(request, f'Notification {"activated" if obj.is_active else "deactivated"}.')
     return redirect('settings:notifications')
 
+
+def notification_preferences(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    pref, _ = UserNotificationPreference.objects.get_or_create(user=request.user)
+    if request.method == 'POST':
+        form = UserNotificationPreferenceForm(request.POST, instance=pref)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Notification preferences updated.')
+            return redirect('settings:notification_preferences')
+    else:
+        form = UserNotificationPreferenceForm(instance=pref)
+    ctx = {'section': 'notifications', 'form': form}
+    return render(request, 'settings_manager/notification_preferences.html', ctx)
+
 def report_settings(request):
     if not _check_settings_access(request.user):
         messages.error(request, 'Access denied.')
@@ -1473,6 +1491,111 @@ def suppression_rule_delete(request, pk):
     return redirect('settings:suppression_rules')
 
 
+# ---------------------------------------------------------------------------
+# Phase 3: Alert routing rules
+# ---------------------------------------------------------------------------
+
+def routing_rules(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+
+    rules = AlertRoutingRule.objects.select_related('assignee', 'created_by').all()
+    total_matched = rules.aggregate(total=Sum('match_count'))['total'] or 0
+
+    if request.method == 'POST':
+        form = AlertRoutingRuleForm(request.POST)
+        if form.is_valid():
+            rule = form.save(commit=False)
+            rule.created_by = request.user
+            rule.save()
+            _log_setting_change(
+                request.user,
+                f'Created routing rule {rule.name}',
+                'AlertRoutingRule',
+                rule.id,
+                '',
+                f'Assignee={rule.assignee_id} Team={rule.assign_team}',
+                request,
+            )
+            messages.success(request, f'Routing rule "{rule.name}" created successfully.')
+            return redirect('settings:routing_rules')
+    else:
+        form = AlertRoutingRuleForm()
+
+    ctx = {
+        'section': 'routing',
+        'rules': rules,
+        'form': form,
+        'total_rules': rules.count(),
+        'active_rules': rules.filter(is_active=True).count(),
+        'total_matched': total_matched,
+    }
+    return render(request, 'settings_manager/routing_rules.html', ctx)
+
+
+def routing_rule_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    rule = get_object_or_404(AlertRoutingRule, id=pk)
+    if request.method == 'POST':
+        form = AlertRoutingRuleForm(request.POST, instance=rule)
+        if form.is_valid():
+            form.save()
+            _log_setting_change(
+                request.user,
+                f'Edited routing rule {rule.name}',
+                'AlertRoutingRule',
+                rule.id,
+                '',
+                'Updated',
+                request,
+            )
+            messages.success(request, f'Routing rule "{rule.name}" updated.')
+            return redirect('settings:routing_rules')
+    else:
+        form = AlertRoutingRuleForm(instance=rule)
+    ctx = {'section': 'routing', 'form': form, 'rule': rule}
+    return render(request, 'settings_manager/routing_rule_edit.html', ctx)
+
+
+@require_POST
+def routing_rule_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    rule = get_object_or_404(AlertRoutingRule, id=pk)
+    rule.is_active = not rule.is_active
+    rule.save(update_fields=['is_active', 'updated_at'])
+    _log_setting_change(
+        request.user,
+        f'{"Activated" if rule.is_active else "Deactivated"} routing rule {rule.name}',
+        'AlertRoutingRule',
+        rule.id,
+        '',
+        f'Active={rule.is_active}',
+        request,
+    )
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'status': 'ok', 'is_active': rule.is_active})
+    messages.success(request, f'Rule "{rule.name}" {"activated" if rule.is_active else "deactivated"}.')
+    return redirect('settings:routing_rules')
+
+
+@require_POST
+def routing_rule_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    rule = get_object_or_404(AlertRoutingRule, id=pk)
+    name = rule.name
+    rule.delete()
+    _log_setting_change(request.user, f'Deleted routing rule {name}', 'AlertRoutingRule', pk, '', 'Deleted', request)
+    messages.success(request, f'Routing rule "{name}" deleted.')
+    return redirect('settings:routing_rules')
+
+
 
 
 from django.http import JsonResponse
@@ -1702,3 +1825,120 @@ def shift_handover_acknowledge(request, pk):
     else:
         messages.error(request, 'Could not acknowledge handover. Please provide a comment.')
     return redirect('settings:shift_handover_detail', pk=handover.id)
+
+
+# ---------------------------------------------------------------------------
+# Phase 9: response playbooks (SOP) + false-positive tuning loop
+# ---------------------------------------------------------------------------
+
+def playbook_list(request):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+
+    playbooks = Playbook.objects.select_related('created_by').all()
+    if request.method == 'POST':
+        form = PlaybookForm(request.POST)
+        if form.is_valid():
+            playbook = form.save(commit=False)
+            playbook.created_by = request.user
+            playbook.save()
+            _log_setting_change(request.user, f'Created playbook {playbook.title}', 'Playbook', playbook.id, '', 'Created', request)
+            messages.success(request, f'Playbook "{playbook.title}" created.')
+            return redirect('settings:playbook_list')
+    else:
+        form = PlaybookForm()
+    ctx = {
+        'section': 'playbooks',
+        'playbooks': playbooks,
+        'form': form,
+        'total_playbooks': playbooks.count(),
+        'active_playbooks': playbooks.filter(is_active=True).count(),
+    }
+    return render(request, 'settings_manager/playbook_list.html', ctx)
+
+
+def playbook_edit(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    playbook = get_object_or_404(Playbook, id=pk)
+    if request.method == 'POST':
+        form = PlaybookForm(request.POST, instance=playbook)
+        if form.is_valid():
+            form.save()
+            _log_setting_change(request.user, f'Edited playbook {playbook.title}', 'Playbook', playbook.id, '', 'Updated', request)
+            messages.success(request, f'Playbook "{playbook.title}" updated.')
+            return redirect('settings:playbook_list')
+    else:
+        form = PlaybookForm(instance=playbook)
+    ctx = {'section': 'playbooks', 'form': form, 'playbook': playbook}
+    return render(request, 'settings_manager/playbook_edit.html', ctx)
+
+
+@require_POST
+def playbook_toggle(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    playbook = get_object_or_404(Playbook, id=pk)
+    playbook.is_active = not playbook.is_active
+    playbook.save(update_fields=['is_active', 'updated_at'])
+    _log_setting_change(request.user, f'{"Activated" if playbook.is_active else "Deactivated"} playbook {playbook.title}', 'Playbook', playbook.id, '', f'Active={playbook.is_active}', request)
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'status': 'ok', 'is_active': playbook.is_active})
+    messages.success(request, f'Playbook "{playbook.title}" {"activated" if playbook.is_active else "deactivated"}.')
+    return redirect('settings:playbook_list')
+
+
+@require_POST
+def playbook_delete(request, pk):
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+    playbook = get_object_or_404(Playbook, id=pk)
+    title = playbook.title
+    playbook.delete()
+    _log_setting_change(request.user, f'Deleted playbook {title}', 'Playbook', pk, '', 'Deleted', request)
+    messages.success(request, f'Playbook "{title}" deleted.')
+    return redirect('settings:playbook_list')
+
+
+def noisy_rules(request):
+    """Phase 9: false-positive tuning dashboard (noisiest detection rules)."""
+    from django.db.models import Count
+    from django.utils import timezone as _tz
+    from datetime import timedelta as _td
+    from alerts.models import FalsePositiveReport
+
+    if not _check_settings_access(request.user):
+        messages.error(request, 'Access denied.')
+        return redirect('alerts:table')
+
+    window_days = 30
+    window_start = _tz.now() - _td(days=window_days)
+
+    fp_rows = (
+        FalsePositiveReport.objects.filter(created_at__gte=window_start)
+        .values('rule_id').annotate(fp_count=Count('id')).order_by('-fp_count')
+    )
+    totals = {
+        row['rule_id']: row['n']
+        for row in Alert.objects.filter(alert_time__gte=window_start).exclude(rule_id='')
+        .values('rule_id').annotate(n=Count('id'))
+    }
+
+    rows = []
+    for row in fp_rows:
+        rule_id = row['rule_id'] or '(none)'
+        total = totals.get(row['rule_id'], 0)
+        rows.append({
+            'rule_id': rule_id,
+            'fp_count': row['fp_count'],
+            'total': total,
+            'ratio': (row['fp_count'] / total) if total else 1.0,
+            'playbook': Playbook.objects.filter(match_rule_id=row['rule_id'], is_active=True).first(),
+        })
+
+    ctx = {'section': 'noisy_rules', 'rows': rows, 'window_days': window_days}
+    return render(request, 'settings_manager/noisy_rules.html', ctx)

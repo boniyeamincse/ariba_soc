@@ -10,6 +10,18 @@
         </ol>
     </nav>
 
+    {% if alert.is_merged %}
+    <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-diagram-2"></i> This alert was merged into
+            <a href="{% url 'alerts:detail' alert.merged_into.id %}" class="alert-link">#{{ alert.merged_into.id }} {{ alert.merged_into.alert_name }}</a>
+            as a duplicate/correlated event.</span>
+        <form method="post" action="{% url 'alerts:unmerge' alert.id %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-dark"><i class="bi bi-arrow-counterclockwise"></i> Unmerge</button>
+        </form>
+    </div>
+    {% endif %}
+
     <div class="row">
         <div class="col-lg-8">
             <div class="ariba-card p-4 mb-3">
@@ -31,7 +43,29 @@
                             {% endif %}
                         </div>
                     </div>
+                    <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
+                        <form method="post" action="{% url 'alerts:set_tags' alert.id %}" class="flex-grow-1" style="max-width:640px;">
+                            {% csrf_token %}
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text"><i class="bi bi-tags"></i></span>
+                                <input type="text" name="tags" class="form-control" value="{{ alert.tags|join:', ' }}" placeholder="comma, separated, tags">
+                                <button class="btn btn-ariba-primary" type="submit">Save</button>
+                            </div>
+                        </form>
+                        {% if alert.tags %}
+                        <div>
+                            {% for t in alert.tags %}<a href="{% url 'alerts:table' %}?tag={{ t|urlencode }}" class="badge bg-secondary bg-opacity-50 text-info text-decoration-none me-1">{{ t }}</a>{% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
                     <div class="d-flex gap-1 flex-shrink-0">
+                        <form method="post" action="{% url 'alerts:bookmark' alert.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-ariba-outline {% if is_bookmarked %}text-warning{% endif %}" title="Bookmark alert">
+                                <i class="bi {% if is_bookmarked %}bi-star-fill{% else %}bi-star{% endif %}"></i>
+                            </button>
+                        </form>
+                        <a href="{% url 'alerts:pdf' alert.id %}" class="btn btn-sm btn-ariba-outline" title="Download PDF"><i class="bi bi-file-earmark-pdf"></i></a>
                         <button class="btn btn-sm btn-ariba-outline" data-bs-toggle="modal" data-bs-target="#editAlertModal"
                             data-alert-id="{{ alert.id }}"
                             data-assignee-id="{{ alert.assignee_id|default:'' }}"
@@ -293,10 +327,26 @@
                 </div>
                 {% endif %}
 
-                {% if alert.enrichment_data %}
                 <hr style="border-color: var(--border-color);">
                 <div class="detail-section">
-                    <h6 class="text-secondary"><i class="bi bi-shield-check"></i> Threat Intelligence (Enrichment)</h6>
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h6 class="text-secondary mb-0"><i class="bi bi-shield-check"></i> Threat Intelligence (Enrichment)</h6>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge {% if alert.enrichment_status == 'Success' %}bg-success{% elif alert.enrichment_status == 'Partial' %}bg-warning text-dark{% elif alert.enrichment_status == 'Failed' %}bg-danger{% elif alert.enrichment_status == 'Skipped' %}bg-secondary{% else %}bg-info text-dark{% endif %}">
+                                {% if alert.enrichment_status == 'Running' %}<span class="spinner-border spinner-border-sm me-1"></span>{% endif %}{{ alert.get_enrichment_status_display }}
+                            </span>
+                            {% if alert.enrichment_updated_at %}<small class="text-muted">{{ alert.enrichment_updated_at|date:"Y-m-d H:i" }}</small>{% endif %}
+                            <form method="post" action="{% url 'alerts:enrich' alert.id %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Re-run enrichment">
+                                    <i class="bi bi-arrow-clockwise"></i> Re-run
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    {% if alert.enrichment_error %}
+                    <div class="alert alert-warning py-1 px-2 small mt-2 mb-0"><i class="bi bi-exclamation-triangle"></i> {{ alert.enrichment_error }}</div>
+                    {% endif %}
                                         <div class="row g-3 mt-1">
                         {% if alert.enrichment_data.VirusTotal %}
                         <div class="col-md-6">
@@ -359,9 +409,16 @@
                             </div>
                         </div>
                         {% endif %}
+                        {% if not alert.enrichment_data.VirusTotal and not alert.enrichment_data.IPInfo and not alert.enrichment_data.AbuseIPDB and not alert.enrichment_data.OTX %}
+                        <div class="col-12">
+                            <p class="text-muted small mb-0">
+                                <i class="bi bi-info-circle"></i>
+                                No threat-intelligence results yet{% if alert.enrichment_status == 'Skipped' %} (enrichment auto-run is not enabled in settings){% endif %}.
+                            </p>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
-                {% endif %}
 
                 <hr style="border-color: var(--border-color);">
                 <div class="detail-section">
@@ -386,9 +443,176 @@
                     <form method="post" action="{% url 'alerts:add_comment' alert.id %}">
                         {% csrf_token %}
                         <div class="mb-2">
-                            <textarea name="comment" class="form-control" rows="2" placeholder="Add your comment..."></textarea>
+                            <textarea name="comment" class="form-control" rows="2" placeholder="Add your comment... Use @username to notify a colleague."></textarea>
                         </div>
                         <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-send"></i> Add Comment</button>
+                    </form>
+                </div>
+
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="text-secondary m-0"><i class="bi bi-paperclip"></i> Evidence ({{ attachments|length }})</h6>
+                    </div>
+                    {% if attachments %}
+                    <ul class="list-unstyled mt-2 mb-2">
+                        {% for att in attachments %}
+                        <li class="d-flex align-items-start justify-content-between p-1">
+                            <span class="text-truncate" style="max-width: 75%;">
+                                <i class="bi {% if att.is_image %}bi-file-earmark-image{% else %}bi-file-earmark{% endif %}"></i>
+                                <a href="{% url 'alerts:attachment_download' att.id %}" class="text-info text-decoration-none">{{ att.original_name }}</a>
+                                <small class="text-muted">({{ att.size_bytes|filesizeformat }}{% if att.uploaded_by %} · {{ att.uploaded_by.username }}{% endif %})</small>
+                                {% if att.description %}<div class="small text-secondary">{{ att.description }}</div>{% endif %}
+                            </span>
+                            <form method="post" action="{% url 'alerts:attachment_delete' att.id %}" onsubmit="return confirm('Delete this evidence?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-link text-danger p-0" title="Delete"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted small mb-2">No evidence attached.</p>
+                    {% endif %}
+                    <form method="post" action="{% url 'alerts:attachment_upload' alert.id %}" enctype="multipart/form-data" class="row g-2">
+                        {% csrf_token %}
+                        <div class="col-12">
+                            <input type="file" name="file" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-12">
+                            <input type="text" name="description" class="form-control form-control-sm" placeholder="Description (optional)" maxlength="255">
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-ariba-outline btn-sm"><i class="bi bi-upload"></i> Upload Evidence</button>
+                        </div>
+                    </form>
+                </div>
+
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="text-secondary m-0"><i class="bi bi-eye"></i> Watchers ({{ watchers|length }})</h6>
+                        <form method="post" action="{% url 'alerts:watcher_toggle' alert.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm {% if is_watching %}btn-ariba-primary{% else %}btn-ariba-outline{% endif %}">
+                                <i class="bi {% if is_watching %}bi-eye-slash{% else %}bi-eye{% endif %}"></i>
+                                {% if is_watching %}Stop watching{% else %}Watch{% endif %}
+                            </button>
+                        </form>
+                    </div>
+                    <div class="mt-2">
+                        {% for w in watchers %}
+                        <span class="badge bg-secondary bg-opacity-50 text-light me-1 mb-1">
+                            {{ w.user.username }}
+                            <form method="post" action="{% url 'alerts:watcher_remove' alert.id w.user_id %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-link text-danger p-0 border-0" style="line-height:1;" title="Remove">&times;</button>
+                            </form>
+                        </span>
+                        {% empty %}
+                        <p class="text-muted small mb-0">No watchers.</p>
+                        {% endfor %}
+                    </div>
+                    <form method="post" action="{% url 'alerts:watcher_add' alert.id %}" class="d-flex gap-1 mt-2">
+                        {% csrf_token %}
+                        <select name="user_id" class="form-select form-select-sm">
+                            <option value="">Add watcher...</option>
+                            {% for u in users %}
+                            <option value="{{ u.id }}">{{ u.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-ariba-outline btn-sm"><i class="bi bi-plus-lg"></i></button>
+                    </form>
+                </div>
+
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="text-secondary m-0"><i class="bi bi-diagram-3"></i> Related Alerts ({{ related_alerts|length }})</h6>
+                    </div>
+                    {% if related_alerts %}
+                    <form method="post" action="{% url 'alerts:merge' alert.id %}">
+                        {% csrf_token %}
+                        <div class="table-responsive mt-2">
+                            <table class="table table-sm align-middle mb-2" style="font-size:0.8rem;">
+                                <thead><tr><th></th><th>Alert</th><th>Rule</th><th>Source IP</th><th>When</th></tr></thead>
+                                <tbody>
+                                    {% for ra in related_alerts %}
+                                    <tr>
+                                        <td><input type="checkbox" name="merge_ids" value="{{ ra.id }}"></td>
+                                        <td>
+                                            <a href="{% url 'alerts:detail' ra.id %}" class="text-info text-decoration-none">{{ ra.alert_name|truncatechars:48 }}</a>
+                                            <span class="badge bg-secondary bg-opacity-50">{{ ra.severity }}</span>
+                                            {% if ra.relation_score %}<span class="badge bg-primary bg-opacity-25 text-info" title="Correlation score">match {{ ra.relation_score }}</span>{% endif %}
+                                        </td>
+                                        <td>{{ ra.rule_id|default:'-' }}</td>
+                                        <td>{{ ra.source_ip|default:'-' }}</td>
+                                        <td>{{ ra.alert_time|timesince }} ago</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <button type="submit" class="btn btn-ariba-outline btn-sm" onclick="return confirm('Merge the selected alerts into this one?');">
+                            <i class="bi bi-arrows-collapse"></i> Merge selected into this alert
+                        </button>
+                    </form>
+                    {% else %}
+                    <p class="text-muted small mb-0">No related alerts found.</p>
+                    {% endif %}
+                </div>
+
+                {% if merged_children %}
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <h6 class="text-secondary"><i class="bi bi-arrows-collapse"></i> Merged Alerts ({{ merged_children|length }})</h6>
+                    <ul class="list-unstyled mt-2 mb-0">
+                        {% for child in merged_children %}
+                        <li class="d-flex justify-content-between align-items-center">
+                            <span>
+                                <a href="{% url 'alerts:detail' child.id %}" class="text-info text-decoration-none">#{{ child.id }} {{ child.alert_name|truncatechars:48 }}</a>
+                                <span class="badge bg-secondary bg-opacity-50">{{ child.severity }}</span>
+                            </span>
+                            <form method="post" action="{% url 'alerts:unmerge' child.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-link text-warning p-0" title="Unmerge"><i class="bi bi-arrow-counterclockwise"></i></button>
+                            </form>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                {% if playbooks %}
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <h6 class="text-secondary"><i class="bi bi-journal-text"></i> Response Playbook ({{ playbooks|length }})</h6>
+                    {% for pb in playbooks %}
+                    <div class="mb-3">
+                        <div class="fw-bold text-light">{{ pb.title }}</div>
+                        <ol class="small mb-1">
+                            {% for step in pb.step_list %}<li>{{ step }}</li>{% endfor %}
+                        </ol>
+                        {% if pb.references %}<div class="small text-muted"><i class="bi bi-link-45deg"></i> {{ pb.references|linebreaksbr }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <hr style="border-color: var(--border-color);">
+                <div class="detail-section">
+                    <h6 class="text-secondary"><i class="bi bi-bug"></i> False Positive Reports ({{ fp_reports|length }})</h6>
+                    {% if fp_reports %}
+                    <ul class="list-unstyled small mb-2">
+                        {% for rep in fp_reports %}
+                        <li><i class="bi bi-dot"></i> {{ rep.created_at|date:'Y-m-d H:i' }} &middot; {{ rep.reported_by.username|default:'system' }}{% if rep.reason %}: {{ rep.reason }}{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                    <form method="post" action="{% url 'alerts:report_fp' alert.id %}" class="d-flex gap-2">
+                        {% csrf_token %}
+                        <input type="text" name="reason" class="form-control form-control-sm" placeholder="Why is this a false positive? (optional)">
+                        <button type="submit" class="btn btn-ariba-outline btn-sm text-warning text-nowrap"><i class="bi bi-bug"></i> Report FP</button>
                     </form>
                 </div>
 

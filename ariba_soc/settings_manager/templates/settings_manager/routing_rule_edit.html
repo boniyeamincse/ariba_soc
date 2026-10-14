@@ -1,0 +1,102 @@
+{% extends 'settings_manager/settings_base.html' %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="m-0"><i class="bi bi-pencil-square text-info"></i> Edit Routing Rule: {{ rule.name }}</h4>
+            <p class="settings-page-desc mb-0">Update match criteria or assignment target.</p>
+        </div>
+        <a href="{% url 'settings:routing_rules' %}" class="btn btn-ariba-outline btn-sm">
+            <i class="bi bi-arrow-left"></i> Back to Rules
+        </a>
+    </div>
+
+    <div class="ariba-card p-4">
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <label class="form-label small fw-bold">Rule Name / Description *</label>
+                    {{ form.name }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">Priority</label>
+                    {{ form.priority }}
+                </div>
+                <div class="col-md-2 d-flex align-items-center mt-4">
+                    <div class="form-check form-switch">
+                        {{ form.is_active }}
+                        <label class="form-check-label fw-bold ms-2">Active</label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Severity</label>
+                    {{ form.match_severity }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Min Risk Score</label>
+                    {{ form.match_min_risk_score }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Rule ID</label>
+                    {{ form.match_rule_id }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Agent ID</label>
+                    {{ form.match_agent_id }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Source IP or CIDR</label>
+                    {{ form.match_source_ip }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Hostname</label>
+                    {{ form.match_hostname }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Username</label>
+                    {{ form.match_username }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">MITRE Tactic</label>
+                    {{ form.match_mitre_tactic }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Alert Name (substring)</label>
+                    {{ form.match_alert_name }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Alert Source</label>
+                    {{ form.match_source }}
+                </div>
+                <div class="col-md-4 d-flex align-items-center mt-4">
+                    <div class="form-check form-switch bg-dark border p-2 rounded w-100">
+                        {{ form.is_regex }}
+                        <label class="form-check-label fw-bold ms-2 text-warning">Regex for text fields</label>
+                    </div>
+                </div>
+                <div class="col-12"><hr class="border-secondary my-1"></div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Assign to Analyst</label>
+                    {{ form.assignee }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Assign to Team (least-loaded)</label>
+                    {{ form.assign_team }}
+                </div>
+                <div class="col-md-4 d-flex align-items-center mt-4">
+                    <div class="form-check form-switch">
+                        {{ form.stop_on_match }}
+                        <label class="form-check-label fw-bold ms-2">Stop after this match</label>
+                    </div>
+                </div>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                <a href="{% url 'settings:routing_rules' %}" class="btn btn-ariba-outline btn-sm">Cancel</a>
+                <button type="submit" class="btn btn-ariba-primary btn-sm"><i class="bi bi-check-lg"></i> Update Rule</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -140,12 +140,15 @@ class NotificationSetting(models.Model):
         ('EMAIL', 'Email'),
         ('DASHBOARD', 'Dashboard'),
         ('TEAMS', 'Microsoft Teams'),
+        ('SLACK', 'Slack'),
+        ('WEBHOOK', 'Generic Webhook'),
     ]
     name = models.CharField(max_length=200)
     event_type = models.CharField(max_length=50, choices=NOTIFICATION_EVENTS)
     channel = models.CharField(max_length=20, choices=CHANNELS, default='DASHBOARD')
     recipient_role = models.CharField(max_length=20, choices=ROLE_CHOICES, blank=True)
     recipient_user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    webhook_url = EncryptedCharField(max_length=500, blank=True, default='', help_text='Webhook / incoming-hook URL for Teams, Slack or generic Webhook channels')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -156,6 +159,38 @@ class NotificationSetting(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class UserNotificationPreference(models.Model):
+    """Per-user opt-in/opt-out for notification channels and events (Phase 4)."""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='notification_preference')
+    email_enabled = models.BooleanField(default=True)
+    dashboard_enabled = models.BooleanField(default=True)
+    teams_enabled = models.BooleanField(default=True)
+    slack_enabled = models.BooleanField(default=True)
+    webhook_enabled = models.BooleanField(default=True)
+    muted_events = models.JSONField(default=list, blank=True, help_text='List of NotificationSetting event keys this user wants to mute')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'User Notification Preference'
+        verbose_name_plural = 'User Notification Preferences'
+
+    def __str__(self):
+        return f'Preferences for {self.user.username}'
+
+    def is_channel_enabled(self, channel):
+        return {
+            'EMAIL': self.email_enabled,
+            'DASHBOARD': self.dashboard_enabled,
+            'TEAMS': self.teams_enabled,
+            'SLACK': self.slack_enabled,
+            'WEBHOOK': self.webhook_enabled,
+        }.get(channel, True)
+
+    def is_event_muted(self, event_type):
+        return event_type in (self.muted_events or [])
+
 
 class ReportSetting(models.Model):
     REPORT_TYPES = [
@@ -569,3 +604,231 @@ class AlertSuppressionRule(models.Model):
                 return False
 
         return has_criteria
+
+
+class AlertRoutingRule(models.Model):
+    """Phase 3: auto-assignment / routing rules evaluated on alert ingestion.
+
+    Rules run in ascending ``priority`` order; the first matching rule assigns
+    the alert to a user or the least-loaded member of a role, then optionally
+    stops further evaluation (``stop_on_match``). Matching never acknowledges
+    the alert, so acknowledgement-SLA tracking continues to work.
+    """
+
+    name = models.CharField(max_length=200, help_text="Rule name / description")
+    priority = models.PositiveIntegerField(default=100, help_text="Lower values run first")
+    is_active = models.BooleanField(default=True)
+
+    # --- match conditions (blank / null = any) ---
+    match_severity = models.CharField(max_length=20, blank=True, help_text="Exact severity, e.g. Critical")
+    match_min_risk_score = models.PositiveIntegerField(null=True, blank=True, help_text="Match alerts whose risk score is >= this")
+    match_rule_id = models.CharField(max_length=50, blank=True, help_text="Wazuh rule id (exact)")
+    match_agent_id = models.CharField(max_length=50, blank=True, help_text="Agent id (exact)")
+    match_source_ip = models.CharField(max_length=100, blank=True, help_text="Source IP or CIDR")
+    match_hostname = models.CharField(max_length=255, blank=True, help_text="Hostname (regex if enabled)")
+    match_username = models.CharField(max_length=150, blank=True, help_text="Username (regex if enabled)")
+    match_alert_name = models.CharField(max_length=255, blank=True, help_text="Substring of the alert name")
+    match_source = models.CharField(max_length=100, blank=True, help_text="Alert source name")
+    match_mitre_tactic = models.CharField(max_length=200, blank=True, help_text="MITRE tactic (substring / regex)")
+    is_regex = models.BooleanField(default=False, help_text="Evaluate text fields as Regular Expressions")
+
+    # --- assignment target ---
+    assignee = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='routing_rules')
+    assign_team = models.CharField(max_length=20, choices=ROLE_CHOICES, blank=True, help_text="Assign to the least-loaded analyst with this role")
+    stop_on_match = models.BooleanField(default=True, help_text="Stop evaluating lower-priority rules after this match")
+
+    match_count = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='routing_rules_created')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['priority', 'id']
+        verbose_name = 'Alert Routing Rule'
+        verbose_name_plural = 'Alert Routing Rules'
+
+    def __str__(self):
+        target = self.assignee.username if self.assignee_id else (self.assign_team or 'unassigned')
+        return f'{self.name} -> {target}'
+
+    @staticmethod
+    def _value(alert, key):
+        if hasattr(alert, key):
+            return getattr(alert, key)
+        if isinstance(alert, dict):
+            return alert.get(key)
+        return None
+
+    def matches(self, alert):
+        import re
+        import ipaddress
+
+        if not self.is_active:
+            return False
+
+        def text_match(pattern, value):
+            if not pattern:
+                return True
+            if value in (None, ''):
+                return False
+            value = str(value)
+            if self.is_regex:
+                try:
+                    return bool(re.search(pattern, value))
+                except re.error:
+                    return False
+            return pattern.lower() in value.lower()
+
+        has_criteria = False
+
+        if self.match_severity:
+            has_criteria = True
+            if str(self._value(alert, 'severity') or '') != self.match_severity:
+                return False
+
+        if self.match_min_risk_score is not None:
+            has_criteria = True
+            try:
+                score = float(self._value(alert, 'risk_score') or 0)
+            except (TypeError, ValueError):
+                score = 0
+            if score < float(self.match_min_risk_score):
+                return False
+
+        if self.match_rule_id:
+            has_criteria = True
+            if str(self._value(alert, 'rule_id') or '') != str(self.match_rule_id):
+                return False
+
+        if self.match_agent_id:
+            has_criteria = True
+            if str(self._value(alert, 'agent_id') or '') != str(self.match_agent_id):
+                return False
+
+        if self.match_source_ip:
+            has_criteria = True
+            target_ip = str(self._value(alert, 'source_ip') or '')
+            if not target_ip:
+                return False
+            try:
+                if '/' in self.match_source_ip:
+                    if ipaddress.ip_address(target_ip) not in ipaddress.ip_network(self.match_source_ip):
+                        return False
+                elif self.match_source_ip != target_ip:
+                    return False
+            except ValueError:
+                if self.match_source_ip != target_ip:
+                    return False
+
+        if self.match_hostname:
+            has_criteria = True
+            if not text_match(self.match_hostname, self._value(alert, 'hostname')):
+                return False
+
+        if self.match_username:
+            has_criteria = True
+            if not text_match(self.match_username, self._value(alert, 'username')):
+                return False
+
+        if self.match_alert_name:
+            has_criteria = True
+            if not text_match(self.match_alert_name, self._value(alert, 'alert_name')):
+                return False
+
+        if self.match_mitre_tactic:
+            has_criteria = True
+            if not text_match(self.match_mitre_tactic, self._value(alert, 'mitre_tactic')):
+                return False
+
+        if self.match_source:
+            has_criteria = True
+            source = self._value(alert, 'source_name') or self._value(alert, 'source')
+            source_name = getattr(source, 'name', source)
+            if not text_match(self.match_source, source_name):
+                return False
+
+        return has_criteria
+
+
+class Playbook(models.Model):
+    """Phase 9: per-rule / per-tactic response playbook (SOP).
+
+    Provides step-by-step analyst guidance shown on the alert detail page.  A
+    playbook matches an alert when every configured key (rule id / MITRE
+    tactic / severity / source) is present on the playbook and equals the
+    alert's value.  A playbook with no keys configured matches nothing.
+    """
+
+    title = models.CharField(max_length=200)
+    priority = models.PositiveIntegerField(default=100, help_text='Lower values are shown first')
+    is_active = models.BooleanField(default=True)
+
+    # --- match conditions (blank = ignore) ---
+    match_rule_id = models.CharField(max_length=50, blank=True, help_text='Wazuh rule id (exact)')
+    match_mitre_tactic = models.CharField(max_length=200, blank=True, help_text='MITRE tactic (exact)')
+    match_severity = models.CharField(max_length=20, blank=True, help_text='Exact severity, e.g. Critical')
+    match_source = models.CharField(max_length=100, blank=True, help_text='Alert source name')
+
+    steps = models.TextField(help_text='One response step per line')
+    references = models.TextField(blank=True, help_text='Optional links / references')
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='playbooks_created')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['priority', 'id']
+        verbose_name = 'Playbook'
+        verbose_name_plural = 'Playbooks'
+
+    def __str__(self):
+        return self.title
+
+    def step_list(self):
+        return [s.strip() for s in (self.steps or '').splitlines() if s.strip()]
+
+    def matches(self, alert):
+        if not self.is_active:
+            return False
+        has_criteria = False
+        if self.match_rule_id:
+            has_criteria = True
+            if str(getattr(alert, 'rule_id', '') or '') != self.match_rule_id:
+                return False
+        if self.match_mitre_tactic:
+            has_criteria = True
+            if str(getattr(alert, 'mitre_tactic', '') or '') != self.match_mitre_tactic:
+                return False
+        if self.match_severity:
+            has_criteria = True
+            if str(getattr(alert, 'severity', '') or '') != self.match_severity:
+                return False
+        if self.match_source:
+            has_criteria = True
+            source = getattr(alert, 'source_name', '') or getattr(alert, 'source', '')
+            source_name = getattr(source, 'name', source)
+            if str(source_name or '') != self.match_source:
+                return False
+        return has_criteria
+
+    @classmethod
+    def for_alert(cls, alert):
+        """Return active playbooks matching ``alert`` (best match first).
+
+        Playbooks with more matching keys are ranked before tie-breakers on
+        ``priority`` so a rule-specific SOP beats a broad severity-only one.
+        """
+        matches = [pb for pb in cls.objects.filter(is_active=True).order_by('priority', 'id') if pb.matches(alert)]
+        return sorted(matches, key=lambda pb: (-pb._match_weight(alert), pb.priority, pb.id))
+
+    def _match_weight(self, alert):
+        weight = 0
+        if self.match_rule_id:
+            weight += 8
+        if self.match_mitre_tactic:
+            weight += 4
+        if self.match_severity:
+            weight += 2
+        if self.match_source:
+            weight += 1
+        return weight

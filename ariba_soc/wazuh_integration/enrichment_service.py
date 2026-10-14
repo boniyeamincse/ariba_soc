@@ -11,18 +11,29 @@ class EnrichmentService:
     def enrich_alert(alert):
         """
         Enriches an alert if there are active IOCEnrichmentSettings and auto_enrich is enabled.
-        Returns True if enrichment was performed, False otherwise.
+
+        Records status on the alert (enrichment_status / enrichment_updated_at /
+        enrichment_error) and returns a result dict:
+            {'performed': bool, 'status': str, 'providers': [str], 'errors': [str]}
         """
-        enrichment_performed = False
-        
+        result = {'performed': False, 'status': 'Skipped', 'providers': [], 'errors': []}
+
         # Check if there's any active setting with auto_enrich
         active_settings = IOCEnrichmentSetting.objects.filter(is_active=True, auto_enrich=True)
         if not active_settings.exists():
-            return False
+            alert.enrichment_status = 'Skipped'
+            alert.enrichment_updated_at = timezone.now()
+            alert.enrichment_error = ''
+            return result
 
         # Prepare the enrichment dict
         if not isinstance(alert.enrichment_data, dict):
             alert.enrichment_data = {}
+
+        alert.enrichment_status = 'Running'
+        providers_ok = []
+        providers_failed = []
+        errors = []
 
         # 1. IP Geolocation (IPInfo)
         ipinfo_setting = active_settings.filter(provider_name='IPInfo').first()
@@ -45,8 +56,13 @@ class EnrichmentService:
                         'loc': data.get('loc'),
                         'timestamp': timezone.now().isoformat()
                     }
-                    enrichment_performed = True
+                    providers_ok.append('IPInfo')
+                else:
+                    providers_failed.append('IPInfo')
+                    errors.append(f'IPInfo HTTP {response.status_code}')
             except Exception as e:
+                providers_failed.append('IPInfo')
+                errors.append(f'IPInfo: {e}')
                 logger.error(f"Failed to enrich IP {alert.source_ip} with IPInfo: {e}")
 
         # 2. VirusTotal File Hash
@@ -57,7 +73,7 @@ class EnrichmentService:
             cached_data = cache.get(cache_key)
             if cached_data:
                 alert.enrichment_data['VirusTotal'] = cached_data
-                enrichment_performed = True
+                providers_ok.append('VirusTotal')
             else:
                 try:
                     url = f"https://www.virustotal.com/api/v3/files/{file_hash}"
@@ -76,8 +92,13 @@ class EnrichmentService:
                         }
                         alert.enrichment_data['VirusTotal'] = vt_data
                         cache.set(cache_key, vt_data, timeout=86400)
-                        enrichment_performed = True
+                        providers_ok.append('VirusTotal')
+                    else:
+                        providers_failed.append('VirusTotal')
+                        errors.append(f'VirusTotal HTTP {response.status_code}')
                 except Exception as e:
+                    providers_failed.append('VirusTotal')
+                    errors.append(f'VirusTotal: {e}')
                     logger.error(f"Failed to enrich hash {file_hash} with VirusTotal: {e}")
 
         # 3. AbuseIPDB
@@ -87,7 +108,7 @@ class EnrichmentService:
             cached_data = cache.get(cache_key)
             if cached_data:
                 alert.enrichment_data['AbuseIPDB'] = cached_data
-                enrichment_performed = True
+                providers_ok.append('AbuseIPDB')
             else:
                 try:
                     url = "https://api.abuseipdb.com/api/v2/check"
@@ -105,8 +126,13 @@ class EnrichmentService:
                         }
                         alert.enrichment_data['AbuseIPDB'] = abuse_data
                         cache.set(cache_key, abuse_data, timeout=86400) # Cache for 24 hours
-                        enrichment_performed = True
+                        providers_ok.append('AbuseIPDB')
+                    else:
+                        providers_failed.append('AbuseIPDB')
+                        errors.append(f'AbuseIPDB HTTP {response.status_code}')
                 except Exception as e:
+                    providers_failed.append('AbuseIPDB')
+                    errors.append(f'AbuseIPDB: {e}')
                     logger.error(f"Failed to enrich IP {alert.source_ip} with AbuseIPDB: {e}")
 
         # 4. AlienVault OTX
@@ -119,7 +145,7 @@ class EnrichmentService:
                 cached_data = cache.get(cache_key)
                 if cached_data:
                     alert.enrichment_data['OTX'] = cached_data
-                    enrichment_performed = True
+                    providers_ok.append('OTX')
                 else:
                     try:
                         url = f"https://otx.alienvault.com/api/v1/indicators/{indicator_type}/{target}/general"
@@ -135,11 +161,46 @@ class EnrichmentService:
                             }
                             alert.enrichment_data['OTX'] = otx_data
                             cache.set(cache_key, otx_data, timeout=86400) # Cache for 24 hours
-                            enrichment_performed = True
+                            providers_ok.append('OTX')
+                        else:
+                            providers_failed.append('OTX')
+                            errors.append(f'OTX HTTP {response.status_code}')
                     except Exception as e:
+                        providers_failed.append('OTX')
+                        errors.append(f'OTX: {e}')
                         logger.error(f"Failed to enrich {target} with OTX: {e}")
 
-        if enrichment_performed:
-            pass
+        # Derive overall status
+        if providers_ok and providers_failed:
+            status = 'Partial'
+        elif providers_ok:
+            status = 'Success'
+        elif providers_failed:
+            status = 'Failed'
+        else:
+            # Settings active but no provider had applicable inputs
+            status = 'Skipped'
 
-        return enrichment_performed
+        alert.enrichment_status = status
+        alert.enrichment_updated_at = timezone.now()
+        alert.enrichment_error = '; '.join(errors)[:500]
+
+        meta = alert.enrichment_data.get('_meta')
+        if not isinstance(meta, dict):
+            meta = {}
+        meta.update({
+            'status': status,
+            'updated_at': alert.enrichment_updated_at.isoformat(),
+            'providers_ok': providers_ok,
+            'providers_failed': providers_failed,
+        })
+        alert.enrichment_data['_meta'] = meta
+
+        result.update({
+            'performed': bool(providers_ok),
+            'status': status,
+            'providers': providers_ok,
+            'errors': errors,
+        })
+        return result
+

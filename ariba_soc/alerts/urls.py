@@ -9,6 +9,10 @@ urlpatterns = [
     path('<int:alert_id>/', views.alert_detail, name='detail'),
     path('<int:alert_id>/edit/', views.alert_edit, name='edit'),
     path('<int:alert_id>/assign/', views.alert_assign, name='assign'),
+    path('<int:alert_id>/enrich/', views.alert_enrich, name='enrich'),
+    path('<int:alert_id>/pdf/', views.alert_pdf, name='pdf'),
+    path('<int:alert_id>/bookmark/', views.alert_toggle_bookmark, name='bookmark'),
+    path('<int:alert_id>/tags/', views.alert_set_tags, name='set_tags'),
     path('<int:alert_id>/comment/', views.alert_add_comment, name='add_comment'),
     path('<int:alert_id>/claim/', views.alert_claim, name='claim'),
     path('<int:alert_id>/escalate/', views.alert_escalate, name='escalate'),
@@ -31,4 +35,21 @@ urlpatterns = [
     path('assets/<int:asset_id>/delete/', views.asset_delete, name='asset_delete'),
     path('assets/sync-wazuh/', views.asset_sync_wazuh, name='asset_sync_wazuh'),
     path('assets/recalculate-risk/', views.recalculate_all_alerts_risk, name='recalculate_risk'),
+    # Phase 6: export + saved filters
+    path('export/csv/', views.alert_export_csv, name='export_csv'),
+    path('saved-filters/save/', views.saved_filter_save, name='saved_filter_save'),
+    path('saved-filters/<int:pk>/delete/', views.saved_filter_delete, name='saved_filter_delete'),
+    # Phase 7: evidence attachments + watchers
+    path('<int:alert_id>/attachments/upload/', views.alert_attachment_upload, name='attachment_upload'),
+    path('attachments/<int:pk>/download/', views.alert_attachment_download, name='attachment_download'),
+    path('attachments/<int:pk>/delete/', views.alert_attachment_delete, name='attachment_delete'),
+    path('<int:alert_id>/watch/', views.alert_watcher_toggle, name='watcher_toggle'),
+    path('<int:alert_id>/watchers/add/', views.alert_watcher_add, name='watcher_add'),
+    path('<int:alert_id>/watchers/<int:user_id>/remove/', views.alert_watcher_remove, name='watcher_remove'),
+    # Phase 8: related alerts + merge/split
+    path('<int:alert_id>/related/', views.alert_related, name='related'),
+    path('<int:alert_id>/merge/', views.alert_merge, name='merge'),
+    path('<int:alert_id>/unmerge/', views.alert_unmerge, name='unmerge'),
+    # Phase 9: false-positive feedback loop
+    path('<int:alert_id>/report-fp/', views.alert_report_fp, name='report_fp'),
 ]

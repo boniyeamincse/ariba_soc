@@ -77,11 +77,29 @@
                         <td><small><code class="text-info">{{ alert.wazuh_alert_id|default:alert.id }}</code></small></td>
                         <td class="text-nowrap"><small>{{ alert.alert_time|date:"M d, H:i" }}</small></td>
                         <td>
+                            <button type="button" class="btn btn-sm btn-link p-0 me-1 bookmark-btn {% if alert.is_bookmarked %}text-warning{% else %}text-secondary{% endif %}" data-url="{% url 'alerts:bookmark' alert.id %}" title="Bookmark alert"><i class="bi {% if alert.is_bookmarked %}bi-star-fill{% else %}bi-star{% endif %}"></i></button>
                             <span class="fw-medium">{{ alert.alert_name|truncatechars:50 }}</span>
                             {% if alert.event_count > 1 %}
                             <span class="badge bg-secondary bg-opacity-75 text-info ms-1" title="Aggregated {{ alert.event_count }} events">
                                 <i class="bi bi-layers-half"></i> {{ alert.event_count }}
                             </span>
+                            {% endif %}
+                            {% if alert.enrichment_status == 'Success' %}
+                            <span class="badge bg-success bg-opacity-75 ms-1" title="Enrichment: Success"><i class="bi bi-shield-check"></i></span>
+                            {% elif alert.enrichment_status == 'Partial' %}
+                            <span class="badge bg-warning text-dark bg-opacity-75 ms-1" title="Enrichment: Partial"><i class="bi bi-shield-exclamation"></i></span>
+                            {% elif alert.enrichment_status == 'Failed' %}
+                            <span class="badge bg-danger bg-opacity-75 ms-1" title="Enrichment: Failed"><i class="bi bi-shield-x"></i></span>
+                            {% elif alert.enrichment_status == 'Running' or alert.enrichment_status == 'Pending' %}
+                            <span class="badge bg-info text-dark bg-opacity-75 ms-1" title="Enrichment: {{ alert.get_enrichment_status_display }}"><i class="bi bi-arrow-repeat"></i></span>
+                            {% endif %}
+                            {% if alert.is_merged %}
+                            <a href="{% url 'alerts:detail' alert.merged_into_id %}" class="badge bg-warning text-dark bg-opacity-75 ms-1 text-decoration-none" title="Merged into #{{ alert.merged_into_id }}"><i class="bi bi-diagram-2"></i> merged</a>
+                            {% endif %}
+                            {% if alert.tags %}
+                            <div class="mt-1">
+                                {% for t in alert.tags %}<a href="?tag={{ t|urlencode }}" class="badge bg-secondary bg-opacity-50 text-info text-decoration-none me-1" title="Filter by tag">{{ t }}</a>{% endfor %}
+                            </div>
                             {% endif %}
                         </td>
                         <td>{% include 'ariba_soc/_severity_badge.html' with severity=alert.severity %}</td>
@@ -185,6 +203,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 var val = btn.getAttribute('data-' + field.replace('_','-') + '-id') || btn.getAttribute('data-' + field.replace('_','-'));
                 if (el) el.value = val || '';
             });
+        });
+    });
+
+    // Bookmark toggle
+    document.querySelectorAll('.bookmark-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var url = this.getAttribute('data-url');
+            var tokenEl = document.querySelector('[name=csrfmiddlewaretoken]');
+            var token = tokenEl ? tokenEl.value : '';
+            fetch(url, {
+                method: 'POST',
+                headers: {'X-CSRFToken': token, 'X-Requested-With': 'XMLHttpRequest'},
+            }).then(function(r) { return r.ok ? r.json() : null; })
+              .then(function(data) {
+                  if (!data) return;
+                  var icon = btn.querySelector('i');
+                  if (data.is_bookmarked) {
+                      btn.classList.remove('text-secondary'); btn.classList.add('text-warning');
+                      icon.className = 'bi bi-star-fill';
+                  } else {
+                      btn.classList.remove('text-warning'); btn.classList.add('text-secondary');
+                      icon.className = 'bi bi-star';
+                  }
+              });
         });
     });
 

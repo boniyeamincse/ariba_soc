@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from uuid import uuid4
 from settings_manager.models import SLASettings
 
 SEVERITY_CHOICES = [
@@ -24,6 +25,12 @@ STATUS_CHOICES = [
     ('Closed', 'Closed'),
     ('Archived', 'Archived'),
 ]
+
+# Alerts in these statuses are considered "done" and are excluded from active
+# workload / SLA-breach checks.
+TERMINAL_STATUSES = ['Closed', 'Archived']
+# Alerts in these statuses are still open and subject to SLA monitoring.
+ACTIVE_STATUSES = [s[0] for s in STATUS_CHOICES if s[0] not in TERMINAL_STATUSES]
 
 VERDICT_CHOICES = [
     ('None', 'None'),
@@ -232,6 +239,31 @@ class Alert(models.Model):
     alert_fields = models.JSONField(default=dict, blank=True)
     raw_json = models.JSONField(default=dict, blank=True)
     enrichment_data = models.JSONField(default=dict, blank=True)
+    enrichment_status = models.CharField(
+        max_length=20, default='NotRun',
+        choices=[
+            ('NotRun', 'Not Run'),
+            ('Pending', 'Pending'),
+            ('Success', 'Success'),
+            ('Partial', 'Partial'),
+            ('Failed', 'Failed'),
+            ('Skipped', 'Skipped'),
+            ('Running', 'Running'),
+        ],
+        help_text='Status of IOC enrichment for this alert',
+    )
+    enrichment_updated_at = models.DateTimeField(null=True, blank=True)
+    enrichment_error = models.CharField(max_length=500, blank=True, default='')
+
+    tags = models.JSONField(default=list, blank=True, help_text='Free-form analyst tags for this alert')
+
+    merged_into = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='merged_children',
+        help_text='If set, this alert was merged into another alert as a duplicate/correlated event',
+    )
+
+
 
     analyst_comment = models.TextField(blank=True)
     escalation_reason = models.TextField(blank=True)
@@ -240,13 +272,22 @@ class Alert(models.Model):
     root_cause_summary = models.TextField(blank=True)
 
     sla_due_at = models.DateTimeField(null=True, blank=True)
+    sla_ack_due_at = models.DateTimeField(null=True, blank=True)
     sla_status = models.CharField(max_length=20, default='Within SLA')
+    sla_breach_phase = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text='Which SLA leg breached: ACK (acknowledge) or RESOLVE',
+    )
+    sla_breach_notified_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='When an SLA breach notification was dispatched for this alert',
+    )
 
     acknowledged_at = models.DateTimeField(null=True, blank=True)
     escalated_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
     archived_at = models.DateTimeField(null=True, blank=True)
-    status_updated_at = models.DateTimeField(auto_now_add=True)
+    status_updated_at = models.DateTimeField(auto_now=True)
 
     aggregation_key = models.CharField(max_length=64, blank=True, db_index=True)
     event_count = models.PositiveIntegerField(default=1)
@@ -320,12 +361,13 @@ class Alert(models.Model):
             if hasattr(self.assignee, 'analyst_profile') and self.assignee.analyst_profile.soc_team:
                 self.assigned_team = self.assignee.analyst_profile.soc_team
                 self.current_owner_team = self.assigned_team.tier
-        if not self.pk or kwargs.pop('recalc_sla', True):
-            self.update_sla()
+        recalc_sla = kwargs.pop('recalc_sla', True)
         if self.status == 'Closed' and not self.closed_at:
             self.closed_at = timezone.now()
         if self.status == 'Archived' and not self.archived_at:
             self.archived_at = timezone.now()
+        if self.pk is None or recalc_sla:
+            self.update_sla()
         super().save(*args, **kwargs)
 
     def update_sla(self):
@@ -341,14 +383,43 @@ class Alert(models.Model):
                          'Low': (480, 4320, 30), 'Informational': (480, 4320, 30)}
             ack_min, resolve_min, breach_warn = defaults.get(self.severity, (120, 1440, 30))
 
-        due = self.alert_time + timezone.timedelta(minutes=resolve_min)
-        self.sla_due_at = due
-        if self.status in ('Closed', 'Archived') and self.closed_at:
-            self.sla_status = 'Breached' if self.closed_at > due else 'Within SLA'
-        elif timezone.now() > due:
+        self.sla_ack_due_at = self.alert_time + timezone.timedelta(minutes=ack_min)
+        resolve_due = self.alert_time + timezone.timedelta(minutes=resolve_min)
+        self.sla_due_at = resolve_due
+        now = timezone.now()
+        is_final = self.status in ('Closed', 'Archived')
+
+        if is_final:
+            closed_ref = self.closed_at or self.archived_at or now
+            if closed_ref > resolve_due:
+                self.sla_status = 'Breached'
+                self.sla_breach_phase = 'RESOLVE'
+            else:
+                self.sla_status = 'Within SLA'
+                self.sla_breach_phase = ''
+        elif now > resolve_due:
             self.sla_status = 'Breached'
-        elif timezone.now() > (due - timezone.timedelta(minutes=breach_warn)):
+            self.sla_breach_phase = 'RESOLVE'
+        elif not self.acknowledged_at and now > self.sla_ack_due_at:
+            self.sla_status = 'Breached'
+            self.sla_breach_phase = 'ACK'
+        elif now > resolve_due - timezone.timedelta(minutes=breach_warn):
             self.sla_status = 'Near SLA breach'
+            self.sla_breach_phase = ''
+        else:
+            self.sla_status = 'Within SLA'
+            self.sla_breach_phase = ''
+
+    def is_sla_breached(self):
+        return self.sla_status == 'Breached'
+
+    def acknowledge(self, user=None, when=None):
+        """Mark the alert acknowledged, stopping the acknowledgement SLA clock."""
+        self.acknowledged_at = when or timezone.now()
+        if self.status == 'New':
+            self.status = 'In Progress'
+        self.save()
+        return self
 
     def calculate_priority(self):
         level = self.rule_level or 0
@@ -359,6 +430,14 @@ class Alert(models.Model):
         elif self.severity == 'Medium' or level >= 4:
             return 'Medium'
         return 'Low'
+
+    @property
+    def is_merged(self):
+        return self.merged_into_id is not None
+
+    @property
+    def merged_count(self):
+        return self.merged_children.count()
 
 
 class AlertEscalation(models.Model):
@@ -483,3 +562,99 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notification for {self.user.username} - Read: {self.is_read}"
+
+
+class AlertBookmark(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='alert_bookmarks')
+    alert = models.ForeignKey(Alert, on_delete=models.CASCADE, related_name='bookmarks')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'alert')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} ★ {self.alert_id}"
+
+
+class SavedFilter(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_filters')
+    name = models.CharField(max_length=120)
+    query = models.CharField(max_length=2000, blank=True, default='')
+    is_shared = models.BooleanField(default=False, help_text='Share this filter with all analysts')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        unique_together = ('user', 'name')
+
+    def __str__(self):
+        return f"{self.name} ({self.user.username})"
+
+
+def alert_attachment_upload_to(instance, filename):
+    return f'alert_evidence/{instance.alert_id}/{uuid4().hex}_{filename}'
+
+
+class AlertAttachment(models.Model):
+    alert = models.ForeignKey(Alert, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to=alert_attachment_upload_to)
+    original_name = models.CharField(max_length=255, blank=True, default='')
+    description = models.CharField(max_length=255, blank=True, default='')
+    uploaded_by = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name='alert_attachments')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Attachment {self.original_name or self.file.name}"
+
+    @property
+    def is_image(self):
+        name = (self.original_name or self.file.name or '').lower()
+        return name.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'))
+
+    @property
+    def size_bytes(self):
+        try:
+            return self.file.size
+        except (ValueError, OSError):
+            return 0
+
+
+class AlertWatcher(models.Model):
+    alert = models.ForeignKey(Alert, on_delete=models.CASCADE, related_name='watchers')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='alert_watchlist')
+    added_by = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name='alert_watchers_added')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('alert', 'user')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} watching alert {self.alert_id}"
+
+
+class FalsePositiveReport(models.Model):
+    """Phase 9: analyst-reported false positive, feeding the tuning loop.
+
+    Aggregated by ``rule_id`` to surface noisy detection rules and feed
+    playbook-driven tuning.
+    """
+
+    alert = models.ForeignKey(Alert, on_delete=models.CASCADE, related_name='fp_reports')
+    rule_id = models.CharField(max_length=50, blank=True, db_index=True)
+    reason = models.TextField(blank=True)
+    reported_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='fp_reports')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'False Positive Report'
+        verbose_name_plural = 'False Positive Reports'
+
+    def __str__(self):
+        return f"FP rule={self.rule_id or 'n/a'} alert={self.alert_id}"
+

@@ -39,6 +39,10 @@
                     {{ form.recipient_user }}
                 </div>
                 <div class="col-12">
+                    <label class="form-label small">Webhook URL <span class="text-muted">(Teams / Slack / Webhook channels)</span></label>
+                    {{ form.webhook_url }}
+                </div>
+                <div class="col-12">
                     <div class="form-check">
                         {{ form.is_active }}
                         <label class="form-check-label small">Active</label>

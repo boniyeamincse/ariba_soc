@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Alert, AlertComment, AlertAuditLog, AlertSource, AlertEscalation, AlertTransition, Notification
+from .models import Alert, AlertComment, AlertAuditLog, AlertSource, AlertEscalation, AlertTransition, Notification, AlertAttachment, AlertWatcher, FalsePositiveReport
 
 @admin.register(Alert)
 class AlertAdmin(admin.ModelAdmin):
@@ -35,3 +35,10 @@ class AlertTransitionAdmin(admin.ModelAdmin):
 class NotificationAdmin(admin.ModelAdmin):
     list_display = ['user', 'message', 'is_read', 'created_at']
     list_filter = ['is_read']
+
+
+@admin.register(FalsePositiveReport)
+class FalsePositiveReportAdmin(admin.ModelAdmin):
+    list_display = ['id', 'alert', 'rule_id', 'reported_by', 'created_at']
+    list_filter = ['rule_id']
+    search_fields = ['rule_id', 'reason']

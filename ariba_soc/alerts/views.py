@@ -1,8 +1,11 @@
 import json
+import os
+import re
+from django.conf import settings
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse, FileResponse
 from django.core.exceptions import PermissionDenied
 from django.views.decorators.http import require_POST
 from django.db import transaction
@@ -10,15 +13,20 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.contrib.auth.models import User
+from django.urls import reverse
 from accounts.models import SocTeam
 from settings_manager.models import SeveritySettings, StatusSettings, VerdictSettings
 from accounts.decorators import role_required, permission_required, TIER_ORDER
 from .models import (
     Alert, AlertComment, AlertAuditLog, Notification,
-    AlertEscalation, AlertTransition,
+    AlertEscalation, AlertTransition, AlertBookmark, SavedFilter,
+    AlertAttachment, AlertWatcher, FalsePositiveReport,
 )
 from .forms import AlertEditForm, AlertCommentForm
-from .services import update_alert, assign_alert, create_audit_log, _notify_escalation
+from .services import (
+    update_alert, assign_alert, create_audit_log, _notify_escalation,
+    find_related_alerts, merge_alerts, unmerge_alert,
+)
 from . import workflow
 
 
@@ -44,7 +52,8 @@ def _handle_workflow_error(request, exc, alert_id=None):
 
 @login_required
 @permission_required('can_view_alerts')
-def alert_table(request):
+def _apply_alert_filters(request):
+    """Apply the alert-table querystring filters; return (queryset, filters, user_soc_team)."""
     alerts = Alert.objects.select_related('assignee', 'source', 'assigned_team').all()
     severity = request.GET.get('severity')
     status = request.GET.get('status')
@@ -55,6 +64,8 @@ def alert_table(request):
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
     sort = request.GET.get('sort', '-alert_time')
+    tag = request.GET.get('tag')
+    bookmarked = request.GET.get('bookmarked')
 
     user_profile = getattr(request.user, 'analyst_profile', None)
     user_soc_team = user_profile.soc_team if user_profile else None
@@ -81,6 +92,10 @@ def alert_table(request):
         alerts = alerts.filter(verdict=verdict)
     if assignee:
         alerts = alerts.filter(assignee_id=assignee)
+    if tag:
+        alerts = alerts.filter(tags__contains=[tag])
+    if bookmarked == '1':
+        alerts = alerts.filter(bookmarks__user=request.user)
     if team:
         if team == 'my_team':
             if user_soc_team:
@@ -102,12 +117,30 @@ def alert_table(request):
     else:
         alerts = alerts.order_by('-alert_time')
 
+    filters = {
+        'search': search, 'severity': severity, 'status': status,
+        'verdict': verdict, 'assignee': assignee, 'team': team,
+        'date_from': date_from, 'date_to': date_to, 'sort': sort,
+        'tag': tag, 'bookmarked': bookmarked,
+    }
+    return alerts, filters, user_soc_team
+
+
+@login_required
+@permission_required('can_view_alerts')
+def alert_table(request):
+    alerts, current_filters, user_soc_team = _apply_alert_filters(request)
+
     paginator = Paginator(alerts, 25)
     page = request.GET.get('page', 1)
     alerts_page = paginator.get_page(page)
 
     assignees = Alert.objects.exclude(assignee__isnull=True).values_list('assignee_id', 'assignee__username').distinct()
     soc_teams = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
+    saved_filters = SavedFilter.objects.filter(Q(user=request.user) | Q(is_shared=True)).order_by('name')
+    bookmarked_ids = set(AlertBookmark.objects.filter(user=request.user).values_list('alert_id', flat=True))
+    for a in alerts_page:
+        a.is_bookmarked = a.id in bookmarked_ids
 
     context = {
         'alerts': alerts_page,
@@ -118,11 +151,8 @@ def alert_table(request):
         'severities': SeveritySettings.objects.filter(is_active=True).order_by('sort_order'),
         'statuses': StatusSettings.objects.filter(is_active=True).order_by('sort_order'),
         'verdicts': VerdictSettings.objects.filter(is_active=True).order_by('name'),
-        'current_filters': {
-            'search': search, 'severity': severity, 'status': status,
-            'verdict': verdict, 'assignee': assignee, 'team': team,
-            'date_from': date_from, 'date_to': date_to, 'sort': sort,
-        },
+        'current_filters': current_filters,
+        'saved_filters': saved_filters,
         'is_paginated': alerts_page.has_other_pages(),
     }
     return render(request, 'ariba_soc/alert_table.html', context)
@@ -211,11 +241,24 @@ def alert_detail(request, alert_id):
     escalation_records = alert.escalation_records.all()[:10]
     form = AlertEditForm(instance=alert, user=request.user)
     soc_teams = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
+    is_bookmarked = AlertBookmark.objects.filter(user=request.user, alert=alert).exists()
+    is_watching = AlertWatcher.objects.filter(user=request.user, alert=alert).exists()
+    attachments = alert.attachments.select_related('uploaded_by').all()
+    watchers = alert.watchers.select_related('user').all()
+    related_alerts = find_related_alerts(alert)
+    from settings_manager.models import Playbook
+    playbooks = Playbook.for_alert(alert)
+    fp_reports = alert.fp_reports.select_related('reported_by').all()[:10]
     return render(request, 'ariba_soc/alert_detail.html', {
         'alert': alert, 'comments': comments, 'audit_logs': audit_logs,
         'transitions': transitions, 'escalation_records': escalation_records,
         'form': form, 'users': User.objects.filter(is_active=True),
-        'soc_teams': soc_teams,
+        'soc_teams': soc_teams, 'is_bookmarked': is_bookmarked,
+        'is_watching': is_watching, 'attachments': attachments, 'watchers': watchers,
+        'related_alerts': related_alerts,
+        'merged_children': alert.merged_children.all(),
+        'playbooks': playbooks,
+        'fp_reports': fp_reports,
     })
 
 
@@ -238,6 +281,23 @@ def alert_edit(request, alert_id):
             for error in form.non_field_errors():
                 messages.error(request, error)
     return redirect('alerts:detail', alert_id=alert_id)
+
+
+@login_required
+@require_POST
+def alert_enrich(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    from wazuh_integration.enrichment_service import EnrichmentService
+    result = EnrichmentService.enrich_alert(alert)
+    alert.save(update_fields=[
+        'enrichment_data', 'enrichment_status',
+        'enrichment_updated_at', 'enrichment_error',
+    ])
+    create_audit_log(alert, request.user, 'Enriched', '', f"Enrichment {result['status']}", request)
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'status': result['status'], 'providers': result['providers']})
+    messages.success(request, f"Enrichment {result['status'].lower()}.")
+    return redirect('alerts:detail', alert_id=alert.id)
 
 
 @login_required
@@ -265,9 +325,30 @@ def alert_add_comment(request, alert_id):
         comment = form.save(commit=False)
         comment.alert = alert
         comment.user = request.user
-        comment.comment_type = 'Analyst Note'
+        comment.comment_type = form.cleaned_data.get('comment_type') or 'Analyst Note'
         comment.save()
-        create_audit_log(alert, request.user, 'Comment Added', '', form.cleaned_data['comment'][:200], request)
+        mention_usernames = set(re.findall(r'@([A-Za-z0-9_.@+-]+)', comment.comment or ''))
+        mentioned = list(User.objects.filter(username__in=mention_usernames, is_active=True))
+        for u in mentioned:
+            if u != request.user:
+                AlertWatcher.objects.get_or_create(
+                    alert=alert, user=u, defaults={'added_by': request.user},
+                )
+                Notification.objects.create(
+                    user=u,
+                    message=f"{request.user.username} mentioned you on alert #{alert.id}",
+                    link=reverse('alerts:detail', args=[alert.id]),
+                )
+        for w in alert.watchers.exclude(user=request.user).select_related('user'):
+            Notification.objects.create(
+                user=w.user,
+                message=f"New comment on alert #{alert.id}: {alert.alert_name[:80]}",
+                link=reverse('alerts:detail', args=[alert.id]),
+            )
+        audit_note = form.cleaned_data['comment'][:200]
+        if mentioned:
+            audit_note = f"{audit_note} (mentions: {', '.join(u.username for u in mentioned)})"
+        create_audit_log(alert, request.user, 'Comment Added', '', audit_note, request)
         messages.success(request, 'Comment added.')
     return redirect('alerts:detail', alert_id=alert_id)
 
@@ -677,4 +758,362 @@ def recalculate_all_alerts_risk(request):
     except Exception as e:
         messages.error(request, f"Failed to recalculate risk scores: {str(e)}")
     return redirect('alerts:assets_list')
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: Saved filters, tags/bookmarks, CSV export, single-alert PDF
+# ---------------------------------------------------------------------------
+
+@login_required
+@permission_required('can_view_alerts')
+def alert_export_csv(request):
+    import csv
+    alerts, _, _ = _apply_alert_filters(request)
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="alerts_export.csv"'
+    writer = csv.writer(response)
+    writer.writerow([
+        'ID', 'Wazuh ID', 'Time', 'Name', 'Severity', 'Status', 'Verdict',
+        'Assignee', 'Team', 'Source IP', 'Destination IP', 'Hostname',
+        'Agent', 'Rule ID', 'MITRE Tactic', 'Tags', 'Risk Score', 'SLA Status',
+    ])
+    for a in alerts[:5000]:
+        writer.writerow([
+            a.id, a.wazuh_alert_id, a.alert_time.isoformat() if a.alert_time else '',
+            a.alert_name, a.severity, a.status, a.verdict,
+            a.assignee.username if a.assignee else '',
+            a.assigned_team.name if a.assigned_team else '',
+            a.source_ip, a.destination_ip, a.hostname, a.agent_name, a.rule_id,
+            a.mitre_tactic, '; '.join(a.tags or []), a.risk_score, a.sla_status,
+        ])
+    return response
+
+
+@login_required
+@permission_required('can_view_alerts')
+def alert_pdf(request, alert_id):
+    import io
+    from xml.sax.saxutils import escape
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+    alert = get_object_or_404(
+        Alert.objects.select_related('assignee', 'source', 'assigned_team'), id=alert_id,
+    )
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=18 * mm,
+                            leftMargin=16 * mm, rightMargin=16 * mm, title=f'Alert {alert.id}')
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph(f'Alert #{alert.id}', styles['Title']),
+        Paragraph(escape(alert.alert_name or ''), styles['Heading2']),
+        Spacer(1, 8),
+    ]
+    rows = [
+        ['Field', 'Value'],
+        ['Wazuh Alert ID', str(alert.wazuh_alert_id or alert.id)],
+        ['Time', alert.alert_time.strftime('%Y-%m-%d %H:%M:%S') if alert.alert_time else '—'],
+        ['Severity', str(alert.severity)],
+        ['Status', str(alert.status)],
+        ['Verdict', str(alert.verdict)],
+        ['Priority', str(alert.priority)],
+        ['Assignee', alert.assignee.username if alert.assignee else '—'],
+        ['Team', alert.assigned_team.name if alert.assigned_team else '—'],
+        ['Source IP', alert.source_ip or '—'],
+        ['Destination IP', alert.destination_ip or '—'],
+        ['Hostname', alert.hostname or '—'],
+        ['Agent', alert.agent_name or '—'],
+        ['Rule ID', alert.rule_id or '—'],
+        ['MITRE Tactic', alert.mitre_tactic or '—'],
+        ['MITRE Technique', alert.mitre_technique or '—'],
+        ['Tags', ', '.join(alert.tags or []) or '—'],
+        ['Risk Score', str(alert.risk_score)],
+        ['SLA Status', str(alert.sla_status)],
+        ['SLA Due', alert.sla_due_at.strftime('%Y-%m-%d %H:%M') if alert.sla_due_at else '—'],
+        ['Enrichment', alert.get_enrichment_status_display()],
+    ]
+    table = Table(rows, colWidths=[45 * mm, 120 * mm])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f2937')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#9ca3af')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f3f4f6')]),
+    ]))
+    story.append(table)
+    for label, body in (('Description', alert.full_log), ('Analyst Comment', alert.analyst_comment),
+                        ('Remediation Note', alert.remediation_note), ('Root Cause', alert.root_cause_summary)):
+        if body:
+            story.append(Spacer(1, 8))
+            story.append(Paragraph(label, styles['Heading4']))
+            story.append(Paragraph(escape(str(body)).replace('\n', '<br/>'), styles['BodyText']))
+    doc.build(story)
+    pdf = buf.getvalue()
+    buf.close()
+    response = HttpResponse(pdf, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="alert_{alert.id}.pdf"'
+    return response
+
+
+@login_required
+@require_POST
+def alert_toggle_bookmark(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    bm, created = AlertBookmark.objects.get_or_create(user=request.user, alert=alert)
+    if not created:
+        bm.delete()
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'is_bookmarked': created})
+    return redirect(request.META.get('HTTP_REFERER', 'alerts:table'))
+
+
+@login_required
+@require_POST
+def alert_set_tags(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    raw = request.POST.get('tags', '')
+    tags = []
+    for t in raw.split(','):
+        t = t.strip()[:50]
+        if t and t not in tags:
+            tags.append(t)
+    old = alert.tags or []
+    alert.tags = tags
+    alert.save(update_fields=['tags'])
+    create_audit_log(alert, request.user, 'Tags Updated', ', '.join(old), ', '.join(tags), request)
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'tags': tags})
+    messages.success(request, 'Tags updated.')
+    return redirect('alerts:detail', alert_id=alert.id)
+
+
+@login_required
+@require_POST
+def saved_filter_save(request):
+    name = (request.POST.get('name') or '').strip()[:120]
+    query = (request.POST.get('query') or '').strip()[:2000]
+    is_shared = request.POST.get('is_shared') in ('1', 'on', 'true')
+    if not name:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Name required'}, status=400)
+        messages.error(request, 'Filter name is required.')
+        return redirect('alerts:table')
+    sf, _ = SavedFilter.objects.update_or_create(
+        user=request.user, name=name,
+        defaults={'query': query, 'is_shared': is_shared},
+    )
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'id': sf.id, 'name': sf.name, 'is_shared': sf.is_shared})
+    messages.success(request, f'Filter "{name}" saved.')
+    return redirect('alerts:table')
+
+
+@login_required
+@require_POST
+def saved_filter_delete(request, pk):
+    sf = get_object_or_404(SavedFilter, id=pk)
+    if sf.user_id != request.user.id and not request.user.is_superuser:
+        raise PermissionDenied('Not your saved filter.')
+    sf.delete()
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'deleted': True})
+    messages.success(request, 'Saved filter deleted.')
+    return redirect('alerts:table')
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: evidence attachments + @mentions/watchers
+# ---------------------------------------------------------------------------
+
+ALLOWED_ATTACHMENT_EXT = {
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.pdf',
+    '.txt', '.log', '.csv', '.json', '.xml', '.pcap', '.evtx', '.doc',
+    '.docx', '.xls', '.xlsx', '.zip', '.gz', '.eml',
+}
+MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
+
+
+def _notify_watchers(alert, actor, message):
+    for w in alert.watchers.exclude(user=actor).select_related('user'):
+        Notification.objects.create(
+            user=w.user, message=message,
+            link=reverse('alerts:detail', args=[alert.id]),
+        )
+
+
+@login_required
+@require_POST
+def alert_attachment_upload(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    upload = request.FILES.get('file')
+    if not upload:
+        messages.error(request, 'No file selected.')
+        return redirect('alerts:detail', alert_id=alert.id)
+    ext = os.path.splitext(upload.name)[1].lower()
+    if ext not in ALLOWED_ATTACHMENT_EXT:
+        messages.error(request, f'File type "{ext or "unknown"}" is not allowed.')
+        return redirect('alerts:detail', alert_id=alert.id)
+    if upload.size > MAX_ATTACHMENT_BYTES:
+        messages.error(request, 'File exceeds the 25 MB limit.')
+        return redirect('alerts:detail', alert_id=alert.id)
+    attachment = AlertAttachment.objects.create(
+        alert=alert,
+        file=upload,
+        original_name=upload.name[:255],
+        description=(request.POST.get('description') or '')[:255],
+        uploaded_by=request.user,
+    )
+    create_audit_log(alert, request.user, 'Evidence Attached', '', attachment.original_name, request)
+    _notify_watchers(alert, request.user, f"New evidence on alert #{alert.id}: {attachment.original_name}")
+    messages.success(request, 'Evidence uploaded.')
+    return redirect('alerts:detail', alert_id=alert.id)
+
+
+@login_required
+def alert_attachment_download(request, pk):
+    attachment = get_object_or_404(AlertAttachment, id=pk)
+    try:
+        return FileResponse(
+            attachment.file.open('rb'), as_attachment=True,
+            filename=attachment.original_name or os.path.basename(attachment.file.name),
+        )
+    except (FileNotFoundError, ValueError):
+        messages.error(request, 'Attachment file is missing.')
+        return redirect('alerts:detail', alert_id=attachment.alert_id)
+
+
+@login_required
+@require_POST
+def alert_attachment_delete(request, pk):
+    attachment = get_object_or_404(AlertAttachment, id=pk)
+    alert = attachment.alert
+    if attachment.uploaded_by_id != request.user.id and not request.user.is_superuser:
+        raise PermissionDenied('You cannot delete this attachment.')
+    name = attachment.original_name
+    attachment.file.delete(save=False)
+    attachment.delete()
+    create_audit_log(alert, request.user, 'Evidence Removed', name, '', request)
+    messages.success(request, 'Evidence removed.')
+    return redirect('alerts:detail', alert_id=alert.id)
+
+
+@login_required
+@require_POST
+def alert_watcher_toggle(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    watcher, created = AlertWatcher.objects.get_or_create(
+        alert=alert, user=request.user, defaults={'added_by': request.user},
+    )
+    if not created:
+        watcher.delete()
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'is_watching': created})
+    messages.success(request, 'Watching alert.' if created else 'Stopped watching alert.')
+    return redirect('alerts:detail', alert_id=alert.id)
+
+
+@login_required
+@require_POST
+def alert_watcher_add(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    user_id = request.POST.get('user_id')
+    user = get_object_or_404(User, id=user_id)
+    AlertWatcher.objects.get_or_create(alert=alert, user=user, defaults={'added_by': request.user})
+    create_audit_log(alert, request.user, 'Watcher Added', '', user.username, request)
+    Notification.objects.create(
+        user=user, message=f"{request.user.username} added you as a watcher on alert #{alert.id}",
+        link=reverse('alerts:detail', args=[alert.id]),
+    )
+    messages.success(request, f'{user.username} added as watcher.')
+    return redirect('alerts:detail', alert_id=alert.id)
+
+
+@login_required
+@require_POST
+def alert_watcher_remove(request, alert_id, user_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    AlertWatcher.objects.filter(alert=alert, user_id=user_id).delete()
+    messages.success(request, 'Watcher removed.')
+    return redirect('alerts:detail', alert_id=alert.id)
+
+
+@login_required
+def alert_related(request, alert_id):
+    """JSON list of alerts that correlate with the given alert."""
+    alert = get_object_or_404(Alert, id=alert_id)
+    related = find_related_alerts(alert)
+    data = [
+        {
+            'id': a.id,
+            'name': a.alert_name,
+            'severity': a.severity,
+            'status': a.status,
+            'rule_id': a.rule_id,
+            'source_ip': a.source_ip,
+            'alert_time': a.alert_time.isoformat() if a.alert_time else '',
+            'relation_score': getattr(a, 'relation_score', 0),
+            'url': reverse('alerts:detail', args=[a.id]),
+        }
+        for a in related
+    ]
+    return JsonResponse({'related': data})
+
+
+@login_required
+@permission_required('can_change_status')
+@require_POST
+def alert_merge(request, alert_id):
+    primary = get_object_or_404(Alert, id=alert_id)
+    ids = request.POST.getlist('merge_ids')
+    if not ids:
+        messages.error(request, 'Select at least one alert to merge.')
+        return redirect('alerts:detail', alert_id=primary.id)
+    duplicates = list(Alert.objects.filter(id__in=ids).exclude(id=primary.id))
+    merged = merge_alerts(primary, duplicates, request.user, request)
+    if merged:
+        messages.success(request, f'Merged {len(merged)} alert(s) into this one.')
+    else:
+        messages.info(request, 'Nothing to merge.')
+    return redirect('alerts:detail', alert_id=primary.id)
+
+
+@login_required
+@permission_required('can_change_status')
+@require_POST
+def alert_unmerge(request, alert_id):
+    alert = get_object_or_404(Alert, id=alert_id)
+    if unmerge_alert(alert, request.user, request):
+        messages.success(request, 'Alert unmerged and returned to the queue.')
+    else:
+        messages.info(request, 'This alert is not merged.')
+    return redirect('alerts:detail', alert_id=alert.id)
+
+
+@login_required
+@permission_required('can_change_verdict')
+@require_POST
+def alert_report_fp(request, alert_id):
+    """Phase 9: record a false-positive report and mark the alert verdict."""
+    alert = get_object_or_404(Alert, id=alert_id)
+    reason = (request.POST.get('reason') or '').strip()
+    FalsePositiveReport.objects.create(
+        alert=alert,
+        rule_id=alert.rule_id or '',
+        reason=reason,
+        reported_by=request.user,
+    )
+    alert.verdict = 'False Positive'
+    alert.save(update_fields=['verdict'], recalc_sla=False)
+    create_audit_log(
+        alert, request.user, 'FP Reported',
+        f'False positive reported: {reason}' if reason else 'False positive reported',
+        request,
+    )
+    messages.success(request, 'Reported as false positive. This feeds the rule-tuning dashboard.')
+    return redirect('alerts:detail', alert_id=alert.id)
 

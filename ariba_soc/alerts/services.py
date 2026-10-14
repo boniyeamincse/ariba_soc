@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.core.mail import send_mail
 from django.conf import settings
 from django.urls import reverse
+from django.db.models import Q
 from django.contrib.auth.models import User
 from settings_manager.models import NotificationSetting, AlarmSetting, AlarmSystemSetting, SystemSetting
 from .models import Alert, AlertComment, AlertAuditLog, Notification
@@ -160,6 +161,63 @@ def _notify_escalation(alert, reason=''):
         pass
 
 
+def notify_sla_breach(alert):
+    """Dispatch in-app + email notifications when an alert breaches its SLA.
+
+    Recipients: the assignee (if any), plus every active NotificationSetting
+    configured for the SLA_BREACH event. Falls back to SOC managers/admins when
+    nothing is configured. Best-effort: never raises.
+    """
+    try:
+        link = reverse('alerts:detail', args=[alert.id])
+        phase = 'acknowledgement' if alert.sla_breach_phase == 'ACK' else 'resolution'
+        msg = (
+            f"SLA BREACH ({phase}): '{alert.alert_name}' [{alert.severity}] "
+            f"has breached its {phase} SLA."
+        )
+
+        recipients = set()
+        if alert.assignee:
+            recipients.add(alert.assignee)
+
+        channel_settings = list(NotificationSetting.objects.filter(event_type='SLA_BREACH', is_active=True))
+        for setting in channel_settings:
+            if setting.recipient_user_id:
+                recipients.add(setting.recipient_user)
+            elif setting.recipient_role:
+                for u in User.objects.filter(is_active=True, analyst_profile__role=setting.recipient_role):
+                    recipients.add(u)
+
+        if not recipients:
+            recipients.update(
+                User.objects.filter(is_active=True, analyst_profile__role__in=['SOC_MGR', 'SOC_ENG', 'ADMIN'])
+            )
+
+        sent = 0
+        subject = f'[Ariba SOC] SLA Breach: {alert.alert_name}'
+        for user in recipients:
+            if user is None:
+                continue
+            if _pref_allows(user, 'SLA_BREACH', 'DASHBOARD'):
+                Notification.objects.create(user=user, message=msg, link=link)
+            if user.email and _pref_allows(user, 'SLA_BREACH', 'EMAIL'):
+                send_mail(
+                    subject,
+                    f'{msg}\n\nSeverity: {alert.severity}\nSLA phase breached: {phase}\n'
+                    f'SLA due: {alert.sla_due_at}\n\nPlease check your dashboard for details.',
+                    settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=True,
+                )
+            sent += 1
+
+        for setting in channel_settings:
+            if setting.channel in ('TEAMS', 'SLACK', 'WEBHOOK') and getattr(setting, 'webhook_url', ''):
+                _post_webhook(setting.channel, setting.webhook_url, 'SLA_BREACH', subject, msg, link, alert)
+
+        return sent
+    except Exception:
+        return 0
+
+
 def _get_alarm_recipients():
     stored_roles = SystemSetting.get_setting('settings_allowed_roles', '')
     if stored_roles:
@@ -213,6 +271,7 @@ def assign_alert(alert, user, assignee=None, request=None, team=None):
     alert.assigned_at = timezone.now()
     if alert.status == 'New':
         alert.status = 'In Progress'
+    if not alert.acknowledged_at:
         alert.acknowledged_at = timezone.now()
     alert.save()
     new_label = str(assignee.username if assignee else (team.name if team else ''))
@@ -321,6 +380,16 @@ def ingest_or_aggregate_alert(data):
         data['risk_score'] = float(data.get('severity_score') or base_map.get(data.get('severity', 'Medium'), 50))
 
     alert = Alert.objects.create(**data)
+    apply_routing_rules(alert)
+    try:
+        from wazuh_integration.enrichment_service import EnrichmentService
+        EnrichmentService.enrich_alert(alert)
+        alert.save(update_fields=[
+            'enrichment_data', 'enrichment_status',
+            'enrichment_updated_at', 'enrichment_error',
+        ])
+    except Exception:
+        logger.exception('Enrichment failed during ingest for alert %s', alert.id)
     return alert, True
 
 
@@ -518,6 +587,306 @@ def recalculate_alerts_risk_score():
         alert.save(update_fields=['asset', 'asset_criticality', 'risk_score', 'priority', 'severity', 'is_incident_candidate'])
         count += 1
     return count
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Auto-assignment / routing rule engine
+# ---------------------------------------------------------------------------
+
+def pick_least_loaded_analyst(role):
+    """Return the active analyst with ``role`` handling the fewest open alerts."""
+    from django.db.models import Count, Q
+    from .models import TERMINAL_STATUSES
+    return (
+        User.objects
+        .filter(is_active=True, analyst_profile__role=role, analyst_profile__is_active=True)
+        .annotate(open_alerts=Count(
+            'assigned_alerts',
+            filter=~Q(assigned_alerts__status__in=TERMINAL_STATUSES),
+        ))
+        .order_by('open_alerts', 'id')
+        .first()
+    )
+
+
+def apply_routing_rules(alert, actor=None):
+    """Assign a newly-ingested alert using ``AlertRoutingRule`` order.
+
+    Rules are evaluated by ascending priority; the first matching rule assigns
+    the alert (to a user, or the least-loaded member of a role). When a rule has
+    ``stop_on_match`` evaluation stops, otherwise lower-priority rules may
+    further override the assignment. The alert is never acknowledged here so
+    acknowledgement-SLA tracking still applies.
+
+    Returns the last matched rule, or ``None`` when nothing matched.
+    """
+    from django.db.models import F
+    from settings_manager.models import AlertRoutingRule
+    from .models import TERMINAL_STATUSES
+
+    if alert.pk is None:
+        alert.save()
+    if alert.assignee_id or alert.status in TERMINAL_STATUSES:
+        return None
+
+    rules = (AlertRoutingRule.objects
+             .filter(is_active=True)
+             .select_related('assignee')
+             .order_by('priority', 'id'))
+
+    matched_rule = None
+    for rule in rules:
+        try:
+            matched = rule.matches(alert)
+        except Exception:
+            continue
+        if not matched:
+            continue
+
+        target_user = rule.assignee
+        if target_user is None and rule.assign_team:
+            target_user = pick_least_loaded_analyst(rule.assign_team)
+
+        if target_user is not None:
+            alert.assignee = target_user
+            alert.assigned_at = timezone.now()
+            profile = getattr(target_user, 'analyst_profile', None)
+            if not alert.assigned_team and profile and profile.soc_team:
+                alert.assigned_team = profile.soc_team
+                alert.current_owner_team = profile.soc_team.tier
+
+        if rule.assign_team:
+            alert.current_owner_team = rule.assign_team
+            if rule.assign_team in ('L1', 'L2', 'L3'):
+                alert.current_tier = rule.assign_team
+
+        alert.save()
+        create_audit_log(alert, actor, 'Assigned', 'Unassigned',
+                         f'Auto-routed by rule: {rule.name}', None)
+        AlertRoutingRule.objects.filter(pk=rule.pk).update(
+            match_count=F('match_count') + 1, updated_at=timezone.now(),
+        )
+        matched_rule = rule
+
+        if rule.stop_on_match:
+            break
+
+    return matched_rule
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Multi-channel notification dispatch
+# ---------------------------------------------------------------------------
+
+def _pref_allows(user, event_type, channel):
+    """Return True unless the user opted out of this channel/event."""
+    if user is None:
+        return False
+    pref = getattr(user, 'notification_preference', None)
+    if pref is None:
+        return True
+    return pref.is_channel_enabled(channel) and not pref.is_event_muted(event_type)
+
+
+def _build_webhook_payload(channel, event_type, subject, message, link, alert=None):
+    alert_payload = {}
+    if alert is not None:
+        alert_payload = {
+            'id': alert.id,
+            'name': alert.alert_name,
+            'severity': alert.severity,
+            'status': alert.status,
+            'rule_id': alert.rule_id,
+            'hostname': alert.hostname,
+            'source_ip': str(alert.source_ip or ''),
+        }
+    if channel == 'SLACK':
+        text = f'*{subject}*\n{message}'
+        if link:
+            text += f'\n<{link}|Open alert>'
+        return {'text': text}
+    if channel == 'TEAMS':
+        payload = {
+            '@type': 'MessageCard',
+            '@context': 'http://schema.org/extensions',
+            'summary': subject,
+            'title': subject,
+            'text': message,
+        }
+        if link:
+            payload['potentialAction'] = [{
+                '@type': 'OpenUri',
+                'name': 'Open Alert',
+                'targets': [{'os': 'default', 'uri': link}],
+            }]
+        return payload
+    return {
+        'event': event_type,
+        'subject': subject,
+        'message': message,
+        'link': link,
+        'alert': alert_payload,
+    }
+
+
+def _post_webhook(channel, url, event_type, subject, message, link, alert=None, timeout=5):
+    """POST a channel-formatted JSON payload to ``url``. Best-effort."""
+    import requests
+    try:
+        payload = _build_webhook_payload(channel, event_type, subject, message, link, alert)
+        requests.post(url, json=payload, timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+
+def send_notification(event_type, subject, message, link='', alert=None, extra_recipients=None):
+    """Dispatch a notification across every active channel configured for ``event_type``.
+
+    Channels: DASHBOARD (in-app), EMAIL, and webhook-based TEAMS / SLACK /
+    WEBHOOK. Per-user preferences are respected for DASHBOARD/EMAIL. Webhook
+    channels are per-setting (one POST each). Best-effort: never raises.
+
+    Returns a dict of counts: ``{'dashboard', 'email', 'webhook', 'skipped'}``.
+    """
+    from settings_manager.models import NotificationSetting
+    from .models import Notification
+
+    result = {'dashboard': 0, 'email': 0, 'webhook': 0, 'skipped': 0}
+    try:
+        settings_qs = NotificationSetting.objects.filter(event_type=event_type, is_active=True)
+
+        for setting in settings_qs:
+            if setting.recipient_user_id:
+                recipients = [setting.recipient_user]
+            elif setting.recipient_role:
+                recipients = list(User.objects.filter(
+                    is_active=True, analyst_profile__role=setting.recipient_role,
+                ))
+            else:
+                recipients = []
+            if extra_recipients:
+                recipients = list({*(recipients or []), *extra_recipients})
+
+            if setting.channel == 'DASHBOARD':
+                for user in recipients:
+                    if _pref_allows(user, event_type, 'DASHBOARD'):
+                        Notification.objects.create(user=user, message=message, link=link)
+                        result['dashboard'] += 1
+                    else:
+                        result['skipped'] += 1
+            elif setting.channel == 'EMAIL':
+                for user in recipients:
+                    if user.email and _pref_allows(user, event_type, 'EMAIL'):
+                        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=True)
+                        result['email'] += 1
+                    else:
+                        result['skipped'] += 1
+            elif setting.channel in ('TEAMS', 'SLACK', 'WEBHOOK'):
+                url = getattr(setting, 'webhook_url', '') or ''
+                if url and _post_webhook(setting.channel, url, event_type, subject, message, link, alert):
+                    result['webhook'] += 1
+                else:
+                    result['skipped'] += 1
+        return result
+    except Exception:
+        return result
+
+
+def find_related_alerts(alert, limit=15, days=7):
+    """Return alerts sharing correlation keys with ``alert``.
+
+    Matches on any of: source/destination IP, agent id, rule id, MITRE id or
+    hostname, within a recent time window.  Alerts already merged (in either
+    direction) are excluded so the merge candidate list stays clean.
+    """
+    window_start = (alert.alert_time or timezone.now()) - timezone.timedelta(days=days)
+    q = Q()
+    if alert.source_ip:
+        q |= Q(source_ip=alert.source_ip)
+    if alert.destination_ip:
+        q |= Q(destination_ip=alert.destination_ip)
+    if alert.agent_id:
+        q |= Q(agent_id=alert.agent_id)
+    if alert.rule_id:
+        q |= Q(rule_id=alert.rule_id)
+    if alert.mitre_id:
+        q |= Q(mitre_id=alert.mitre_id)
+    if alert.hostname:
+        q |= Q(hostname=alert.hostname)
+    if not q:
+        return []
+
+    candidates = (
+        Alert.objects.filter(q, alert_time__gte=window_start)
+        .exclude(id=alert.id)
+        .exclude(merged_into__isnull=False)
+        .filter(merged_children__isnull=True)
+        .distinct()
+    )
+
+    def _score(other):
+        score = 0
+        if alert.source_ip and other.source_ip == alert.source_ip:
+            score += 3
+        if alert.rule_id and other.rule_id == alert.rule_id:
+            score += 3
+        if alert.destination_ip and other.destination_ip == alert.destination_ip:
+            score += 2
+        if alert.agent_id and other.agent_id == alert.agent_id:
+            score += 2
+        if alert.mitre_id and other.mitre_id == alert.mitre_id:
+            score += 1
+        if alert.hostname and other.hostname == alert.hostname:
+            score += 1
+        return score
+
+    ranked = sorted(candidates, key=lambda a: (-_score(a), -a.alert_time.timestamp()))
+    for item in ranked[:limit]:
+        item.relation_score = _score(item)
+    return ranked[:limit]
+
+
+def merge_alerts(primary, duplicates, user, request=None):
+    """Merge ``duplicates`` into ``primary`` as correlated/duplicate events."""
+    merged = []
+    for dup in duplicates:
+        if dup.id == primary.id or dup.merged_into_id == primary.id:
+            continue
+        dup.merged_into = primary
+        dup.status = 'Closed'
+        dup.verdict = 'Duplicate'
+        dup.closed_at = dup.closed_at or timezone.now()
+        dup.save(update_fields=['merged_into', 'status', 'verdict', 'closed_at', 'updated_at'], recalc_sla=False)
+        create_audit_log(
+            dup, user, 'Merged Into Alert',
+            old_value='', new_value=f'#{primary.id} {primary.alert_name}', request=request,
+        )
+        merged.append(dup)
+    if merged:
+        ids = ', '.join(f'#{m.id}' for m in merged)
+        create_audit_log(
+            primary, user, 'Merged Duplicates',
+            old_value='', new_value=ids, request=request,
+        )
+    return merged
+
+
+def unmerge_alert(alert, user, request=None):
+    """Reverse a merge, restoring an alert to the active queue."""
+    if not alert.merged_into_id:
+        return False
+    parent_id = alert.merged_into_id
+    alert.merged_into = None
+    if alert.status == 'Closed' and alert.verdict == 'Duplicate':
+        alert.status = 'New'
+        alert.verdict = 'None'
+        alert.closed_at = None
+    alert.save(update_fields=['merged_into', 'status', 'verdict', 'closed_at', 'updated_at'])
+    create_audit_log(alert, user, 'Unmerged From Alert', old_value=f'#{parent_id}', new_value='', request=request)
+    return True
+
+
 
 
 

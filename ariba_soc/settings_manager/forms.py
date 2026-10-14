@@ -6,7 +6,7 @@ from .models import (
     AlertSourceSettings, SeveritySettings, StatusSettings, VerdictSettings,
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
     DashboardSetting, AuditLogSetting, AlarmSetting, AlarmSystemSetting, SystemSetting, IOCEnrichmentSetting,
-    AlertAggregationSetting, AlertSuppressionRule
+    AlertAggregationSetting, AlertSuppressionRule, AlertRoutingRule, UserNotificationPreference, Playbook
 )
 
 class UserManagementForm(UserCreationForm):
@@ -222,7 +222,7 @@ class EscalationRuleForm(forms.ModelForm):
 class NotificationSettingForm(forms.ModelForm):
     class Meta:
         model = NotificationSetting
-        fields = ['name', 'event_type', 'channel', 'recipient_role', 'recipient_user', 'is_active']
+        fields = ['name', 'event_type', 'channel', 'recipient_role', 'recipient_user', 'webhook_url', 'is_active']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -233,6 +233,27 @@ class NotificationSettingForm(forms.ModelForm):
         self.fields['channel'].widget.attrs.update({'class': 'form-select form-select-sm'})
         self.fields['recipient_role'].widget.attrs.update({'class': 'form-select form-select-sm'})
         self.fields['recipient_user'].widget.attrs.update({'class': 'form-select form-select-sm'})
+
+
+class UserNotificationPreferenceForm(forms.ModelForm):
+    muted_events = forms.MultipleChoiceField(
+        choices=NotificationSetting.NOTIFICATION_EVENTS,
+        required=False,
+        widget=forms.SelectMultiple(attrs={'class': 'form-select form-select-sm'}),
+    )
+
+    class Meta:
+        model = UserNotificationPreference
+        fields = ['email_enabled', 'dashboard_enabled', 'teams_enabled', 'slack_enabled', 'webhook_enabled', 'muted_events']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, f in self.fields.items():
+            if isinstance(f.widget, forms.CheckboxInput):
+                f.widget.attrs.update({'class': 'form-check-input'})
+            elif not f.widget.attrs.get('class'):
+                f.widget.attrs.update({'class': 'form-control form-control-sm'})
+
 
 class ReportSettingForm(forms.ModelForm):
     class Meta:
@@ -355,6 +376,31 @@ class AlertSuppressionRuleForm(forms.ModelForm):
                 field.widget.attrs.update({'class': 'form-control form-control-sm'})
 
 
+class AlertRoutingRuleForm(forms.ModelForm):
+    class Meta:
+        model = AlertRoutingRule
+        fields = [
+            'name', 'priority', 'is_active',
+            'match_severity', 'match_min_risk_score', 'match_rule_id',
+            'match_agent_id', 'match_source_ip', 'match_hostname',
+            'match_username', 'match_alert_name', 'match_source',
+            'match_mitre_tactic', 'is_regex',
+            'assignee', 'assign_team', 'stop_on_match',
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['assignee'].required = False
+        self.fields['assignee'].queryset = User.objects.filter(is_active=True).order_by('username')
+        for name, field in self.fields.items():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.update({'class': 'form-check-input'})
+            elif isinstance(field.widget, forms.Select):
+                field.widget.attrs.update({'class': 'form-select form-select-sm'})
+            else:
+                field.widget.attrs.update({'class': 'form-control form-control-sm'})
+
+
 class SystemSettingForm(forms.ModelForm):
     class Meta:
         model = SystemSetting
@@ -432,3 +478,31 @@ class ShiftHandoverAcknowledgeForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['acknowledgment_comment'].widget.attrs.update({'class': 'form-control form-control-sm'})
         self.fields['acknowledgment_comment'].required = True
+
+
+class PlaybookForm(forms.ModelForm):
+    class Meta:
+        model = Playbook
+        fields = [
+            'title', 'priority', 'is_active',
+            'match_rule_id', 'match_mitre_tactic', 'match_severity', 'match_source',
+            'steps', 'references',
+        ]
+        widgets = {
+            'steps': forms.Textarea(attrs={'rows': 8, 'placeholder': 'One response step per line...'}),
+            'references': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Runbook links, threat-intel references...'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.update({'class': 'form-check-input'})
+            else:
+                field.widget.attrs.update({'class': 'form-control form-control-sm'})
+
+    def clean(self):
+        cleaned = super().clean()
+        if not any(cleaned.get(k) for k in ('match_rule_id', 'match_mitre_tactic', 'match_severity', 'match_source')):
+            raise forms.ValidationError('At least one match key (rule id, MITRE tactic, severity or source) is required.')
+        return cleaned

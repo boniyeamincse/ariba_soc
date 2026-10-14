@@ -70,6 +70,7 @@ class AlertCommentForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['comment'].widget.attrs.update({'rows': 3, 'class': 'form-control', 'placeholder': 'Add your comment...'})
+        self.fields['comment_type'].required = False
         self.fields['comment_type'].widget.attrs.update({'class': 'form-select'})
 
 

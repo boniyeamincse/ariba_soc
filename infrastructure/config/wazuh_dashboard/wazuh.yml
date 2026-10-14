@@ -5,3 +5,4 @@ hosts:
       username: wazuh-wui
       password: "WazuhApi@12345"
       run_as: true
+enrollment.dns: "localhost"

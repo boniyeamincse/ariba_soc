@@ -42,6 +42,7 @@ urlpatterns = [
     path('escalation/<int:pk>/toggle/', views.escalation_toggle, name='escalation_toggle'),
     path('escalation/<int:pk>/delete/', views.escalation_delete, name='escalation_delete'),
     path('notifications/', views.notification_settings, name='notifications'),
+    path('notifications/preferences/', views.notification_preferences, name='notification_preferences'),
     path('notifications/<int:pk>/edit/', views.notification_edit, name='notification_edit'),
     path('notifications/<int:pk>/toggle/', views.notification_toggle, name='notification_toggle'),
     path('alarms/', views.alarm_settings, name='alarms'),
@@ -74,5 +75,14 @@ urlpatterns = [
     path('suppression/<int:pk>/edit/', views.suppression_rule_edit, name='suppression_rule_edit'),
     path('suppression/<int:pk>/toggle/', views.suppression_rule_toggle, name='suppression_rule_toggle'),
     path('suppression/<int:pk>/delete/', views.suppression_rule_delete, name='suppression_rule_delete'),
+    path('routing/', views.routing_rules, name='routing_rules'),
+    path('routing/<int:pk>/edit/', views.routing_rule_edit, name='routing_rule_edit'),
+    path('routing/<int:pk>/toggle/', views.routing_rule_toggle, name='routing_rule_toggle'),
+    path('routing/<int:pk>/delete/', views.routing_rule_delete, name='routing_rule_delete'),
+    path('playbooks/', views.playbook_list, name='playbook_list'),
+    path('playbooks/<int:pk>/edit/', views.playbook_edit, name='playbook_edit'),
+    path('playbooks/<int:pk>/toggle/', views.playbook_toggle, name='playbook_toggle'),
+    path('playbooks/<int:pk>/delete/', views.playbook_delete, name='playbook_delete'),
+    path('noisy-rules/', views.noisy_rules, name='noisy_rules'),
 ]
 

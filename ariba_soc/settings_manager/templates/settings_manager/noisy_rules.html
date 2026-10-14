@@ -1,0 +1,69 @@
+{% extends 'settings_manager/settings_base.html' %}
+
+{% block settings_content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="m-0"><i class="bi bi-bug text-warning"></i> Noisy Rules / False-Positive Tuning</h4>
+            <p class="settings-page-desc mb-0">Detection rules with the most false-positive reports over the last {{ window_days }} days. Use this to tune, suppress or document a rule with a playbook.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'settings:playbook_list' %}" class="btn btn-ariba-primary btn-sm">
+                <i class="bi bi-journal-text"></i> Playbooks
+            </a>
+            <a href="{% url 'settings:suppression_rules' %}" class="btn btn-ariba-outline btn-sm">
+                <i class="bi bi-funnel"></i> Suppression Rules
+            </a>
+        </div>
+    </div>
+
+    <div class="ariba-card p-3">
+        <div class="table-responsive">
+            <table class="table ariba-table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Rule ID</th>
+                        <th>FP Reports</th>
+                        <th>Total Alerts ({{ window_days }}d)</th>
+                        <th>FP Ratio</th>
+                        <th>Playbook</th>
+                        <th style="width:120px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td><span class="badge bg-dark border">{{ row.rule_id }}</span></td>
+                        <td><span class="badge bg-warning text-dark">{{ row.fp_count }}</span></td>
+                        <td>{{ row.total }}</td>
+                        <td>
+                            {% widthratio row.ratio 1 100 as pct %}
+                            <div class="progress" style="height: 18px; min-width: 120px;">
+                                <div class="progress-bar {% if pct|add:0 >= 50 %}bg-danger{% elif pct|add:0 >= 20 %}bg-warning{% else %}bg-secondary{% endif %}" role="progressbar" style="width: {{ pct }}%;">{{ pct }}%</div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if row.playbook %}
+                            <a href="{% url 'settings:playbook_edit' row.playbook.id %}" class="badge bg-success text-decoration-none"><i class="bi bi-journal-check"></i> {{ row.playbook.title }}</a>
+                            {% else %}
+                            <span class="text-muted small">none</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'settings:playbook_list' %}" class="btn btn-sm btn-ariba-outline"><i class="bi bi-plus-lg"></i> Playbook</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            <i class="bi bi-emoji-smile fs-3 d-block mb-2"></i>
+                            No false positives reported in the last {{ window_days }} days.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

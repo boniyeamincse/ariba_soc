@@ -4,9 +4,8 @@ from .models import (
     SLASettings, EscalationRule, NotificationSetting, ReportSetting,
     DashboardSetting, AuditLogSetting, SystemSetting, SettingAuditLog,
     AlarmSetting, AlarmSystemSetting, IOCEnrichmentSetting, AlertAggregationSetting,
-    AlertSuppressionRule
+    AlertSuppressionRule, AlertRoutingRule, UserNotificationPreference, Playbook
 )
-
 @admin.register(AlertSourceSettings)
 class AlertSourceSettingsAdmin(admin.ModelAdmin): list_display = ['name', 'source_type', 'is_active']
 
@@ -69,5 +68,26 @@ class AlertSuppressionRuleAdmin(admin.ModelAdmin):
     list_display = ['name', 'action', 'rule_id', 'source_ip', 'hostname', 'is_active', 'match_count', 'expires_at']
     list_filter = ['action', 'is_active']
     search_fields = ['name', 'rule_id', 'source_ip', 'destination_ip', 'hostname', 'agent_id', 'username']
+
+
+@admin.register(AlertRoutingRule)
+class AlertRoutingRuleAdmin(admin.ModelAdmin):
+    list_display = ['name', 'priority', 'assignee', 'assign_team', 'match_severity', 'is_active', 'match_count', 'created_at']
+    list_filter = ['is_active', 'assign_team', 'is_regex']
+    search_fields = ['name', 'match_rule_id', 'match_hostname', 'match_username', 'match_source_ip']
+
+
+@admin.register(UserNotificationPreference)
+class UserNotificationPreferenceAdmin(admin.ModelAdmin):
+    list_display = ['user', 'email_enabled', 'dashboard_enabled', 'slack_enabled', 'teams_enabled', 'webhook_enabled', 'updated_at']
+    search_fields = ['user__username', 'user__email']
+
+
+@admin.register(Playbook)
+class PlaybookAdmin(admin.ModelAdmin):
+    list_display = ['title', 'priority', 'match_rule_id', 'match_mitre_tactic', 'match_severity', 'is_active', 'updated_at']
+    list_filter = ['is_active', 'match_severity']
+    search_fields = ['title', 'match_rule_id', 'match_mitre_tactic', 'match_source']
+
 
 

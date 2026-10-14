@@ -49,6 +49,15 @@ ESCALATION_PATH = {
     'L2': 'L3',
 }
 
+# States from which the SLA-breach worker may auto-escalate an alert one tier
+# up. This is intentionally more permissive than ALLOWED_TRANSITIONS because a
+# system action should be able to escalate a breached alert that was never
+# claimed (NEW/QUEUED_L1) as well as one already in progress.
+SYSTEM_ESCALATION_SOURCE_STATES = {
+    'NEW', 'QUEUED_L1', 'IN_PROGRESS_L1', 'RETURNED_TO_L1',
+    'IN_PROGRESS_L2', 'RETURNED_TO_L2',
+}
+
 
 class WorkflowError(Exception):
     """Raised when a workflow transition is invalid."""
@@ -518,3 +527,60 @@ def _acquire_lock(alert_id):
         return Alert.objects.select_for_update().get(id=alert_id)
     except Alert.DoesNotExist:
         raise WorkflowError('Alert not found.', 404)
+
+
+def system_auto_escalate(alert, reason='SLA breach auto-escalation', request=None):
+    """Auto-escalate an alert one tier up as a *system* action.
+
+    Unlike ``escalate_alert`` this bypasses actor role checks (there is no human
+    actor) and is safe to call from the SLA-breach worker. Returns the alert on
+    success, or ``None`` when the alert cannot be escalated (already at L3, or
+    the workflow state does not permit an escalation transition).
+    """
+    source_tier = alert.current_tier or 'L1'
+    target = ESCALATION_PATH.get(source_tier)
+    if target not in ('L2', 'L3'):
+        return None
+    workflow_target_state = f'PENDING_{target}_ACCEPTANCE'
+    if alert.workflow_state not in SYSTEM_ESCALATION_SOURCE_STATES:
+        return None
+
+    with transaction.atomic():
+        old_state = alert.workflow_state
+        AlertEscalation.objects.create(
+            alert=alert,
+            source_tier=source_tier,
+            target_tier=target,
+            escalated_by=None,
+            escalation_reason=reason,
+            escalation_status='PENDING',
+            escalated_at=timezone.now(),
+        )
+        alert.current_tier = target
+        alert.current_owner_team = target
+        alert.escalated_from_tier = source_tier
+        alert.escalated_to_tier = target
+        alert.escalation_status = 'pending_acceptance'
+        alert.escalation_reason = reason
+        alert.escalated_at = alert.escalated_at or timezone.now()
+        alert.is_escalated = True
+        alert.workflow_state = workflow_target_state
+        alert.workflow_version += 1
+        alert.status_updated_at = timezone.now()
+        alert.save()
+
+        AlertComment.objects.create(
+            alert=alert, user=None,
+            comment=f'Auto-escalated {source_tier} → {target} (system): {reason}',
+            comment_type='Escalation Note',
+        )
+        _create_transition(alert, old_state, workflow_target_state, 'auto_escalate',
+                           None, reason=reason, request=request)
+        _create_audit_log(alert, None, 'Escalated', f'{source_tier} → {target}', reason, request)
+
+        from django.urls import reverse
+        link = reverse('alerts:detail', args=[alert.id])
+        msg = f"Alert '{alert.alert_name}' auto-escalated from {source_tier} to {target} due to SLA breach."
+        _notify_tier_users(target, msg, link=link)
+
+    return alert
