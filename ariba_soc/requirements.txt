@@ -8,4 +8,4 @@ gunicorn>=21.2
 python-decouple>=3.8
 redis>=5.0
 cryptography>=42.0
-xhtml2pdf>=0.2
+xhtml2pdf>=0.2.27
