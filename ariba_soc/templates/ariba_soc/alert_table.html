@@ -12,6 +12,228 @@
         </div>
     </div>
 
+    <!-- Severity KPI Overview Cards (Ultra-Clean Cyber Cockpit Strip) -->
+    <style>
+        .severity-kpi-strip {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 0.65rem;
+            margin-bottom: 0.85rem;
+        }
+        @media (max-width: 991px) {
+            .severity-kpi-strip {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+        @media (max-width: 576px) {
+            .severity-kpi-strip {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        .kpi-card-item {
+            background: var(--bg-card, #131a2b);
+            border: 1px solid var(--border-color, #1e2d4a);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 62px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+        }
+        .kpi-card-item:hover {
+            background: var(--bg-card-hover, #1a2440);
+            border-color: rgba(56, 189, 248, 0.35);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+        }
+        .kpi-card-item .kpi-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary, #8896b8);
+            line-height: 1;
+        }
+        .kpi-card-item .kpi-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .kpi-card-item .kpi-body {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-top: 0.25rem;
+        }
+        .kpi-card-item .kpi-number {
+            font-size: 1.35rem;
+            font-weight: 700;
+            line-height: 1;
+            color: var(--text-primary, #e0e6f0);
+            letter-spacing: -0.5px;
+        }
+        .kpi-card-item .kpi-filter-tag {
+            font-size: 0.68rem;
+            color: var(--text-muted, #5a6a8a);
+            transition: color 0.2s;
+        }
+        .kpi-card-item:hover .kpi-filter-tag {
+            color: var(--accent-cyan, #06b6d4);
+        }
+        /* Active Filter State */
+        .kpi-card-item.kpi-active {
+            border-color: var(--kpi-color, var(--accent-cyan)) !important;
+            background: rgba(19, 26, 43, 0.95);
+            box-shadow: 0 0 14px var(--kpi-glow, rgba(6, 182, 212, 0.25));
+        }
+        .kpi-card-item.kpi-active::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--kpi-color, var(--accent-cyan));
+        }
+        .kpi-card-item.kpi-active .kpi-filter-tag {
+            color: var(--kpi-color, var(--accent-cyan));
+            font-weight: 600;
+        }
+        /* Pulse for Critical when > 0 */
+        .critical-pulse-badge {
+            animation: critBeacon 2.5s infinite ease-in-out;
+        }
+        @keyframes critBeacon {
+            0%, 100% { opacity: 0.85; }
+            50% { opacity: 0.3; }
+        }
+    </style>
+
+    <div class="severity-kpi-strip">
+        <!-- 1. Total Alerts -->
+        <div class="kpi-card-item {% if not current_filters.severity %}kpi-active{% endif %}" 
+             style="--kpi-color: #06b6d4; --kpi-glow: rgba(6, 182, 212, 0.25);"
+             onclick="applySeverityFilter('')"
+             title="Show All Alerts (Clear Severity Filter)">
+            <div class="kpi-header">
+                <span><i class="bi bi-shield-shaded me-1 text-info"></i> Total Alerts</span>
+                <i class="bi bi-layers text-secondary" style="font-size: 0.8rem;"></i>
+            </div>
+            <div class="kpi-body">
+                <span class="kpi-number text-white">{{ severity_summary.total|default:0|intcomma }}</span>
+                <span class="kpi-filter-tag">{% if not current_filters.severity %}Active &bull; All{% else %}Show All &rarr;{% endif %}</span>
+            </div>
+        </div>
+
+        <!-- 2. Critical -->
+        <div class="kpi-card-item {% if current_filters.severity|lower == 'critical' %}kpi-active{% endif %}" 
+             style="--kpi-color: var(--severity-critical, #ef4444); --kpi-glow: rgba(239, 68, 68, 0.3);"
+             onclick="applySeverityFilter('Critical')"
+             title="Filter Critical Alerts">
+            <div class="kpi-header">
+                <span>
+                    <span class="kpi-dot bg-danger {% if severity_summary.critical > 0 %}critical-pulse-badge{% endif %}"></span>
+                    Critical
+                </span>
+                <i class="bi bi-exclamation-octagon-fill text-danger" style="font-size: 0.8rem;"></i>
+            </div>
+            <div class="kpi-body">
+                <span class="kpi-number" style="color: var(--severity-critical, #ef4444);">{{ severity_summary.critical|default:0|intcomma }}</span>
+                <span class="kpi-filter-tag">{% if current_filters.severity|lower == 'critical' %}Active &bull; Filtered{% else %}Filter &rarr;{% endif %}</span>
+            </div>
+        </div>
+
+        <!-- 3. High -->
+        <div class="kpi-card-item {% if current_filters.severity|lower == 'high' %}kpi-active{% endif %}" 
+             style="--kpi-color: var(--severity-high, #f97316); --kpi-glow: rgba(249, 115, 22, 0.3);"
+             onclick="applySeverityFilter('High')"
+             title="Filter High Severity Alerts">
+            <div class="kpi-header">
+                <span>
+                    <span class="kpi-dot" style="background: var(--severity-high, #f97316);"></span>
+                    High
+                </span>
+                <i class="bi bi-fire text-warning" style="font-size: 0.8rem;"></i>
+            </div>
+            <div class="kpi-body">
+                <span class="kpi-number" style="color: var(--severity-high, #f97316);">{{ severity_summary.high|default:0|intcomma }}</span>
+                <span class="kpi-filter-tag">{% if current_filters.severity|lower == 'high' %}Active &bull; Filtered{% else %}Filter &rarr;{% endif %}</span>
+            </div>
+        </div>
+
+        <!-- 4. Medium -->
+        <div class="kpi-card-item {% if current_filters.severity|lower == 'medium' %}kpi-active{% endif %}" 
+             style="--kpi-color: var(--severity-medium, #eab308); --kpi-glow: rgba(234, 179, 8, 0.3);"
+             onclick="applySeverityFilter('Medium')"
+             title="Filter Medium Severity Alerts">
+            <div class="kpi-header">
+                <span>
+                    <span class="kpi-dot" style="background: var(--severity-medium, #eab308);"></span>
+                    Medium
+                </span>
+                <i class="bi bi-shield-exclamation text-warning" style="font-size: 0.8rem;"></i>
+            </div>
+            <div class="kpi-body">
+                <span class="kpi-number" style="color: var(--severity-medium, #eab308);">{{ severity_summary.medium|default:0|intcomma }}</span>
+                <span class="kpi-filter-tag">{% if current_filters.severity|lower == 'medium' %}Active &bull; Filtered{% else %}Filter &rarr;{% endif %}</span>
+            </div>
+        </div>
+
+        <!-- 5. Low -->
+        <div class="kpi-card-item {% if current_filters.severity|lower == 'low' %}kpi-active{% endif %}" 
+             style="--kpi-color: var(--severity-low, #22c55e); --kpi-glow: rgba(34, 197, 94, 0.3);"
+             onclick="applySeverityFilter('Low')"
+             title="Filter Low Severity Alerts">
+            <div class="kpi-header">
+                <span>
+                    <span class="kpi-dot" style="background: var(--severity-low, #22c55e);"></span>
+                    Low
+                </span>
+                <i class="bi bi-info-circle-fill text-success" style="font-size: 0.8rem;"></i>
+            </div>
+            <div class="kpi-body">
+                <span class="kpi-number" style="color: var(--severity-low, #22c55e);">{{ severity_summary.low|default:0|intcomma }}</span>
+                <span class="kpi-filter-tag">{% if current_filters.severity|lower == 'low' %}Active &bull; Filtered{% else %}Filter &rarr;{% endif %}</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    function applySeverityFilter(sev) {
+        const sel = document.querySelector('select[name="severity"]');
+        if (sel) {
+            // Toggle off to show All if clicked again
+            if (sev && sel.value && sel.value.toLowerCase() === sev.toLowerCase()) {
+                sel.value = "";
+            } else {
+                sel.value = sev;
+            }
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+            return;
+        }
+        const url = new URL(window.location.href);
+        const curr = url.searchParams.get('severity') || '';
+        if (sev && curr.toLowerCase() !== sev.toLowerCase()) {
+            url.searchParams.set('severity', sev);
+        } else {
+            url.searchParams.delete('severity');
+        }
+        url.searchParams.delete('page');
+        window.location.href = url.toString();
+    }
+    </script>
+
     {% include 'ariba_soc/_alert_filters.html' %}
 
     <div id="bulkActionBar" class="ariba-card p-2 mb-2 d-none">

@@ -9,7 +9,7 @@ from django.http import JsonResponse, HttpResponse, FileResponse
 from django.core.exceptions import PermissionDenied
 from django.views.decorators.http import require_POST
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -111,6 +111,18 @@ def _apply_alert_filters(request):
     if date_to:
         alerts = alerts.filter(alert_time__lte=date_to)
 
+    # Calculate severity KPI summary counts for the current scope (before filtering by severity)
+    severity_summary = alerts.aggregate(
+        total=Count('id'),
+        critical=Count('id', filter=Q(severity__iexact='critical')),
+        high=Count('id', filter=Q(severity__iexact='high')),
+        medium=Count('id', filter=Q(severity__iexact='medium')),
+        low=Count('id', filter=Q(severity__iexact='low')),
+    )
+
+    if severity:
+        alerts = alerts.filter(severity__iexact=severity)
+
     allowed_sorts = ['alert_time', '-alert_time', 'severity', '-severity', 'status', '-status', 'verdict', '-verdict', 'alert_name', '-alert_name', 'wazuh_alert_id', '-wazuh_alert_id']
     if sort in allowed_sorts:
         alerts = alerts.order_by(sort)
@@ -123,13 +135,13 @@ def _apply_alert_filters(request):
         'date_from': date_from, 'date_to': date_to, 'sort': sort,
         'tag': tag, 'bookmarked': bookmarked,
     }
-    return alerts, filters, user_soc_team
+    return alerts, filters, user_soc_team, severity_summary
 
 
 @login_required
 @permission_required('can_view_alerts')
 def alert_table(request):
-    alerts, current_filters, user_soc_team = _apply_alert_filters(request)
+    alerts, current_filters, user_soc_team, severity_summary = _apply_alert_filters(request)
 
     paginator = Paginator(alerts, 25)
     page = request.GET.get('page', 1)
@@ -154,6 +166,7 @@ def alert_table(request):
         'current_filters': current_filters,
         'saved_filters': saved_filters,
         'is_paginated': alerts_page.has_other_pages(),
+        'severity_summary': severity_summary,
     }
     return render(request, 'ariba_soc/alert_table.html', context)
 
@@ -768,7 +781,7 @@ def recalculate_all_alerts_risk(request):
 @permission_required('can_view_alerts')
 def alert_export_csv(request):
     import csv
-    alerts, _, _ = _apply_alert_filters(request)
+    alerts, _, _, _ = _apply_alert_filters(request)
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="alerts_export.csv"'
     writer = csv.writer(response)
@@ -802,7 +815,7 @@ def alert_export_pdf(request):
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 
-    alerts, filters, _ = _apply_alert_filters(request)
+    alerts, filters, _, _ = _apply_alert_filters(request)
     total_count = alerts.count()
     limit = 500
     export_alerts = list(alerts[:limit])
