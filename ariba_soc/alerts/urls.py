@@ -37,6 +37,7 @@ urlpatterns = [
     path('assets/recalculate-risk/', views.recalculate_all_alerts_risk, name='recalculate_risk'),
     # Phase 6: export + saved filters
     path('export/csv/', views.alert_export_csv, name='export_csv'),
+    path('export/pdf/', views.alert_export_pdf, name='export_pdf'),
     path('saved-filters/save/', views.saved_filter_save, name='saved_filter_save'),
     path('saved-filters/<int:pk>/delete/', views.saved_filter_delete, name='saved_filter_delete'),
     # Phase 7: evidence attachments + watchers

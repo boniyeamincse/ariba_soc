@@ -65,7 +65,7 @@
                                 <i class="bi {% if is_bookmarked %}bi-star-fill{% else %}bi-star{% endif %}"></i>
                             </button>
                         </form>
-                        <a href="{% url 'alerts:pdf' alert.id %}" class="btn btn-sm btn-ariba-outline" title="Download PDF"><i class="bi bi-file-earmark-pdf"></i></a>
+                        <a href="{% url 'alerts:pdf' alert.id %}" class="btn btn-sm btn-ariba-outline" title="Download Ariba SOC Incident Report (PDF)"><i class="bi bi-file-earmark-pdf me-1"></i> PDF Report</a>
                         <button class="btn btn-sm btn-ariba-outline" data-bs-toggle="modal" data-bs-target="#editAlertModal"
                             data-alert-id="{{ alert.id }}"
                             data-assignee-id="{{ alert.assignee_id|default:'' }}"

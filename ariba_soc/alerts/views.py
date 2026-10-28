@@ -791,72 +791,376 @@ def alert_export_csv(request):
 
 @login_required
 @permission_required('can_view_alerts')
-def alert_pdf(request, alert_id):
+def alert_export_pdf(request):
+    """Export filtered alerts into an executive Ariba SOC PDF report."""
     import io
     from xml.sax.saxutils import escape
+    from django.utils import timezone
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+
+    alerts, filters, _ = _apply_alert_filters(request)
+    total_count = alerts.count()
+    limit = 500
+    export_alerts = list(alerts[:limit])
+
+    downloaded_by = request.user.get_full_name() or request.user.username
+    if request.user.email and request.user.email != downloaded_by:
+        downloaded_by_display = f"{downloaded_by} ({request.user.email})"
+    else:
+        downloaded_by_display = downloaded_by
+
+    download_time = timezone.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=landscape(A4),
+        topMargin=20 * mm,
+        bottomMargin=18 * mm,
+        leftMargin=14 * mm,
+        rightMargin=14 * mm,
+        title='Ariba SOC - Alerts Telemetry Report',
+    )
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        'AribaExpTitle',
+        parent=styles['Title'],
+        fontName='Helvetica-Bold',
+        fontSize=18,
+        leading=22,
+        textColor=colors.HexColor('#0f172a'),
+        alignment=0,
+    )
+    subtitle_style = ParagraphStyle(
+        'AribaExpSub',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor('#2563eb'),
+    )
+    meta_style = ParagraphStyle(
+        'AribaExpMeta',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=8,
+        leading=11,
+        textColor=colors.HexColor('#334155'),
+    )
+
+    story = [
+        Paragraph('ARIBA SOC', title_style),
+        Paragraph('SECURITY OPERATIONS CENTER &mdash; ALERTS TELEMETRY EXPORT REPORT', subtitle_style),
+        Spacer(1, 3),
+        HRFlowable(width='100%', thickness=1.5, color=colors.HexColor('#2563eb'), spaceAfter=6, spaceBefore=2),
+    ]
+
+    sev_counts = {'Critical': 0, 'High': 0, 'Medium': 0, 'Low': 0, 'Informational': 0}
+    for a in export_alerts:
+        sev_counts[a.severity] = sev_counts.get(a.severity, 0) + 1
+
+    meta_rows = [
+        [
+            Paragraph('<b>System:</b> Ariba SOC (Enterprise SIEM/SOAR)', meta_style),
+            Paragraph(f'<b>Downloaded By:</b> {escape(downloaded_by_display)}', meta_style),
+            Paragraph(f'<b>Exported Alerts:</b> {len(export_alerts)} (of {total_count} total)', meta_style),
+        ],
+        [
+            Paragraph('<b>Classification:</b> CONFIDENTIAL // TLP:AMBER', meta_style),
+            Paragraph(f'<b>Downloaded On:</b> {download_time}', meta_style),
+            Paragraph(f'<b>Severity Breakdown:</b> Crit: {sev_counts.get("Critical", 0)} | High: {sev_counts.get("High", 0)} | Med: {sev_counts.get("Medium", 0)} | Low: {sev_counts.get("Low", 0)}', meta_style),
+        ],
+    ]
+    meta_table = Table(meta_rows, colWidths=[80 * mm, 100 * mm, 89 * mm])
+    meta_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+        ('BOX', (0, 0), (-1, -1), 0.6, colors.HexColor('#cbd5e1')),
+        ('INNERGRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#e2e8f0')),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(meta_table)
+    story.append(Spacer(1, 8))
+
+    table_headers = ['ID', 'Alert Time', 'Severity', 'Status', 'Alert Name / Description', 'Agent / Host', 'Rule ID', 'Events']
+    table_data = [table_headers]
+
+    for a in export_alerts:
+        t_str = a.alert_time.strftime('%Y-%m-%d %H:%M') if a.alert_time else '—'
+        name_short = (a.alert_name[:55] + '...') if len(a.alert_name or '') > 55 else (a.alert_name or '—')
+        host_agent = a.agent_name or a.hostname or '—'
+        table_data.append([
+            str(a.id),
+            t_str,
+            str(a.severity),
+            str(a.status),
+            name_short,
+            host_agent,
+            str(a.rule_id or '—'),
+            str(a.event_count),
+        ])
+
+    table = Table(table_data, colWidths=[14 * mm, 30 * mm, 22 * mm, 24 * mm, 105 * mm, 34 * mm, 22 * mm, 18 * mm])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0f172a')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#cbd5e1')),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7.5),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+        ('TOPPADDING', (0, 0), (-1, -1), 2.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    story.append(table)
+
+    def draw_landscape_decorations(canvas, d):
+        canvas.saveState()
+        width, height = landscape(A4)
+        canvas.setFont('Helvetica-Bold', 8)
+        canvas.setFillColor(colors.HexColor('#1e40af'))
+        canvas.drawString(14 * mm, height - 10 * mm, 'ARIBA SOC')
+        canvas.setFont('Helvetica', 7.5)
+        canvas.setFillColor(colors.HexColor('#64748b'))
+        canvas.drawRightString(width - 14 * mm, height - 10 * mm, 'Alerts Telemetry Report')
+        canvas.setStrokeColor(colors.HexColor('#e2e8f0'))
+        canvas.setLineWidth(0.6)
+        canvas.line(14 * mm, height - 12 * mm, width - 14 * mm, height - 12 * mm)
+
+        canvas.line(14 * mm, 12 * mm, width - 14 * mm, 12 * mm)
+        canvas.setFont('Helvetica', 7)
+        canvas.setFillColor(colors.HexColor('#64748b'))
+        canvas.drawString(14 * mm, 8 * mm, f'Ariba SOC Confidential — Downloaded by {downloaded_by} on {download_time}')
+        canvas.drawRightString(width - 14 * mm, 8 * mm, f'Page {canvas.getPageNumber()}')
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=draw_landscape_decorations, onLaterPages=draw_landscape_decorations)
+    pdf = buf.getvalue()
+    buf.close()
+    response = HttpResponse(pdf, content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="Ariba_SOC_Alerts_Export.pdf"'
+    return response
+
+
+@login_required
+@permission_required('can_view_alerts')
+def alert_pdf(request, alert_id):
+    """Generate a high-fidelity single alert PDF dossier with Ariba SOC branding, downloader, and timestamp."""
+    import io
+    from xml.sax.saxutils import escape
+    from django.utils import timezone
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 
     alert = get_object_or_404(
         Alert.objects.select_related('assignee', 'source', 'assigned_team'), id=alert_id,
     )
+
+    downloaded_by = request.user.get_full_name() or request.user.username
+    if request.user.email and request.user.email != downloaded_by:
+        downloaded_by_display = f"{downloaded_by} ({request.user.email})"
+    else:
+        downloaded_by_display = downloaded_by
+
+    download_time = timezone.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=18 * mm,
-                            leftMargin=16 * mm, rightMargin=16 * mm, title=f'Alert {alert.id}')
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        topMargin=22 * mm,
+        bottomMargin=20 * mm,
+        leftMargin=16 * mm,
+        rightMargin=16 * mm,
+        title=f'Ariba SOC - Alert #{alert.id}',
+    )
+
     styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        'AribaHeaderTitle',
+        parent=styles['Title'],
+        fontName='Helvetica-Bold',
+        fontSize=20,
+        leading=24,
+        textColor=colors.HexColor('#0f172a'),
+        alignment=0,
+    )
+    subtitle_style = ParagraphStyle(
+        'AribaHeaderSubtitle',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9.5,
+        leading=13,
+        textColor=colors.HexColor('#2563eb'),
+    )
+    meta_label_style = ParagraphStyle(
+        'AribaMetaLabel',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=8.5,
+        leading=11,
+        textColor=colors.HexColor('#475569'),
+    )
+    meta_val_style = ParagraphStyle(
+        'AribaMetaVal',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=8.5,
+        leading=11,
+        textColor=colors.HexColor('#0f172a'),
+    )
+    section_style = ParagraphStyle(
+        'AribaSection',
+        parent=styles['Heading3'],
+        fontName='Helvetica-Bold',
+        fontSize=11,
+        leading=14,
+        textColor=colors.HexColor('#1e293b'),
+        spaceBefore=8,
+        spaceAfter=4,
+    )
+    body_style = ParagraphStyle(
+        'AribaBody',
+        parent=styles['BodyText'],
+        fontName='Helvetica',
+        fontSize=8,
+        leading=11,
+        textColor=colors.HexColor('#334155'),
+    )
+
     story = [
-        Paragraph(f'Alert #{alert.id}', styles['Title']),
-        Paragraph(escape(alert.alert_name or ''), styles['Heading2']),
-        Spacer(1, 8),
+        Paragraph('ARIBA SOC', title_style),
+        Paragraph('SECURITY OPERATIONS CENTER &mdash; INCIDENT INVESTIGATION REPORT', subtitle_style),
+        Spacer(1, 4),
+        HRFlowable(width='100%', thickness=1.5, color=colors.HexColor('#2563eb'), spaceAfter=8, spaceBefore=2),
     ]
+
+    meta_box_data = [
+        [
+            Paragraph('<b>System:</b> Ariba SOC (Enterprise SIEM/SOAR)', meta_label_style),
+            Paragraph(f'<b>Downloaded By:</b> {escape(downloaded_by_display)}', meta_val_style),
+        ],
+        [
+            Paragraph('<b>Classification:</b> CONFIDENTIAL // TLP:AMBER', meta_label_style),
+            Paragraph(f'<b>Downloaded On:</b> {download_time}', meta_val_style),
+        ],
+    ]
+    meta_box = Table(meta_box_data, colWidths=[85 * mm, 93 * mm])
+    meta_box.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+        ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor('#cbd5e1')),
+        ('INNERGRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#e2e8f0')),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    story.append(meta_box)
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph(f'<b>Alert #{alert.id}:</b> {escape(alert.alert_name or "Unknown Alert")}', section_style))
+    story.append(Spacer(1, 4))
+
     rows = [
         ['Field', 'Value'],
         ['Wazuh Alert ID', str(alert.wazuh_alert_id or alert.id)],
-        ['Time', alert.alert_time.strftime('%Y-%m-%d %H:%M:%S') if alert.alert_time else '—'],
-        ['Severity', str(alert.severity)],
-        ['Status', str(alert.status)],
-        ['Verdict', str(alert.verdict)],
+        ['Alert Event Time', alert.alert_time.strftime('%Y-%m-%d %H:%M:%S') if alert.alert_time else '—'],
+        ['Severity Level', str(alert.severity)],
+        ['Investigation Status', str(alert.status)],
+        ['Triage Verdict', str(alert.verdict or 'Unassigned')],
         ['Priority', str(alert.priority)],
-        ['Assignee', alert.assignee.username if alert.assignee else '—'],
-        ['Team', alert.assigned_team.name if alert.assigned_team else '—'],
+        ['Assigned Analyst', alert.assignee.get_full_name() or alert.assignee.username if alert.assignee else 'Unassigned'],
+        ['Assigned SOC Team', alert.assigned_team.name if alert.assigned_team else '—'],
         ['Source IP', alert.source_ip or '—'],
         ['Destination IP', alert.destination_ip or '—'],
-        ['Hostname', alert.hostname or '—'],
-        ['Agent', alert.agent_name or '—'],
-        ['Rule ID', alert.rule_id or '—'],
-        ['MITRE Tactic', alert.mitre_tactic or '—'],
-        ['MITRE Technique', alert.mitre_technique or '—'],
-        ['Tags', ', '.join(alert.tags or []) or '—'],
+        ['Host / Endpoint', alert.hostname or '—'],
+        ['Agent Name', f"{alert.agent_name} (ID: {alert.agent_id})" if alert.agent_id else (alert.agent_name or '—')],
+        ['Wazuh Rule ID', alert.rule_id or '—'],
+        ['Aggregated Events', str(alert.event_count)],
+        ['MITRE ATT&CK Tactic', alert.mitre_tactic or '—'],
+        ['MITRE ATT&CK Technique', alert.mitre_technique or '—'],
+        ['Tags / Indicators', ', '.join(alert.tags or []) or '—'],
         ['Risk Score', str(alert.risk_score)],
         ['SLA Status', str(alert.sla_status)],
-        ['SLA Due', alert.sla_due_at.strftime('%Y-%m-%d %H:%M') if alert.sla_due_at else '—'],
-        ['Enrichment', alert.get_enrichment_status_display()],
+        ['SLA Deadline', alert.sla_due_at.strftime('%Y-%m-%d %H:%M') if alert.sla_due_at else '—'],
+        ['Enrichment Status', alert.get_enrichment_status_display()],
     ]
-    table = Table(rows, colWidths=[45 * mm, 120 * mm])
+
+    sev_colors = {
+        'Critical': '#b91c1c',
+        'High': '#c2410c',
+        'Medium': '#a16207',
+        'Low': '#1d4ed8',
+        'Informational': '#475569',
+    }
+    header_color = colors.HexColor(sev_colors.get(alert.severity, '#1e293b'))
+
+    table = Table(rows, colWidths=[48 * mm, 130 * mm])
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f2937')),
+        ('BACKGROUND', (0, 0), (-1, 0), header_color),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#9ca3af')),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#cbd5e1')),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f3f4f6')]),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
     ]))
     story.append(table)
-    for label, body in (('Description', alert.full_log), ('Analyst Comment', alert.analyst_comment),
-                        ('Remediation Note', alert.remediation_note), ('Root Cause', alert.root_cause_summary)):
+
+    for label, body in (
+        ('Alert Log & Raw Telemetry', alert.full_log),
+        ('Analyst Investigation Comments', alert.analyst_comment),
+        ('Remediation & Containment Actions', alert.remediation_note),
+        ('Root Cause Summary', alert.root_cause_summary),
+    ):
         if body:
             story.append(Spacer(1, 8))
-            story.append(Paragraph(label, styles['Heading4']))
-            story.append(Paragraph(escape(str(body)).replace('\n', '<br/>'), styles['BodyText']))
-    doc.build(story)
+            story.append(Paragraph(f'<b>{label}</b>', section_style))
+            story.append(Paragraph(escape(str(body)).replace('\n', '<br/>'), body_style))
+
+    def draw_page_decorations(canvas, d):
+        canvas.saveState()
+        width, height = A4
+        canvas.setFont('Helvetica-Bold', 8)
+        canvas.setFillColor(colors.HexColor('#1e40af'))
+        canvas.drawString(16 * mm, height - 12 * mm, 'ARIBA SOC')
+        canvas.setFont('Helvetica', 7.5)
+        canvas.setFillColor(colors.HexColor('#64748b'))
+        canvas.drawRightString(width - 16 * mm, height - 12 * mm, f'Alert #{alert.id} Investigation Dossier')
+        canvas.setStrokeColor(colors.HexColor('#e2e8f0'))
+        canvas.setLineWidth(0.6)
+        canvas.line(16 * mm, height - 14 * mm, width - 16 * mm, height - 14 * mm)
+
+        canvas.line(16 * mm, 14 * mm, width - 16 * mm, 14 * mm)
+        canvas.setFont('Helvetica', 7)
+        canvas.setFillColor(colors.HexColor('#64748b'))
+        canvas.drawString(16 * mm, 9 * mm, f'Ariba SOC Confidential — Downloaded by {downloaded_by} on {download_time}')
+        canvas.drawRightString(width - 16 * mm, 9 * mm, f'Page {canvas.getPageNumber()}')
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=draw_page_decorations, onLaterPages=draw_page_decorations)
     pdf = buf.getvalue()
     buf.close()
     response = HttpResponse(pdf, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="alert_{alert.id}.pdf"'
+    response['Content-Disposition'] = f'attachment; filename="Ariba_SOC_Alert_{alert.id}.pdf"'
     return response
 
 

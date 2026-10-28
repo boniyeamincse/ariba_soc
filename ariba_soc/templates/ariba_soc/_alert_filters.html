@@ -96,6 +96,9 @@
         <a class="btn btn-sm btn-ariba-outline" href="{% url 'alerts:export_csv' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">
             <i class="bi bi-filetype-csv"></i> Export CSV
         </a>
+        <a class="btn btn-sm btn-ariba-outline" href="{% url 'alerts:export_pdf' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" title="Export Filtered Alerts as Ariba SOC PDF Report">
+            <i class="bi bi-file-earmark-pdf"></i> Export PDF
+        </a>
     </div>
 </div>
 
