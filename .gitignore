@@ -21,14 +21,17 @@ ariba_soc/media/avatars/
 .env.production
 ariba_soc/.env
 infrastructure/.env
+remoted/.env
 
 # ─── Docker ────────────────────────────────────────────────
 infrastructure/data/
 infrastructure/backups/*.sql
 infrastructure/backups/*.tar.gz
+remoted/backups/
 
 # ─── SSL Certs ─────────────────────────────────────────────
 infrastructure/config/wazuh_indexer_ssl_certs/
+remoted/config/wazuh_indexer_ssl_certs/
 
 # ─── OS ────────────────────────────────────────────────────
 .DS_Store
