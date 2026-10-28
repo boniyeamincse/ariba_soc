@@ -4,7 +4,11 @@
 
 ---
 
-
+## 🎯 সার্ভার ইনফরমেশন (Example / প্লেসহোল্ডার)
+- **IP:** `<YOUR_SERVER_IP>` (যেমন: `192.168.1.50` বা `10.x.x.x`)
+- **User:** `<YOUR_SERVER_USER>` (যেমন: `ubuntu`, `debian` বা আপনার সার্ভার ইউজার)
+- **Password:** `<YOUR_SERVER_PASSWORD>` (সার্ভার লগইন ও sudo পাসওয়ার্ড)
+- **ডিপ্লয়মেন্ট ডিরেক্টরি:** `~/ariba_soc_deploy`
 
 ---
 
@@ -14,19 +18,19 @@
 আপনার লোকাল মেশিনের প্রজেক্ট ফোল্ডারে টার্মিনাল ওপেন করে নিচের কমান্ডটি দিন:
 ```bash
 cd /home/boni/Desktop/ariba_soc-main
-./deploy-remote.sh infosec@10.24.66.2
+./deploy-remote.sh <YOUR_SERVER_USER>@<YOUR_SERVER_IP>
 ```
-- পাসওয়ার্ড চাইলে দিন: `WazInf@#4321`
-> **নোট:** এই স্ক্রিপ্টটি শুধুমাত্র `remoted/` ফোল্ডারের ডকার কনফিগ ও স্ক্রিপ্ট সার্ভারে পাঠায়। আপনার কোনো Django কোড সার্ভারে যাবে না।
+- পাসওয়ার্ড চাইলে দিন: `<YOUR_SERVER_PASSWORD>`
+> **নোট:** এই স্ক্রিপ্টটি শুধুমাত্র `remoted/` ফোল্ডারের ডকার কনফিগ ও স্ক্রিপ্ট সার্ভারে পাঠায়। আপনার কোনো Django সোর্স কোড সার্ভারে যাবে না।
 
 ---
 
 ### ধাপ ২: সার্ভারে SSH দিয়ে লগইন করা
 লোকাল টার্মিনাল থেকেই সার্ভারে লগইন করুন:
 ```bash
-ssh infosec@10.24.66.2
+ssh <YOUR_SERVER_USER>@<YOUR_SERVER_IP>
 ```
-- পাসওয়ার্ড দিন: `WazInf@#4321`
+- পাসওয়ার্ড দিন: `<YOUR_SERVER_PASSWORD>`
 
 ---
 
@@ -42,7 +46,7 @@ cd ~/ariba_soc_deploy
 ```bash
 sudo ./scripts/install-docker.sh
 ```
-*(sudo পাসওয়ার্ড চাইলে দিন: `WazInf@#4321`)*
+*(sudo পাসওয়ার্ড চাইলে দিন: `<YOUR_SUDO_PASSWORD>`)*
 
 ---
 
@@ -50,8 +54,9 @@ sudo ./scripts/install-docker.sh
 ডিফল্ট টেমপ্লেট থেকে `.env` ফাইল কপি করুন:
 ```bash
 cp .env.example .env
+nano .env
 ```
-*(প্রয়োজন মনে করলে `nano .env` দিয়ে দেখে নিতে পারেন, অন্যথায় ডিফল্ট সেটিংস দিয়েও চলবে)*
+*(প্রয়োজন মনে করলে পাসওয়ার্ড বা ডোমেইন/আইপি পরিবর্তন করে নিতে পারেন, অন্যথায় ডিফল্ট সেটিংস দিয়েও চলবে)*
 
 ---
 
@@ -59,7 +64,7 @@ cp .env.example .env
 ```bash
 ./scripts/setup.sh
 ```
-- কার্নেল সেটিংস (`vm.max_map_count`) ঠিক করার জন্য sudo পাসওয়ার্ড চাইলে দিন: `WazInf@#4321`
+- কার্নেল সেটিংস (`vm.max_map_count`) ঠিক করার জন্য sudo পাসওয়ার্ড চাইলে দিন: `<YOUR_SUDO_PASSWORD>`
 
 **এই স্ক্রিপ্টটি নিজে নিজেই যা যা করবে:**
 1. কার্নেল ভ্যালু `262144` সেট করবে (Wazuh OpenSearch-এর জন্য)।
@@ -77,9 +82,9 @@ cp .env.example .env
 
 | প্ল্যাটফর্ম | ব্রাউজার লিঙ্ক | ইউজারনেম | পাসওয়ার্ড |
 | :--- | :--- | :--- | :--- |
-| **Ariba SOC Platform** | `http://10.24.66.2` | `admin` | `Admin_SOC_Pass123!` |
-| **Wazuh Dashboard** | `https://10.24.66.2:8443` | `admin` | `Secret_Wazuh_Indexer_Pass123!` |
-| **Wazuh Manager API** | `https://10.24.66.2:55000` | `wazuh-wui` | `Secret_Wazuh_API_Pass123!` |
+| **Ariba SOC Platform** | `http://<YOUR_SERVER_IP>` | `admin` | `.env`-এ দেওয়া `DJANGO_ADMIN_PASSWORD` (ডিফল্ট: `Admin_SOC_Pass123!`) |
+| **Wazuh Dashboard** | `https://<YOUR_SERVER_IP>:8443` | `admin` | `.env`-এ দেওয়া `WAZUH_INDEXER_ADMIN_PASSWORD` |
+| **Wazuh Manager API** | `https://<YOUR_SERVER_IP>:55000` | `wazuh-wui` | `.env`-এ দেওয়া `WAZUH_API_PASSWORD` |
 
 *(সার্ভিস প্রথমবার চালু হতে ২-৩ মিনিট সময় লাগতে পারে)*
 
@@ -107,7 +112,7 @@ cd /home/boni/Desktop/ariba_soc-main/infrastructure
 cd ~/ariba_soc_deploy
 ./scripts/update.sh
 ```
-*(অথবা লোকাল পিসি থেকেই এক লাইনে রান করতে পারেন: `ssh infosec@10.24.66.2 "cd ~/ariba_soc_deploy && ./scripts/update.sh"`)*
+*(অথবা লোকাল পিসি থেকেই এক লাইনে রান করতে পারেন: `ssh <YOUR_SERVER_USER>@<YOUR_SERVER_IP> "cd ~/ariba_soc_deploy && ./scripts/update.sh"`)*
 
 > **ফলাফল:** সার্ভার নতুন ডকার ইমেজ নামিয়ে নেবে, অটো-মাইগ্রেশন করবে এবং নতুন কোড লাইভ হয়ে যাবে। ডাটাবেসের ডেটা বা Wazuh-এর কোনো ক্ষতি হবে না।
 
