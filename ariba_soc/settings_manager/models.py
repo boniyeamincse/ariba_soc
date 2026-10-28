@@ -476,12 +476,12 @@ class AlertAggregationSetting(models.Model):
             hostname = str(data_or_rule_id.get('hostname') or '')
             username = str(data_or_rule_id.get('username') or '')
         else:
-            rule_id = str(data_or_rule_id or '')
-            source_ip = str(source_ip or '')
-            destination_ip = str(destination_ip or '')
-            agent_id = str(agent_id or '')
-            hostname = str(hostname or '')
-            username = str(username or '')
+            rule_id = str(kwargs.get('rule_id') or data_or_rule_id or '')
+            source_ip = str(source_ip or kwargs.get('source_ip') or '')
+            destination_ip = str(destination_ip or kwargs.get('destination_ip') or '')
+            agent_id = str(agent_id or kwargs.get('agent_id') or '')
+            hostname = str(hostname or kwargs.get('hostname') or '')
+            username = str(username or kwargs.get('username') or '')
 
         parts = []
         if self.group_by_rule and rule_id:
