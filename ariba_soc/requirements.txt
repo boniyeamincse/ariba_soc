@@ -6,6 +6,6 @@ reportlab>=4.0
 Pillow>=10.0
 gunicorn>=21.2
 python-decouple>=3.8
-redis>=5.0
+redis>=8.1.0
 cryptography>=42.0
 xhtml2pdf>=0.2
