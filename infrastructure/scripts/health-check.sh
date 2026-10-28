@@ -30,7 +30,10 @@ else
 fi
 
 echo -e "\n[4] Checking Ariba SOC Dashboard..."
-SOC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80 || echo "failed")
+SOC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 2>/dev/null || true)
+if [[ "$SOC_STATUS" != "200" && "$SOC_STATUS" != "301" && "$SOC_STATUS" != "302" ]]; then
+    SOC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80 2>/dev/null || echo "failed")
+fi
 if [[ "$SOC_STATUS" == "200" || "$SOC_STATUS" == "301" || "$SOC_STATUS" == "302" ]]; then
     echo -e "Ariba SOC: ${GREEN}Online${NC}"
 else
