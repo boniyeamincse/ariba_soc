@@ -3,7 +3,7 @@ services:
   # WAZUH STACK
   # -------------------------
   wazuh.manager:
-    image: wazuh/wazuh-manager:4.9.0
+    image: wazuh/wazuh-manager:4.14.9
     hostname: wazuh.manager
     restart: always
     ulimits:
@@ -60,7 +60,7 @@ services:
       - soc_network
 
   wazuh.indexer:
-    image: wazuh/wazuh-indexer:4.9.0
+    image: wazuh/wazuh-indexer:4.14.9
     hostname: wazuh.indexer
     restart: always
     ports:
@@ -93,7 +93,7 @@ services:
       - soc_network
 
   wazuh.dashboard:
-    image: wazuh/wazuh-dashboard:4.9.0
+    image: wazuh/wazuh-dashboard:4.14.9
     hostname: wazuh.dashboard
     restart: always
     ports:
