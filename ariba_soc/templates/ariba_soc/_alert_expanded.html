@@ -14,9 +14,9 @@
         <div class="detail-value mb-2">{{ alert.source_ip|default:'—' }} → {{ alert.destination_ip|default:'—' }}</div>
         <div class="detail-label">Username</div>
         <div class="detail-value mb-2">{{ alert.username|default:'—' }}</div>
-        {% if alert.target_file %}
-        <div class="detail-label">Target File</div>
-        <div class="detail-value mb-2">{{ alert.target_file }}</div>
+        {% if alert.target_file or alert.file_path %}
+        <div class="detail-label">File / Target</div>
+        <div class="detail-value mb-2"><code>{{ alert.target_file|default:alert.file_path }}</code></div>
         {% endif %}
         {% if alert.file_hash_sha256 %}
         <div class="detail-label">SHA256</div>

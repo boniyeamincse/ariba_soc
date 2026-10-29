@@ -81,11 +81,13 @@ def _apply_alert_filters(request):
             Q(rule_id__icontains=search) |
             Q(agent_name__icontains=search) |
             Q(process_name__icontains=search) |
+            Q(target_file__icontains=search) |
+            Q(file_path__icontains=search) |
+            Q(command_line__icontains=search) |
+            Q(mitre_id__icontains=search) |
             Q(file_hash_md5__icontains=search) |
             Q(file_hash_sha256__icontains=search)
         )
-    if severity:
-        alerts = alerts.filter(severity=severity)
     if status:
         alerts = alerts.filter(status=status)
     if verdict:
@@ -230,8 +232,17 @@ def alert_board(request):
     if search:
         alerts = alerts.filter(
             Q(alert_name__icontains=search) |
+            Q(wazuh_alert_id__icontains=search) |
             Q(hostname__icontains=search) |
-            Q(username__icontains=search)
+            Q(username__icontains=search) |
+            Q(source_ip__icontains=search) |
+            Q(destination_ip__icontains=search) |
+            Q(rule_id__icontains=search) |
+            Q(agent_name__icontains=search) |
+            Q(process_name__icontains=search) |
+            Q(target_file__icontains=search) |
+            Q(file_path__icontains=search) |
+            Q(command_line__icontains=search)
         )
 
     severity_summary = alerts.aggregate(
@@ -683,6 +694,9 @@ def alert_move_api(request, alert_id):
 
     if new_status and new_status not in allowed_statuses:
         return JsonResponse({'success': False, 'error': f'Invalid status: {new_status}'}, status=400)
+
+    if new_verdict and new_verdict not in allowed_verdicts:
+        return JsonResponse({'success': False, 'error': f'Invalid verdict: {new_verdict}'}, status=400)
 
     return JsonResponse({'success': True, 'status': alert.status, 'verdict': alert.verdict})
 

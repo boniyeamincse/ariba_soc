@@ -185,6 +185,11 @@
                                     Process: <code class="text-light">{{ alert.process_name }}</code>
                                 </div>
                                 {% endif %}
+                                {% if alert.target_file or alert.file_path %}
+                                <div class="small text-muted mt-1 text-truncate" title="{{ alert.target_file|default:alert.file_path }}">
+                                    Target: <code class="text-light">{{ alert.target_file|default:alert.file_path }}</code>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
 
@@ -301,8 +306,8 @@
                             <tr><td class="detail-label">Process</td><td class="detail-value">{{ alert.process_name|default:'—' }}</td></tr>
                             <tr><td class="detail-label">Process User</td><td class="detail-value">{{ alert.process_user|default:'—' }}</td></tr>
                             <tr><td class="detail-label">Command Line</td><td class="detail-value"><code style="font-size:0.75rem;">{{ alert.command_line|default:'—' }}</code></td></tr>
-                            {% if alert.target_file %}
-                            <tr><td class="detail-label">Target File</td><td class="detail-value">{{ alert.target_file }}</td></tr>
+                            {% if alert.target_file or alert.file_path %}
+                            <tr><td class="detail-label">File / Target</td><td class="detail-value"><code>{{ alert.target_file|default:alert.file_path }}</code></td></tr>
                             {% endif %}
                             {% if alert.url %}
                             <tr><td class="detail-label">URL</td><td class="detail-value"><small>{{ alert.url }}</small></td></tr>
