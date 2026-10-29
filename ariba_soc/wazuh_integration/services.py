@@ -1,6 +1,7 @@
 import re
 import requests
 import logging
+import ipaddress
 from datetime import datetime, timedelta
 from django.conf import settings
 from django.utils import timezone
@@ -233,6 +234,151 @@ class IndexerClient:
             raise
 
 
+def _clean_ip(val):
+    if not val:
+        return None
+    val = str(val).strip()
+    try:
+        ipaddress.ip_address(val)
+        return val
+    except ValueError:
+        return None
+
+
+def extract_wazuh_network_process_fields(doc):
+    """
+    Intelligently extracts network, user, process, file, and URL fields from any
+    Wazuh event doc (Auditd, Sysmon, Suricata, Windows Security, Linux Syslog, etc.).
+    """
+    data = doc.get('data') if isinstance(doc.get('data'), dict) else doc
+    if not isinstance(data, dict):
+        data = {}
+    audit = data.get('audit') if isinstance(data.get('audit'), dict) else {}
+    win = data.get('win', {}).get('eventdata', {}) if isinstance(data.get('win'), dict) and isinstance(data.get('win', {}).get('eventdata'), dict) else {}
+    process = data.get('process') if isinstance(data.get('process'), dict) else {}
+    full_log = doc.get('full_log') or data.get('full_log') or ''
+
+    # 1. Source IP
+    raw_src = (
+        doc.get('srcip') or doc.get('SrcIp') or doc.get('src_ip') or
+        data.get('src_ip') or data.get('srcip') or data.get('SrcIp') or
+        (doc.get('source', {}).get('ip') if isinstance(doc.get('source'), dict) else None) or
+        (data.get('source', {}).get('ip') if isinstance(data.get('source'), dict) else None) or
+        (data.get('flow', {}).get('src_ip') if isinstance(data.get('flow'), dict) else None) or
+        win.get('ipAddress') or
+        (data.get('netinfo', {}).get('srcip') if isinstance(data.get('netinfo'), dict) else None)
+    )
+    source_ip = _clean_ip(raw_src)
+    if not source_ip and full_log:
+        m = re.search(r'(?:srcip[=:]|from\s+)([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})', full_log)
+        if m:
+            source_ip = _clean_ip(m.group(1))
+
+    # 2. Destination IP
+    raw_dst = (
+        doc.get('dstip') or doc.get('DstIp') or doc.get('dest_ip') or
+        data.get('dest_ip') or data.get('dstip') or data.get('DstIp') or
+        (doc.get('destination', {}).get('ip') if isinstance(doc.get('destination'), dict) else None) or
+        (data.get('destination', {}).get('ip') if isinstance(data.get('destination'), dict) else None) or
+        (data.get('flow', {}).get('dest_ip') if isinstance(data.get('flow'), dict) else None) or
+        (data.get('netinfo', {}).get('dstip') if isinstance(data.get('netinfo'), dict) else None)
+    )
+    destination_ip = _clean_ip(raw_dst)
+
+    # 3. Username
+    username = (
+        doc.get('user') or doc.get('dstuser') or doc.get('srcuser') or
+        data.get('user') or data.get('dstuser') or data.get('srcuser') or
+        audit.get('acct') or audit.get('user') or
+        win.get('targetUserName') or win.get('subjectUserName') or
+        process.get('user') or ''
+    )
+    if not username and audit:
+        uid = str(audit.get('uid', ''))
+        euid = str(audit.get('euid', ''))
+        if uid == '0' or euid == '0':
+            username = 'root'
+        elif uid and uid != '4294967295':
+            username = f"uid:{uid}"
+    if not username and full_log:
+        m_uid = re.search(r'UID="([^"]+)"', full_log)
+        m_user = re.search(r'(?:user[=:\s]+|for\s+)([a-zA-Z0-9_\.\-]+)', full_log)
+        if m_uid:
+            username = m_uid.group(1)
+        elif m_user:
+            username = m_user.group(1)
+        elif 'uid=0' in full_log:
+            username = 'root'
+
+    # 4. Process Name
+    process_name = (
+        audit.get('exe') or audit.get('command') or
+        process.get('name') or
+        win.get('image') or win.get('parentImage') or
+        doc.get('program_name') or ''
+    )
+    if not process_name and full_log:
+        m_exe = re.search(r'exe="([^"]+)"', full_log)
+        m_comm = re.search(r'comm="([^"]+)"', full_log)
+        if m_exe:
+            process_name = m_exe.group(1)
+        elif m_comm:
+            process_name = m_comm.group(1)
+
+    # 5. Process User
+    process_user = (
+        audit.get('acct') or
+        win.get('user') or win.get('subjectUserName') or
+        process.get('user') or ''
+    )
+    if not process_user and audit.get('euid') == '0':
+        process_user = 'root'
+    elif not process_user and username:
+        process_user = username
+
+    # 6. Command Line
+    command_line = (
+        audit.get('command') or audit.get('cmd') or
+        process.get('command_line') or process.get('cmd') or
+        win.get('commandLine') or ''
+    )
+    if not command_line and full_log:
+        m_cmd = re.search(r'(?:cmd|command)="([^"]+)"', full_log)
+        if m_cmd:
+            command_line = m_cmd.group(1)
+
+    # 7. File / Target File
+    target_file = (
+        (audit.get('file', {}).get('name') if isinstance(audit.get('file'), dict) else '') or
+        win.get('targetFilename') or
+        (doc.get('syscheck', {}).get('path') if isinstance(doc.get('syscheck'), dict) else '') or ''
+    )
+    file_path = (
+        (doc.get('file', {}).get('path') if isinstance(doc.get('file'), dict) else '') or
+        (data.get('file', {}).get('path') if isinstance(data.get('file'), dict) else '') or
+        target_file
+    )
+
+    # 8. URL
+    url = (
+        (data.get('http', {}).get('url') if isinstance(data.get('http'), dict) else '') or
+        (doc.get('http', {}).get('url') if isinstance(doc.get('http'), dict) else '') or
+        doc.get('url', '')
+    )
+
+    return {
+        'source_ip': source_ip,
+        'destination_ip': destination_ip,
+        'username': username,
+        'process_name': process_name,
+        'process_user': process_user,
+        'command_line': command_line,
+        'target_file': target_file,
+        'file_path': file_path,
+        'url': url,
+    }
+
+
 def normalize_alert(wazuh_alert):
     data = wazuh_alert.get('data', wazuh_alert)
     rule = data.get('rule', {})
@@ -245,6 +391,8 @@ def normalize_alert(wazuh_alert):
             parts = group.split('_', 2)
             if len(parts) >= 3:
                 mitre[parts[1]] = parts[2]
+
+    extracted = extract_wazuh_network_process_fields(wazuh_alert)
 
     alert_data = {
         'wazuh_alert_id': str(wazuh_alert.get('id', '')),
@@ -261,18 +409,18 @@ def normalize_alert(wazuh_alert):
         'agent_name': agent.get('name', ''),
         'agent_ip': agent.get('ip', ''),
         'hostname': agent.get('name', '') or data.get('system_name', ''),
-        'source_ip': data.get('srcip', '') or data.get('SrcIp', ''),
-        'destination_ip': data.get('dstip', '') or data.get('DstIp', ''),
-        'username': data.get('user', '') or data.get('dstuser', '') or data.get('srcuser', ''),
-        'process_name': data.get('process', {}).get('name', '') if isinstance(data.get('process'), dict) else '',
-        'process_user': '',
-        'command_line': '',
-        'target_file': '',
-        'file_path': '',
+        'source_ip': extracted['source_ip'],
+        'destination_ip': extracted['destination_ip'],
+        'username': extracted['username'],
+        'process_name': extracted['process_name'],
+        'process_user': extracted['process_user'],
+        'command_line': extracted['command_line'],
+        'target_file': extracted['target_file'],
+        'file_path': extracted['file_path'],
         'file_hash_md5': '',
         'file_hash_sha1': '',
         'file_hash_sha256': '',
-        'url': '',
+        'url': extracted['url'],
         'mitre_id': mitre.get('id', ''),
         'mitre_tactic': mitre.get('tactic', ''),
         'mitre_technique': mitre.get('technique', ''),
@@ -303,6 +451,8 @@ def normalize_es_alert(doc, idx=0):
     elif doc.get('input', {}).get('mitre', {}).get('id'):
         mitre_ids = doc['input']['mitre']['id']
 
+    extracted = extract_wazuh_network_process_fields(doc)
+
     return {
         'wazuh_alert_id': doc.get('id') or doc.get('_id') or str(idx),
         'alert_time': timestamp,
@@ -318,18 +468,18 @@ def normalize_es_alert(doc, idx=0):
         'agent_name': agent.get('name', ''),
         'agent_ip': agent.get('ip', ''),
         'hostname': agent.get('name', '') or doc.get('agent', {}).get('name', '') or doc.get('host', {}).get('hostname', ''),
-        'source_ip': doc.get('srcip') or doc.get('SrcIp') or doc.get('source', {}).get('ip', ''),
-        'destination_ip': doc.get('dstip') or doc.get('DstIp') or doc.get('destination', {}).get('ip', ''),
-        'username': doc.get('user') or doc.get('dstuser') or doc.get('srcuser', ''),
-        'process_name': '',
-        'process_user': '',
-        'command_line': '',
-        'target_file': '',
-        'file_path': doc.get('file', {}).get('path', '') if isinstance(doc.get('file'), dict) else '',
+        'source_ip': extracted['source_ip'],
+        'destination_ip': extracted['destination_ip'],
+        'username': extracted['username'],
+        'process_name': extracted['process_name'],
+        'process_user': extracted['process_user'],
+        'command_line': extracted['command_line'],
+        'target_file': extracted['target_file'],
+        'file_path': extracted['file_path'],
         'file_hash_md5': '',
         'file_hash_sha1': '',
         'file_hash_sha256': '',
-        'url': '',
+        'url': extracted['url'],
         'mitre_id': ', '.join(mitre_ids) if isinstance(mitre_ids, list) else str(mitre_ids),
         'mitre_tactic': '',
         'mitre_technique': '',

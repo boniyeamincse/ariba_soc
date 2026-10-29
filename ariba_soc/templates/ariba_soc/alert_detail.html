@@ -290,6 +290,14 @@
                         <table class="table table-sm ariba-table">
                             <tr><td class="detail-label">Source IP</td><td class="detail-value">{{ alert.source_ip|default:'—' }}</td></tr>
                             <tr><td class="detail-label">Destination IP</td><td class="detail-value">{{ alert.destination_ip|default:'—' }}</td></tr>
+                            {% if alert.alert_fields.data.audit.dev %}
+                            <tr><td class="detail-label">Interface</td><td class="detail-value"><span class="badge bg-secondary">{{ alert.alert_fields.data.audit.dev }}</span></td></tr>
+                            {% elif alert.alert_fields.data.in_iface %}
+                            <tr><td class="detail-label">Interface</td><td class="detail-value"><span class="badge bg-secondary">{{ alert.alert_fields.data.in_iface }}</span></td></tr>
+                            {% endif %}
+                            {% if alert.alert_fields.data.proto %}
+                            <tr><td class="detail-label">Protocol</td><td class="detail-value">{{ alert.alert_fields.data.proto }}{% if alert.alert_fields.data.src_port or alert.alert_fields.data.dest_port %} ({{ alert.alert_fields.data.src_port|default:'*' }} &rarr; {{ alert.alert_fields.data.dest_port|default:'*' }}){% endif %}</td></tr>
+                            {% endif %}
                             <tr><td class="detail-label">Process</td><td class="detail-value">{{ alert.process_name|default:'—' }}</td></tr>
                             <tr><td class="detail-label">Process User</td><td class="detail-value">{{ alert.process_user|default:'—' }}</td></tr>
                             <tr><td class="detail-label">Command Line</td><td class="detail-value"><code style="font-size:0.75rem;">{{ alert.command_line|default:'—' }}</code></td></tr>
