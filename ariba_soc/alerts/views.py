@@ -194,17 +194,37 @@ def alert_board(request):
     month = request.GET.get('month')
     year = request.GET.get('year')
 
-    if month and year:
+    # Date filtering: support 'all' and default to 'all' so active alerts aren't hidden
+    if month and month != 'all' and year and year != 'all':
         try:
             m, y = int(month), int(year)
             alerts = alerts.filter(alert_time__year=y, alert_time__month=m)
+            selected_month = m
+            selected_year = y
         except (ValueError, TypeError):
-            month = None
-            year = None
+            selected_month = 'all'
+            selected_year = 'all'
+    elif month and month != 'all':
+        try:
+            m = int(month)
+            alerts = alerts.filter(alert_time__month=m)
+            selected_month = m
+            selected_year = 'all'
+        except (ValueError, TypeError):
+            selected_month = 'all'
+            selected_year = 'all'
+    elif year and year != 'all':
+        try:
+            y = int(year)
+            alerts = alerts.filter(alert_time__year=y)
+            selected_month = 'all'
+            selected_year = y
+        except (ValueError, TypeError):
+            selected_month = 'all'
+            selected_year = 'all'
     else:
-        month = now.month
-        year = now.year
-        alerts = alerts.filter(alert_time__year=year, alert_time__month=month)
+        selected_month = 'all'
+        selected_year = 'all'
 
     search = request.GET.get('search')
     if search:
@@ -213,6 +233,15 @@ def alert_board(request):
             Q(hostname__icontains=search) |
             Q(username__icontains=search)
         )
+
+    severity_summary = alerts.aggregate(
+        total=Count('id'),
+        critical=Count('id', filter=Q(severity__iexact='critical')),
+        high=Count('id', filter=Q(severity__iexact='high')),
+        medium=Count('id', filter=Q(severity__iexact='medium')),
+        low=Count('id', filter=Q(severity__iexact='low')),
+    )
+
     soc_teams = SocTeam.objects.filter(is_active=True).order_by('tier', 'name')
     context = {
         'new_alerts': alerts.filter(status='New'),
@@ -230,14 +259,16 @@ def alert_board(request):
         'soc_teams': soc_teams,
         'user_soc_team': user_soc_team,
         'selected_team': team_param,
-        'selected_month': month,
-        'selected_year': year,
+        'selected_month': selected_month,
+        'selected_year': selected_year,
+        'severity_summary': severity_summary,
         'months': [
+            ('all', 'All Months'),
             (1, 'January'), (2, 'February'), (3, 'March'), (4, 'April'),
             (5, 'May'), (6, 'June'), (7, 'July'), (8, 'August'),
             (9, 'September'), (10, 'October'), (11, 'November'), (12, 'December'),
         ],
-        'years': range(2024, 2028),
+        'years': ['all', 2024, 2025, 2026, 2027, 2028],
     }
     return render(request, 'ariba_soc/alert_board.html', context)
 
@@ -613,18 +644,47 @@ def alert_bulk_action(request):
 @permission_required('can_change_status')
 def alert_move_api(request, alert_id):
     alert = get_object_or_404(Alert, id=alert_id)
-    data = json.loads(request.body)
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
     new_status = data.get('status')
+    new_verdict = data.get('verdict')
+
     allowed_statuses = list(StatusSettings.objects.filter(is_active=True).values_list('name', flat=True))
+    allowed_verdicts = list(VerdictSettings.objects.filter(is_active=True).values_list('name', flat=True))
+
+    status_changed = False
+    verdict_changed = False
+
     if new_status and new_status in allowed_statuses:
-        old = alert.status
-        alert.status = new_status
-        if new_status == 'In Progress':
-            alert.acknowledged_at = alert.acknowledged_at or timezone.now()
+        if alert.status != new_status:
+            old_status = alert.status
+            alert.status = new_status
+            status_changed = True
+            if new_status == 'In Progress':
+                alert.acknowledged_at = alert.acknowledged_at or timezone.now()
+            elif new_status == 'Closed':
+                alert.closed_at = alert.closed_at or timezone.now()
+                alert.closed_by = request.user
+            create_audit_log(alert, request.user, 'Status Changed', old_status, new_status, request)
+
+    if new_verdict and new_verdict in allowed_verdicts:
+        if alert.verdict != new_verdict:
+            old_verdict = alert.verdict
+            alert.verdict = new_verdict
+            verdict_changed = True
+            create_audit_log(alert, request.user, 'Verdict Changed', old_verdict, new_verdict, request)
+
+    if status_changed or verdict_changed:
         alert.save()
-        create_audit_log(alert, request.user, 'Status Changed', old, new_status, request)
-        return JsonResponse({'success': True})
-    return JsonResponse({'success': False, 'error': 'Invalid status'}, status=400)
+        return JsonResponse({'success': True, 'status': alert.status, 'verdict': alert.verdict})
+
+    if new_status and new_status not in allowed_statuses:
+        return JsonResponse({'success': False, 'error': f'Invalid status: {new_status}'}, status=400)
+
+    return JsonResponse({'success': True, 'status': alert.status, 'verdict': alert.verdict})
 
 
 # ---------------------------------------------------------------------------

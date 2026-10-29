@@ -149,13 +149,14 @@ document.addEventListener('DOMContentLoaded', function() {
             this.classList.remove('bg-opacity-10');
             var alertId = e.dataTransfer.getData('text/plain');
             var newStatus = this.getAttribute('data-status');
-            if (alertId && newStatus) {
-                moveAlert(alertId, newStatus, this);
+            var newVerdict = this.getAttribute('data-verdict');
+            if (alertId && (newStatus || newVerdict)) {
+                moveAlert(alertId, newStatus, newVerdict, this);
             }
         });
     });
 
-    function moveAlert(alertId, newStatus, column) {
+    function moveAlert(alertId, newStatus, newVerdict, column) {
         var card = document.querySelector('.kanban-card[data-alert-id="' + alertId + '"]');
         if (!card) return;
         
@@ -163,13 +164,17 @@ document.addEventListener('DOMContentLoaded', function() {
         column.appendChild(card);
         updateColumnCounts();
 
+        var payload = {};
+        if (newStatus) payload.status = newStatus;
+        if (newVerdict) payload.verdict = newVerdict;
+
         fetch('/api/alerts/' + alertId + '/move/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCookie('csrftoken')
             },
-            body: JSON.stringify({status: newStatus})
+            body: JSON.stringify(payload)
         })
         .then(function(response) { return response.json(); })
         .then(function(data) {
@@ -179,6 +184,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     updateColumnCounts();
                 }
                 alert('Failed to move alert: ' + (data.error || 'Unknown error'));
+            } else {
+                if (data.status) card.setAttribute('data-status', data.status);
+                if (data.verdict) card.setAttribute('data-verdict', data.verdict);
             }
         })
         .catch(function() {
@@ -374,28 +382,60 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
     // Kanban quick filters
-    var currentUserId = document.body.getAttribute('data-user-id'); // Need to make sure this exists or find another way. Wait! 
     var currentUserId = document.body.getAttribute('data-user-id');
     document.querySelectorAll('.board-filter-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var filter = this.getAttribute('data-filter');
             
             // Toggle active state
-            document.querySelectorAll('.board-filter-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.board-filter-btn').forEach(function(b) { b.classList.remove('active'); });
             this.classList.add('active');
 
             var cards = document.querySelectorAll('.kanban-card');
             cards.forEach(function(card) {
                 var show = true;
+                var sev = (card.getAttribute('data-severity') || '').trim().toLowerCase();
                 if (filter === 'mine') {
                     show = (card.getAttribute('data-assignee-id') === currentUserId);
                 } else if (filter === 'critical') {
-                    show = (card.getAttribute('data-severity') === 'Critical' || card.getAttribute('data-severity') === 'High');
+                    show = (sev === 'critical');
+                } else if (filter === 'high') {
+                    show = (sev === 'high');
+                } else if (filter === 'medium') {
+                    show = (sev === 'medium');
+                } else if (filter === 'low') {
+                    show = (sev === 'low');
+                } else if (filter === 'clear') {
+                    show = true;
                 }
                 
                 card.style.display = show ? 'block' : 'none';
             });
             
             updateColumnCounts();
+        });
+    });
+
+    // Kanban Board View Mode Toggles (Active Triage vs Closed vs All)
+    document.querySelectorAll('.board-view-toggle').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var viewMode = this.getAttribute('data-view-mode');
+            document.querySelectorAll('.board-view-toggle').forEach(function(b) { b.classList.remove('active', 'btn-info', 'btn-primary'); b.classList.add('btn-outline-secondary'); });
+            this.classList.remove('btn-outline-secondary');
+            this.classList.add('active', 'btn-primary');
+
+            var activeCols = document.querySelectorAll('.board-col-active-group');
+            var closedCols = document.querySelectorAll('.board-col-closed-group');
+
+            if (viewMode === 'active') {
+                activeCols.forEach(function(c) { c.style.display = ''; });
+                closedCols.forEach(function(c) { c.style.display = 'none'; });
+            } else if (viewMode === 'closed') {
+                activeCols.forEach(function(c) { c.style.display = 'none'; });
+                closedCols.forEach(function(c) { c.style.display = ''; });
+            } else {
+                activeCols.forEach(function(c) { c.style.display = ''; });
+                closedCols.forEach(function(c) { c.style.display = ''; });
+            }
         });
     });

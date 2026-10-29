@@ -3,10 +3,16 @@
 
 {% block content %}
 <div class="container-fluid py-3">
+    <!-- Header Row -->
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h4 class="m-0"><i class="bi bi-kanban"></i> Alert Board</h4>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="m-0"><i class="bi bi-kanban"></i> Alert Board</h4>
+            <span class="badge bg-dark border border-secondary text-info px-2 py-1 small">
+                <i class="bi bi-layers me-1"></i>{{ severity_summary.total|default:0|intcomma }} alerts
+            </span>
+        </div>
         <div class="d-flex gap-2 align-items-center flex-wrap">
-            <form method="get" class="d-flex gap-2 align-items-center flex-wrap">
+            <form method="get" class="d-flex gap-2 align-items-center flex-wrap" id="boardFilterForm">
                 <select name="team" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
                     <option value="">All SOC Teams</option>
                     {% if user_soc_team %}
@@ -18,12 +24,12 @@
                 </select>
                 <select name="month" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
                     {% for value, label in months %}
-                    <option value="{{ value }}" {% if selected_month == value %}selected{% endif %}>{{ label }}</option>
+                    <option value="{{ value }}" {% if selected_month == value|stringformat:"s" or selected_month == value %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
                 <select name="year" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
                     {% for y in years %}
-                    <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>{{ y }}</option>
+                    <option value="{{ y }}" {% if selected_year == y|stringformat:"s" or selected_year == y %}selected{% endif %}>{% if y == 'all' %}All Years{% else %}{{ y }}{% endif %}</option>
                     {% endfor %}
                 </select>
             </form>
@@ -32,14 +38,47 @@
         </div>
     </div>
     
-    <div class="mb-3 d-flex gap-2">
-        <button class="btn btn-sm btn-outline-secondary board-filter-btn" data-filter="mine"><i class="bi bi-person"></i> My Alerts</button>
-        <button class="btn btn-sm btn-outline-danger board-filter-btn" data-filter="critical"><i class="bi bi-exclamation-triangle"></i> Critical Only</button>
-        <button class="btn btn-sm btn-outline-info board-filter-btn" data-filter="clear"><i class="bi bi-x-circle"></i> Clear Filters</button>
+    <!-- Controls Bar: View Modes & Quick Severity Filters -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <!-- View Mode Switcher -->
+        <div class="btn-group btn-group-sm" role="group" aria-label="Board Column Mode">
+            <button type="button" class="btn btn-outline-secondary board-view-toggle" data-view-mode="active">
+                <i class="bi bi-lightning-charge text-warning me-1"></i> Active Triage (6)
+            </button>
+            <button type="button" class="btn btn-outline-secondary board-view-toggle" data-view-mode="closed">
+                <i class="bi bi-check2-all text-success me-1"></i> Resolved &amp; Closed (4)
+            </button>
+            <button type="button" class="btn btn-primary board-view-toggle active" data-view-mode="all">
+                <i class="bi bi-view-list me-1"></i> All Columns (10)
+            </button>
+        </div>
+
+        <!-- Quick Filters -->
+        <div class="d-flex gap-1 flex-wrap align-items-center">
+            <span class="text-secondary small me-1"><i class="bi bi-funnel"></i> Quick:</span>
+            <button class="btn btn-sm btn-outline-info board-filter-btn active" data-filter="clear">All</button>
+            <button class="btn btn-sm btn-outline-danger board-filter-btn" data-filter="critical">
+                <span class="badge bg-danger p-1 me-1"></span>Critical
+            </button>
+            <button class="btn btn-sm btn-outline-warning board-filter-btn" data-filter="high">
+                <span class="badge bg-warning p-1 me-1"></span>High
+            </button>
+            <button class="btn btn-sm btn-outline-warning board-filter-btn" style="color: #eab308; border-color: #eab308;" data-filter="medium">
+                <span class="badge p-1 me-1" style="background:#eab308;"></span>Medium
+            </button>
+            <button class="btn btn-sm btn-outline-success board-filter-btn" data-filter="low">
+                <span class="badge bg-success p-1 me-1"></span>Low
+            </button>
+            <button class="btn btn-sm btn-outline-secondary board-filter-btn" data-filter="mine">
+                <i class="bi bi-person me-1"></i>My Alerts
+            </button>
+        </div>
     </div>
 
+    <!-- Kanban Board Grid -->
     <div class="kanban-board">
-        <div class="kanban-column board-col-new">
+        <!-- 1. New Alerts -->
+        <div class="kanban-column board-col-new board-col-active-group">
             <div class="kanban-column-header">
                 <span><i class="bi bi-inbox"></i> New</span>
                 <span class="badge bg-primary">{{ new_alerts|length }}</span>
@@ -53,7 +92,8 @@
             </div>
         </div>
 
-        <div class="kanban-column board-col-awaiting">
+        <!-- 2. Awaiting Action -->
+        <div class="kanban-column board-col-awaiting board-col-active-group">
             <div class="kanban-column-header">
                 <span><i class="bi bi-hourglass-split"></i> Awaiting Action</span>
                 <span class="badge bg-warning text-dark">{{ awaiting_alerts|length }}</span>
@@ -67,7 +107,8 @@
             </div>
         </div>
 
-        <div class="kanban-column board-col-progress">
+        <!-- 3. In Progress -->
+        <div class="kanban-column board-col-progress board-col-active-group">
             <div class="kanban-column-header">
                 <span><i class="bi bi-arrow-repeat"></i> In Progress</span>
                 <span class="badge bg-warning text-dark">{{ in_progress_alerts|length }}</span>
@@ -81,7 +122,8 @@
             </div>
         </div>
 
-        <div class="kanban-column board-col-pending">
+        <!-- 4. Pending -->
+        <div class="kanban-column board-col-pending board-col-active-group">
             <div class="kanban-column-header">
                 <span><i class="bi bi-pause-circle"></i> Pending</span>
                 <span class="badge bg-secondary">{{ pending_alerts|length }}</span>
@@ -95,7 +137,8 @@
             </div>
         </div>
 
-        <div class="kanban-column board-col-escalated">
+        <!-- 5. Escalated -->
+        <div class="kanban-column board-col-escalated board-col-active-group">
             <div class="kanban-column-header">
                 <span><i class="bi bi-arrow-up-circle"></i> Escalated</span>
                 <span class="badge bg-danger">{{ escalated_alerts|length }}</span>
@@ -109,7 +152,8 @@
             </div>
         </div>
 
-        <div class="kanban-column board-col-remediation">
+        <!-- 6. Remediation -->
+        <div class="kanban-column board-col-remediation board-col-active-group">
             <div class="kanban-column-header">
                 <span><i class="bi bi-tools"></i> Remediation</span>
                 <span class="badge bg-info text-dark">{{ remediation_alerts|length }}</span>
@@ -123,12 +167,13 @@
             </div>
         </div>
 
-        <div class="kanban-column board-col-tp">
+        <!-- 7. True Positives (Closed) -->
+        <div class="kanban-column board-col-tp board-col-closed-group">
             <div class="kanban-column-header">
                 <span><i class="bi bi-check2-circle"></i> True Positives</span>
                 <span class="badge bg-danger">{{ true_positives|length }}</span>
             </div>
-            <div class="kanban-column-body">
+            <div class="kanban-column-body" data-status="Closed" data-verdict="True Positive">
                 {% for alert in true_positives %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
@@ -137,12 +182,13 @@
             </div>
         </div>
 
-        <div class="kanban-column board-col-fp">
+        <!-- 8. False Positives (Closed) -->
+        <div class="kanban-column board-col-fp board-col-closed-group">
             <div class="kanban-column-header">
                 <span><i class="bi bi-x-circle"></i> False Positives</span>
                 <span class="badge bg-success">{{ false_positives|length }}</span>
             </div>
-            <div class="kanban-column-body">
+            <div class="kanban-column-body" data-status="Closed" data-verdict="False Positive">
                 {% for alert in false_positives %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
@@ -151,12 +197,13 @@
             </div>
         </div>
 
-        <div class="kanban-column board-col-closed-other">
+        <!-- 9. Closed Other -->
+        <div class="kanban-column board-col-closed-other board-col-closed-group">
             <div class="kanban-column-header">
                 <span><i class="bi bi-slash-circle"></i> Closed (Other)</span>
                 <span class="badge bg-secondary">{{ closed_other_alerts|length }}</span>
             </div>
-            <div class="kanban-column-body">
+            <div class="kanban-column-body" data-status="Closed" data-verdict="None">
                 {% for alert in closed_other_alerts %}
                 {% include 'ariba_soc/_board_card.html' with alert=alert %}
                 {% empty %}
@@ -165,7 +212,8 @@
             </div>
         </div>
 
-        <div class="kanban-column board-col-archive">
+        <!-- 10. Archive -->
+        <div class="kanban-column board-col-archive board-col-closed-group">
             <div class="kanban-column-header">
                 <span><i class="bi bi-archive"></i> Archive</span>
                 <span class="badge bg-secondary">{{ archived_alerts|length }}</span>
