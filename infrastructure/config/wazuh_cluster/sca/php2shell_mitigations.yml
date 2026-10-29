@@ -1,0 +1,54 @@
+policy:
+  id: "php2shell_mitigations"
+  file: "php2shell_mitigations.yml"
+  name: "PHP2Shell temporary mitigations for PHP under Apache"
+  description: "Checks the php.ini settings that PHP lists as partial mitigations for CVE-2026-109619."
+  references:
+    - https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp
+    - https://wazuh.com/blog/detecting-php2shell-remote-code-execution-with-wazuh/
+
+requirements:
+  title: "Check that PHP for Apache is installed"
+  description: "Requires an Apache php.ini file for PHP 8.3, 8.4, or 8.5."
+  condition: any
+  rules:
+    - "f:/etc/php/8.3/apache2/php.ini"
+    - "f:/etc/php/8.4/apache2/php.ini"
+    - "f:/etc/php/8.5/apache2/php.ini"
+
+checks:
+  - id: 109601
+    title: "Ensure PHP 8.3 session upload progress is disabled for Apache"
+    description: "The session upload progress feature is a confirmed exploitation path of CVE-2026-109619."
+    rationale: "PHP lists session.upload_progress.enabled=0 as a partial mitigation until you update PHP."
+    remediation: "Set session.upload_progress.enabled = 0 in /etc/php/8.3/apache2/php.ini and restart Apache."
+    condition: all
+    rules:
+      - 'f:/etc/php/8.3/apache2/php.ini -> r:^\s*session.upload_progress.enabled\s*=\s*0|^\s*session.upload_progress.enabled\s*=\s*off'
+
+  - id: 109602
+    title: "Ensure PHP 8.4 session upload progress is disabled for Apache"
+    description: "The session upload progress feature is a confirmed exploitation path of CVE-2026-109619."
+    rationale: "PHP lists session.upload_progress.enabled=0 as a partial mitigation until you update PHP."
+    remediation: "Set session.upload_progress.enabled = 0 in /etc/php/8.4/apache2/php.ini and restart Apache."
+    condition: all
+    rules:
+      - 'f:/etc/php/8.4/apache2/php.ini -> r:^\s*session.upload_progress.enabled\s*=\s*0|^\s*session.upload_progress.enabled\s*=\s*off'
+
+  - id: 109603
+    title: "Ensure PHP 8.5 session upload progress is disabled for Apache"
+    description: "The session upload progress feature is a confirmed exploitation path of CVE-2026-109619."
+    rationale: "PHP lists session.upload_progress.enabled=0 as a partial mitigation until you update PHP."
+    remediation: "Set session.upload_progress.enabled = 0 in /etc/php/8.5/apache2/php.ini and restart Apache."
+    condition: all
+    rules:
+      - 'f:/etc/php/8.5/apache2/php.ini -> r:^\s*session.upload_progress.enabled\s*=\s*0|^\s*session.upload_progress.enabled\s*=\s*off'
+
+  - id: 109604
+    title: "Ensure PHP 8.5 fatal error backtraces are disabled for Apache"
+    description: "Fatal error backtraces are the confirmed mod_php exploitation path of CVE-2026-109619 on PHP 8.5."
+    rationale: "PHP lists fatal_error_backtraces=0 as a partial mitigation for PHP 8.5 until you update PHP."
+    remediation: "Set fatal_error_backtraces = 0 in /etc/php/8.5/apache2/php.ini and restart Apache."
+    condition: all
+    rules:
+      - 'f:/etc/php/8.5/apache2/php.ini -> r:^\s*fatal_error_backtraces\s*=\s*0|^\s*fatal_error_backtraces\s*=\s*off'

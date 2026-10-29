@@ -1,0 +1,70 @@
+<!--
+  PHP2Shell Remote Code Execution (CVE-2026-109618, CVE-2026-109619) Detection Rules
+  Reference: https://wazuh.com/blog/detecting-php2shell-remote-code-execution-with-wazuh/
+-->
+
+<group name="php2shell,apache,web,">
+  <!-- Rule 100200: Precursor - PHP memory exhaustion error -->
+  <rule id="100200" level="7">
+    <if_sid>30301</if_sid>
+    <regex type="pcre2">PHP Fatal error:\s+Allowed memory size of \d+ bytes exhausted</regex>
+    <description>PHP2Shell precursor: PHP memory exhaustion fatal error for a request from $(srcip).</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <!-- Rule 100201: Precursor - PHP execution timeout exceeded -->
+  <rule id="100201" level="7">
+    <if_sid>30301</if_sid>
+    <regex type="pcre2">PHP Fatal error:\s+Maximum execution time of \d+ seconds? exceeded</regex>
+    <description>PHP2Shell precursor: PHP maximum execution time exceeded for a request from $(srcip).</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <!-- Rule 100202: Active Attack - Multiple PHP memory exhaustion errors from same IP -->
+  <rule id="100202" level="12" frequency="5" timeframe="120">
+    <if_matched_sid>100200</if_matched_sid>
+    <same_source_ip />
+    <description>PHP2Shell: Multiple PHP memory exhaustion errors for requests from $(srcip). Possible exploitation attempt.</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+</group>
+
+<group name="php2shell,audit,">
+  <!-- Rule 100210: Post-exploitation - www-data executed a command/binary -->
+  <rule id="100210" level="12">
+    <if_sid>80792</if_sid>
+    <field name="audit.euid">^33$</field>
+    <description>PHP2Shell post-exploitation: The www-data web server account ran $(audit.exe).</description>
+    <mitre>
+      <id>T1059.004</id>
+    </mitre>
+  </rule>
+</group>
+
+<group name="php2shell,syscheck,">
+  <!-- Rule 100220: Post-exploitation - Web shell dropped (new PHP file created in webroot) -->
+  <rule id="100220" level="12">
+    <if_sid>554</if_sid>
+    <field name="file" type="pcre2">(?i)^/var/www/html/.+\.(php\d?|phtml|phar)$</field>
+    <description>PHP2Shell post-exploitation: New PHP file in the web root directory. Possible web shell.</description>
+    <mitre>
+      <id>T1505.003</id>
+    </mitre>
+  </rule>
+
+  <!-- Rule 100221: Post-exploitation - Existing PHP file modified in webroot -->
+  <rule id="100221" level="10">
+    <if_sid>550</if_sid>
+    <field name="file" type="pcre2">(?i)^/var/www/html/.+\.(php\d?|phtml|phar)$</field>
+    <description>PHP2Shell post-exploitation: PHP file modified in the web root directory. Possible web shell.</description>
+    <mitre>
+      <id>T1505.003</id>
+    </mitre>
+  </rule>
+</group>
